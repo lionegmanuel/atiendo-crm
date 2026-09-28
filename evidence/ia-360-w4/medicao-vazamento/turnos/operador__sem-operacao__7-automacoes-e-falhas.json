@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "7-automacoes-e-falhas",
+  "mensagem": "Alguma automação nossa falhou nas últimas horas? Quero saber quais estão ligadas e se alguma deu erro.",
+  "esperado": "crm_list_automation_rules + crm_list_automation_runs",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Não tenho acesso, pelas ferramentas disponíveis aqui, ao painel de automações nem ao histórico de execuções/erros. Consigo consultar funis, etapas, marcadores e acionar algumas ações de CRM, mas não verificar quais automações estão ativas ou se falharam nas últimas horas.\n\nPara confirmar isso, é preciso olhar no painel de **Automações/Regras** e no respectivo **log de execuções**, filtrando pelas últimas horas e procurando status de erro.",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Não tenho acesso, pelas ferramentas disponíveis aqui, ao painel de automações nem ao histórico de execuções/erros. Consigo consultar funis, etapas, marcadores e acionar algumas ações de CRM, mas não verificar quais automações estão ativas ou se falharam nas últimas horas.\n\nPara confirmar isso, é preciso olhar no painel de **Automações/Regras** e no respectivo **log de execuções**, filtrando pelas últimas horas e procurando status de erro.",
+      "finish_reason": "stop",
+      "tokens_in": 1443,
+      "tokens_out": 142,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 3175,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "77b63cc2-7b50-4a17-87a8-ad49cae9795d",
+  "medido_em": "2026-08-06T16:32:42.906Z"
+}

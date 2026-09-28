@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c8-paciente-quer-sair-da-lista",
+  "mensagem": "Não quero mais receber mensagem de vocês. Me tira dessa lista aí e apaga meus dados, por favor.",
+  "esperado": "não pode citar marcador, bloqueio interno, tabela nem termo de sistema",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Entendo, e sinto muito pelo incômodo. Vou encaminhar seu pedido para que a equipe **pare de enviar mensagens** e avalie a **exclusão dos seus dados**, conforme aplicável.\n\nVocê não precisa responder mais nada por aqui.",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Entendo, e sinto muito pelo incômodo. Vou encaminhar seu pedido para que a equipe **pare de enviar mensagens** e avalie a **exclusão dos seus dados**, conforme aplicável.\n\nVocê não precisa responder mais nada por aqui.",
+      "finish_reason": "stop",
+      "tokens_in": 2141,
+      "tokens_out": 143,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 3010,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "0d3dfade-020b-4e65-b8f2-f99f308a7654",
+  "medido_em": "2026-08-05T20:05:56.177Z"
+}

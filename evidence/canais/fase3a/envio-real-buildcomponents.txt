@@ -1,0 +1,78 @@
+# Envio REAL com o payload de buildComponents — Fase 3a, Task 2
+
+Graph API real, 2026-07-28. WABA de teste, destinatário 5531998966398 (registrado
+na lista permitida do número de teste). Comando:
+
+  pnpm exec tsx --env-file=.env.local scripts/spike-send-template.ts
+
+O template é buscado VIVO da WABA (não da fixture): o contrato provado é o do que a
+Meta hospeda agora. Dois envios, e só dois — cada um é mensagem real num celular.
+
+  ENVIO 1  payload montado por buildComponents (3 de 3)  -> wamid, message_status accepted
+  ENVIO 2  o MESMO payload com o 3o parametro removido A MAO -> 132000
+
+O envio 2 remove o parametro DEPOIS do buildComponents de proposito: o montador se
+recusa a produzir payload incompleto (missingSlots aponta {{3}} e buildComponents
+lanca), entao a unica forma de reproduzir o erro e contornando-o. E essa a
+demonstracao: o 132000 so e alcancavel saindo do caminho normal.
+
+--- saida literal ---
+
+━━ contrato derivado de jaspers_market_order_confirmation_v1 (en_US)
+   corpo        {{1}}  text
+   corpo        {{2}}  text
+   corpo        {{3}}  text
+   missingSlots com os 3 valores: 0
+
+   components[] montado:
+[
+  {
+    "type": "body",
+    "parameters": [
+      {
+        "type": "text",
+        "text": "Rafael"
+      },
+      {
+        "type": "text",
+        "text": "DESK-001"
+      },
+      {
+        "type": "text",
+        "text": "30/07"
+      }
+    ]
+  }
+]
+
+━━ ENVIO 1 — payload de buildComponents (3 de 3 parâmetros)
+{
+  "messaging_product": "whatsapp",
+  "contacts": [
+    {
+      "input": "5531998966398",
+      "wa_id": "553198966398"
+    }
+  ],
+  "messages": [
+    {
+      "id": "wamid.HBgMNTUzMTk4OTY2Mzk4FQIAERgSRDEwQ0MwOEMxMTY4NjBEMUU5AA==",
+      "message_status": "accepted"
+    }
+  ]
+}
+
+━━ ENVIO 2 — o MESMO payload com 1 parâmetro removido à mão: {"type":"text","text":"30/07"}
+   (buildComponents se recusaria: missingSlots aponta {{3}})
+{
+  "error": {
+    "message": "(#132000) Number of parameters does not match the expected number of params",
+    "code": 132000,
+    "type": "OAuthException",
+    "error_data": {
+      "messaging_product": "whatsapp",
+      "details": "body: number of localizable_params (2) does not match the expected number of params (3)"
+    },
+    "fbtrace_id": "AQGT3aQS5x48dzQ03UYo3lA"
+  }
+}

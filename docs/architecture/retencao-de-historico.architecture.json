@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "A poda do histórico — as duas tabelas que cresciam sozinhas",
+    "subtitle": "issue #261: o que sai, o que tem dono e não sai, e por que o expurgo da auditoria não é uma porta",
+    "output": "retencao-de-historico.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o operador vê" },
+    { "id": "relogio", "label": "Relógio" },
+    { "id": "borda", "label": "Borda HTTP (cron)" },
+    { "id": "regra", "label": "Regra pura" },
+    { "id": "banco", "label": "Banco (onde a regra de verdade mora)" },
+    { "id": "volta", "label": "O laço de retorno" }
+  ],
+  "mainPath": ["scheduler", "rota", "podar", "fnpoda", "fila", "trilha"],
+  "nodes": [
+    { "id": "envs", "lane": "humano", "col": 1, "type": "frontend", "label": "JOB_QUEUE_RETENTION_DAYS / AUDIT_LOG_RETENTION_DAYS", "sublabel": "opcionais; os defaults valem sem editar .env (doutrina de packaging)" },
+    { "id": "runbook", "lane": "humano", "col": 2, "type": "frontend", "label": "docs/runbooks/custo-e-cota-do-supabase.md §4", "sublabel": "comandos: medir tamanho, ver a última poda, separar 'nada vencido' de 'cron parado'" },
+    { "id": "painel", "lane": "humano", "col": 3, "type": "frontend", "label": "Painel de auditoria (/admin/audit)", "sublabel": "retention.sweep_run entra no filtro por vir de AUDIT_ACTIONS" },
+
+    { "id": "scheduler", "lane": "relogio", "col": 1, "type": "service", "label": "scheduler (crond) — 40 4 * * *", "sublabel": "docker/scheduler/entrypoint.sh; timeout 120s" },
+
+    { "id": "rota", "lane": "borda", "col": 2, "type": "api", "label": "GET/POST /api/v1/cron/data-retention", "sublabel": "Bearer fail-closed; só relógio e laço — não decide o que é podável" },
+
+    { "id": "politica", "lane": "regra", "col": 1, "type": "service", "label": "lib/retencao/politica.ts", "sublabel": "interpretarRetencao — lixo vira padrão COM aviso; nunca lança (env.ts derrubaria o app)" },
+    { "id": "podar", "lane": "regra", "col": 2, "type": "service", "label": "podarHistorico() — lotes de 1000, teto de 20", "sublabel": "para no lote incompleto; declara fila_tem_resto quando sobrou trabalho" },
+    { "id": "efeito", "lane": "regra", "col": 3, "type": "service", "label": "houveEfeito()", "sublabel": "rodada que não apagou nada não ocupa linha de auditoria" },
+
+    { "id": "fnpoda", "lane": "banco", "col": 1, "type": "database", "label": "fn_podar_fila_de_jobs (definer)", "sublabel": "terminais done/failed/dead · piso 7d no corpo · anti-join ANTES do limit" },
+    { "id": "fnexpurgo", "lane": "banco", "col": 2, "type": "database", "label": "fn_expurgar_auditoria_vencida (definer)", "sublabel": "sem seletor de linha · piso 90d no corpo · revogada de anon/authenticated" },
+    { "id": "fila", "lane": "banco", "col": 3, "type": "database", "label": "job_queue", "sublabel": "pending/running NUNCA saem — têm trabalho dentro" },
+    { "id": "auditlog", "lane": "banco", "col": 4, "type": "database", "label": "api_audit_log", "sublabel": "append-only no SCHEMA: anon, authenticated e service_role sem UPDATE/DELETE/TRUNCATE (0258)" },
+    { "id": "cascata", "lane": "banco", "col": 5, "type": "database", "label": "send_ledger / before_send_traces", "sublabel": "on delete cascade — parte do conserto, e os consumidores falham FECHADO" },
+    { "id": "avisos", "lane": "banco", "col": 6, "type": "database", "label": "agent_inbox_items (job_dead, status='open')", "sublabel": "o aviso aberto É o dono: o job que ele aponta não é podado" },
+
+    { "id": "trilha", "lane": "volta", "col": 2, "type": "service", "label": "audit('retention.sweep_run')", "sublabel": "contagem + retenção em vigor; linha nova demais para o próprio expurgo alcançar" },
+    { "id": "log", "lane": "volta", "col": 1, "type": "service", "label": "logger.warn / logger.error", "sublabel": "knob ajustado e falha de RPC saem alto — nunca a frase tranquilizadora" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "scheduler", "to": "rota", "label": "curl com INTERNAL_SECRET" },
+    { "id": "e2", "from": "envs", "to": "politica", "label": "valor cru" },
+    { "id": "e3", "from": "politica", "to": "podar", "label": "dias + aviso" },
+    { "id": "e4", "from": "rota", "to": "podar", "label": "invoca a regra" },
+    { "id": "e5", "from": "podar", "to": "fnpoda", "label": "rpc em lote" },
+    { "id": "e6", "from": "podar", "to": "fnexpurgo", "label": "rpc em lote" },
+    { "id": "e7", "from": "fnpoda", "to": "fila", "label": "delete dos terminais velhos" },
+    { "id": "e8", "from": "avisos", "to": "fnpoda", "label": "aviso aberto ⇒ não pode podar" },
+    { "id": "e9", "from": "fila", "to": "cascata", "label": "FK on delete cascade" },
+    { "id": "e10", "from": "fnexpurgo", "to": "auditlog", "label": "delete do que passou da retenção" },
+    { "id": "e11", "from": "podar", "to": "efeito", "label": "resultado" },
+    { "id": "e12", "from": "efeito", "to": "trilha", "label": "só quando apagou algo" },
+    { "id": "e13", "from": "trilha", "to": "auditlog", "label": "insert (a erosão fica registrada)" },
+    { "id": "e14", "from": "auditlog", "to": "painel", "label": "select do admin" },
+    { "id": "e15", "from": "podar", "to": "log", "label": "avisos de configuração" },
+    { "id": "e16", "from": "log", "to": "runbook", "label": "o que o operador procura" },
+    { "id": "e17", "from": "runbook", "to": "envs", "label": "qual alavanca puxar" },
+    { "id": "e18", "from": "rota", "to": "trilha", "label": "request_id correlaciona" }
+  ]
+}

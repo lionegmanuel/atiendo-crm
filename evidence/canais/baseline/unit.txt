@@ -1,0 +1,14 @@
+
+> deskcomm-crm@0.1.0 test:unit /Users/rafaelmelgaco/DeskcommCRM-canais
+> vitest run
+
+
+ RUN  v4.1.10 /Users/rafaelmelgaco/DeskcommCRM-canais
+
+
+ Test Files  136 passed (136)
+      Tests  1038 passed (1038)
+   Start at  13:03:39
+   Duration  34.97s (transform 6.76s, setup 33.70s, import 63.11s, tests 20.97s, environment 170.85s)
+
+exit=0

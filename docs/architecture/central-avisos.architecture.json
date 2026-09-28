@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Central de avisos com contexto",
+    "subtitle": "Abrir não resolve; autorização por registro decide o destino",
+    "output": "central-avisos.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "app",
+      "label": "Aplicativo"
+    },
+    {
+      "id": "db",
+      "label": "Banco"
+    },
+    {
+      "id": "humano",
+      "label": "Pessoa"
+    }
+  ],
+  "mainPath": [
+    "produtores",
+    "central",
+    "projecao",
+    "ui",
+    "contexto"
+  ],
+  "nodes": [
+    {
+      "id": "produtores",
+      "lane": "app",
+      "col": 0,
+      "type": "service",
+      "label": "Runtime, canal, follow-up e cron → agent_inbox_items"
+    },
+    {
+      "id": "central",
+      "lane": "app",
+      "col": 1,
+      "type": "service",
+      "label": "GET /api/v1/ai/inbox: cookie agent+ e org ativa"
+    },
+    {
+      "id": "rls",
+      "lane": "db",
+      "col": 2,
+      "type": "database",
+      "label": "Client autenticado: RLS por registro + organização"
+    },
+    {
+      "id": "projecao",
+      "lane": "app",
+      "col": 3,
+      "type": "service",
+      "label": "inbox-destino: catálogo, lote e fallback"
+    },
+    {
+      "id": "ui",
+      "lane": "humano",
+      "col": 4,
+      "type": "ui",
+      "label": "AgentInboxList: contexto ou orientação"
+    },
+    {
+      "id": "contexto",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "Conversa / contato / negócio / configuração real"
+    },
+    {
+      "id": "status",
+      "lane": "app",
+      "col": 6,
+      "type": "service",
+      "label": "PATCH separado: resolver ou reabrir + auditoria"
+    },
+    {
+      "id": "etapa_que_avisa",
+      "lane": "humano",
+      "col": 0,
+      "type": "ui",
+      "label": "Funis › Etapas: «Avisar a equipe na Central» (crm_stages.avisar_na_central, 0440)"
+    },
+    {
+      "id": "aviso_de_etapa",
+      "lane": "app",
+      "col": 0,
+      "type": "service",
+      "label": "leads.aviso-de-etapa: lead.stage_changed → aviso other/lead"
+    },
+    {
+      "id": "campainha",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "Campainha do topo: aviso NOVO que pede gente toca o som (useSonsDaCentral, leitura de 30 s)"
+    },
+    {
+      "id": "sons",
+      "lane": "app",
+      "col": 5,
+      "type": "service",
+      "label": "/api/v1/settings/sons + bucket privado org-sounds (0441); regra única somDoAviso"
+    },
+    {
+      "id": "barramento",
+      "lane": "db",
+      "col": 1,
+      "type": "database",
+      "label": "trg_aviso_da_central_criado → event_log central.aviso_criado (0442, sem I/O)"
+    },
+    {
+      "id": "push",
+      "lane": "app",
+      "col": 2,
+      "type": "service",
+      "label": "push.handler: somDoAviso decide o que vai ao celular (idioma da organização)"
+    },
+    {
+      "id": "celular",
+      "lane": "humano",
+      "col": 3,
+      "type": "ui",
+      "label": "Notificação no celular, com o CRM fechado"
+    }
+  ],
+  "edges": [
+    {
+      "from": "produtores",
+      "to": "central",
+      "label": "listagem filtrada por org"
+    },
+    {
+      "from": "central",
+      "to": "rls",
+      "label": "consulta em lote com JWT"
+    },
+    {
+      "from": "rls",
+      "to": "projecao",
+      "label": "apenas IDs autorizados"
+    },
+    {
+      "from": "central",
+      "to": "projecao",
+      "label": "papel efetivo e referências"
+    },
+    {
+      "from": "projecao",
+      "to": "ui",
+      "label": "destination validado; erro sem URL"
+    },
+    {
+      "from": "ui",
+      "to": "contexto",
+      "label": "Link sem PATCH"
+    },
+    {
+      "from": "contexto",
+      "to": "ui",
+      "label": "voltar: aviso ainda aberto"
+    },
+    {
+      "from": "ui",
+      "to": "status",
+      "label": "decisão humana explícita"
+    },
+    {
+      "from": "status",
+      "to": "central",
+      "label": "reconsultar abertos/resolvidos"
+    },
+    {
+      "from": "etapa_que_avisa",
+      "to": "aviso_de_etapa",
+      "label": "marca lida a cada entrada na etapa"
+    },
+    {
+      "from": "aviso_de_etapa",
+      "to": "produtores",
+      "label": "um aviso por negócio e etapa, só o nome da etapa no texto"
+    },
+    {
+      "from": "central",
+      "to": "campainha",
+      "label": "abertos, relidos a cada 30 s"
+    },
+    {
+      "from": "sons",
+      "to": "campainha",
+      "label": "URL assinada de 1 h (sem arquivo: bipe do produto)"
+    },
+    {
+      "from": "campainha",
+      "to": "contexto",
+      "label": "quem ouviu abre a Central"
+    },
+    {
+      "from": "produtores",
+      "to": "barramento",
+      "label": "todo aviso de organização anuncia que nasceu"
+    },
+    {
+      "from": "barramento",
+      "to": "push",
+      "label": "dreno do event_log"
+    },
+    {
+      "from": "push",
+      "to": "celular",
+      "label": "passagem, IA sem saldo, etapa que avisa (VAPID)"
+    },
+    {
+      "from": "celular",
+      "to": "contexto",
+      "label": "toque abre conversa, negócio ou credenciais"
+    }
+  ]
+}

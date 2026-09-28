@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Gestão de funis — quem cria, quem recusa e quem sabe o que quebraria",
+    "subtitle": "a tela do Kanban virou dona dos funis; as três dependências que o banco não defende sozinho",
+    "output": "gestao-funis.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o humano vê" },
+    { "id": "borda", "label": "Borda HTTP (manager+)" },
+    { "id": "regra", "label": "Regras puras" },
+    { "id": "dados", "label": "Banco" },
+    { "id": "dependente", "label": "Quem depende do funil" }
+  ],
+  "mainPath": ["lista", "hooks", "post", "regras", "pipelines"],
+  "nodes": [
+    { "id": "lista", "lane": "humano", "col": 1, "type": "frontend", "label": "/app/kanban (page)", "sublabel": "Server Component · filtra organization_id da org ATIVA" },
+    { "id": "client", "lane": "humano", "col": 2, "type": "frontend", "label": "FunisClient", "sublabel": "criar · renomear · ↑↓ · padrão · arquivar" },
+    { "id": "hooks", "lane": "humano", "col": 3, "type": "frontend", "label": "usePipelines", "sublabel": "só mutations — a leitura é do servidor" },
+    { "id": "board", "lane": "humano", "col": 4, "type": "frontend", "label": "/app/pipelines/[id]", "sublabel": "o quadro do funil escolhido" },
+
+    { "id": "post", "lane": "borda", "col": 2, "type": "api", "label": "POST /api/v1/pipelines", "sublabel": "funil + 4 etapas · compensa se as etapas falharem" },
+    { "id": "patch", "lane": "borda", "col": 3, "type": "api", "label": "PATCH /api/v1/pipelines/[id]", "sublabel": "nome · descrição · ordem · padrão" },
+    { "id": "delete", "lane": "borda", "col": 4, "type": "api", "label": "DELETE /api/v1/pipelines/[id]", "sublabel": "arquiva; ?definitivo=1 só no caso limpo" },
+    { "id": "funis", "lane": "borda", "col": 1, "type": "service", "label": "_funis.ts", "sublabel": "lerFunis · lerDependencias · corpo · conflitoDoBanco" },
+
+    { "id": "regras", "lane": "regra", "col": 2, "type": "service", "label": "pipeline-editing.ts", "sublabel": "as recusas, em português, citando o nome" },
+    { "id": "slug", "lane": "regra", "col": 1, "type": "service", "label": "stage-editing (reuso)", "sublabel": "chaveDeNome dobra acento · slugDeNome" },
+    { "id": "padrao", "lane": "regra", "col": 3, "type": "service", "label": "updatesDePadrao", "sublabel": "libera o anterior ANTES de marcar o novo" },
+
+    { "id": "pipelines", "lane": "dados", "col": 2, "type": "database", "label": "crm_pipelines", "sublabel": "position numeric · is_archived · is_default" },
+    { "id": "stages", "lane": "dados", "col": 3, "type": "database", "label": "crm_stages", "sublabel": "Novo · Em andamento · Ganho(won) · Perdido(lost)" },
+    { "id": "audit", "lane": "dados", "col": 4, "type": "database", "label": "api_audit_log", "sublabel": "pipeline.created/updated/archived/deleted" },
+    { "id": "trigger", "lane": "dados", "col": 1, "type": "service", "label": "trg_seed_default_pipeline_for_org", "sublabel": "semeia 'Pedidos' e-commerce em toda org nova" },
+
+    { "id": "leads", "lane": "dependente", "col": 2, "type": "database", "label": "crm_leads", "sublabel": "FK ON DELETE RESTRICT" },
+    { "id": "sources", "lane": "dependente", "col": 3, "type": "database", "label": "webhook_sources", "sublabel": "FK ON DELETE **CASCADE** — o perigo" },
+    { "id": "rules", "lane": "dependente", "col": 4, "type": "database", "label": "automation_rules", "sublabel": "pipeline_id dentro de jsonb — SEM FK" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "lista", "to": "pipelines", "label": "select … .eq(organization_id, org ATIVA) — a RLS sozinha misturava as orgs" },
+    { "id": "e2", "from": "lista", "to": "client", "label": "funis + podeGerenciar (papel na org ativa, igual ao requireRole)" },
+    { "id": "e3", "from": "client", "to": "hooks", "label": "criar · editar · arquivar" },
+    { "id": "e4", "from": "client", "to": "board", "label": "clique na linha abre o quadro" },
+    { "id": "e5", "from": "hooks", "to": "post", "label": "POST { name }" },
+    { "id": "e6", "from": "hooks", "to": "patch", "label": "PATCH { name?, is_default?, depois_de? }" },
+    { "id": "e7", "from": "hooks", "to": "delete", "label": "DELETE ?definitivo=1?" },
+    { "id": "e8", "from": "hooks", "to": "lista", "label": "router.refresh() — relê pelo servidor, não por GET manager+" },
+    { "id": "e9", "from": "post", "to": "funis", "label": "lerFunis (inclui arquivados: o slug continua ocupado)" },
+    { "id": "e10", "from": "patch", "to": "funis", "label": "lerFunis" },
+    { "id": "e11", "from": "delete", "to": "funis", "label": "lerFunis + lerDependencias" },
+    { "id": "e12", "from": "funis", "to": "pipelines", "label": "select" },
+    { "id": "e13", "from": "funis", "to": "leads", "label": "count por pipeline_id" },
+    { "id": "e14", "from": "funis", "to": "sources", "label": "quais formulários apontam para cá" },
+    { "id": "e15", "from": "funis", "to": "rules", "label": "lê TODAS e filtra em JS (jsonb sem schema)" },
+    { "id": "e16", "from": "post", "to": "regras", "label": "validarNomeDeFunil · slugDeFunil · ETAPAS_INICIAIS" },
+    { "id": "e17", "from": "patch", "to": "regras", "label": "validarNomeDeFunil · posicaoEntre" },
+    { "id": "e18", "from": "delete", "to": "regras", "label": "validarArquivamento · podeExcluirDeVez" },
+    { "id": "e19", "from": "regras", "to": "slug", "label": "reusa a chave de nome e a conta de slug — sem segunda cópia" },
+    { "id": "e20", "from": "patch", "to": "padrao", "label": "dois UPDATEs, em sequência" },
+    { "id": "e21", "from": "padrao", "to": "pipelines", "label": "uniq_..._org_default é IMEDIATO" },
+    { "id": "e22", "from": "post", "to": "pipelines", "label": "insert do funil" },
+    { "id": "e23", "from": "post", "to": "stages", "label": "insert das 4 etapas — e delete do funil se falhar" },
+    { "id": "e24", "from": "post", "to": "audit", "label": "pipeline.created" },
+    { "id": "e25", "from": "patch", "to": "audit", "label": "pipeline.updated" },
+    { "id": "e26", "from": "delete", "to": "audit", "label": "pipeline.archived · pipeline.deleted" },
+    { "id": "e27", "from": "delete", "to": "pipelines", "label": "is_archived=true (ou delete no caso limpo)" },
+    { "id": "e28", "from": "trigger", "to": "pipelines", "label": "toda org nova nasce com 'Pedidos' — a razão de a clínica precisar desta tela" },
+    { "id": "e29", "from": "trigger", "to": "stages", "label": "8 etapas de e-commerce" },
+    { "id": "e30", "from": "board", "to": "stages", "label": "as colunas do quadro" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "As três dependências, e por que só uma o banco defende",
+      "items": [
+        "crm_leads é ON DELETE RESTRICT: o Postgres recusa sozinho apagar funil com negócio — esta é a defendida",
+        "webhook_sources é ON DELETE **CASCADE**: apagar o funil apagaria a fonte de webhook do cliente EM SILÊNCIO, e o formulário público pararia de captar lead",
+        "automation_rules guarda pipeline_id dentro de actions (jsonb, sem FK e sem CHECK): o banco não sabe que a regra existe, e ela sobreviveria apontando para o vazio",
+        "por isso a operação padrão é ARQUIVAR, e a exclusão definitiva só passa com as três zeradas"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Não-ligações deliberadas",
+      "items": [
+        "a tela NÃO chama GET /api/v1/pipelines: essa rota é manager+, e /app/kanban é aberta a qualquer papel — um agent relendo por ali levaria 403 e ficaria sem quadro. A releitura é router.refresh() (e8)",
+        "a tela NÃO conta negócios para decidir se mostra 'Excluir de vez': quem conta é o servidor, e uma segunda contagem discordaria dele",
+        "o POST NÃO usa função SQL transacional: são duas escritas com compensação (e23), para não custar migration + apêndice de baseline aos self-hosters"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "O defeito que a aresta e1 conserta",
+      "items": [
+        "crm_pipelines_select libera TODAS as organizações do usuário e libera tudo para platform admin — a RLS responde 'pode ver?', não 'quer ver agora?'",
+        "como o gatilho (e28) cria um 'Pedidos' em cada org, a lista mostrava várias linhas idênticas, cada uma abrindo um quadro diferente",
+        "provado por sabotagem: sem o .eq da e1, o e2e fica vermelho com 'Expected: 1, Received: 2'"
+      ]
+    }
+  ]
+}

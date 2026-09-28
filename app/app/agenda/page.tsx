@@ -1,0 +1,342 @@
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+
+import {
+  enderecoDeRetorno,
+  faltaParaConectarOGoogle,
+  googleEstaConfigurado,
+  origemLocalDosCabecalhos,
+} from "@/lib/agenda/google/config";
+import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
+import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
+import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
+import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { diaDeHojeNoFuso, semanaSemente } from "@/lib/agenda/semana-semente";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
+import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
+import { logger } from "@/lib/logger";
+import { ROLE_RANK } from "@/lib/auth/types";
+import { createClient } from "@/lib/supabase/server";
+
+import type { Agendamento as AgendamentoDaTela } from "@/components/agenda/tipos";
+
+import { AgendaClient } from "./_client";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * A Agenda.
+ *
+ * O servidor resolve só a SEMENTE — quem é, de que organização, e em que fuso a
+ * grade deve ser desenhada. O dado vivo vem do cliente por `/api/v1/agenda`,
+ * porque o cookie de sessão é `httpOnly` e o supabase-js do browser não o lê:
+ * `auth.uid()` viria null e a RLS esconderia tudo. É a razão estrutural que o
+ * resto do produto já segue.
+ *
+ * O FUSO É DA APRESENTAÇÃO, não da regra (decisão 4 da entrega): quem está em
+ * Manaus vê a grade no horário de Manaus, enquanto as janelas de trabalho
+ * continuam valendo no fuso da jornada. São perguntas diferentes e por isso duas
+ * fontes — e este campo do perfil, oferecido pela tela há meses, ganha aqui o
+ * primeiro leitor de verdade.
+ */
+/**
+ * O embed do PostgREST devolve objeto quando a FK é para-um e array quando o
+ * gerador de tipos não consegue provar isso. Aceitar as duas formas evita que a
+ * tela dependa de qual das duas o `database.types.ts` do dia declarou.
+ *
+ * Quem se chama como é decidido por `nomeDoContato` — esta função só desfaz o
+ * embed. A cadeia estava remontada aqui, sem a guarda de identificador
+ * técnico, e punha `Contato 543134@lid` no card da grade.
+ */
+function contatoDoEmbed(c: ContatoNomeavel | ContatoNomeavel[] | null): string | undefined {
+  return nomeDoContato(Array.isArray(c) ? (c[0] ?? null) : c) ?? undefined;
+}
+
+export default async function AgendaPage() {
+  const user = await requireAuth();
+  const activeOrg = await resolveActiveOrg(user);
+  if (!activeOrg) redirect("/app");
+  const cabecalhos = await headers();
+  const origemLocal = origemLocalDosCabecalhos(cabecalhos);
+
+  // `user.timezone` e não `user_metadata.timezone`: o AuthUser deste projeto
+  // não expõe o metadata cru — ele extrai o que toda tela precisa no primeiro
+  // render, como já fazia com o `locale`. O fuso entrou lá pela mesma razão.
+  const fusoDeApresentacao = user.timezone ?? null;
+
+  // Resolvido no SERVIDOR: `GOOGLE_CALENDAR_*` é env de servidor e não pode
+  // atravessar para o cliente. A tela recebe o booleano e a lista do que falta,
+  // nunca o segredo.
+  /**
+   * A SEMENTE vem do servidor, e não de um hook — porque a rota de leitura ainda
+   * não existe.
+   *
+   * ⚠️ ESTE PARÁGRAFO VENCEU e foi reescrito. Ele dizia que
+   * `GET /api/v1/agenda/agendamentos` "não foi escrito (medido)" — e o GET existe:
+   * `grep -n "^export async function" app/api/v1/agenda/agendamentos/route.ts` → GET:95.
+   * A medição estava certa no dia; a frase não tinha como saber que envelheceu.
+   *
+   * O que esta consulta faz HOJE é a PRIMEIRA PINTURA: o RSC entrega a grade já
+   * desenhada, sem piscar e sem spinner, e o `useAgendamentos` assume a partir
+   * dali para as atualizações. O cookie `httpOnly` segue impedindo o supabase-js
+   * do browser de consultar direto — por isso o caminho do cliente é a rota.
+   *
+   * O servidor PODE: ele tem a sessão, e a RLS filtra por organização como em
+   * qualquer outra tela. Então a Agenda nasce com dado REAL em vez de vazia — o
+   * que ela perde, até o GET existir, é atualizar sem recarregar.
+   *
+   * Isto NÃO é contorno permanente: quando o GET subir, troca-se esta consulta
+   * por `useQuery` e a tela ganha o realtime. O que muda é a origem; o desenho
+   * fica. E é melhor que esperar: uma tela vazia por falta de rota é
+   * indistinguível, para quem olha, de uma agenda sem compromissos.
+   */
+  const supabase = await createClient();
+
+  /**
+   * O RELÓGIO É DA ORGANIZAÇÃO — decisão do dono do produto (2026-09-20, #1350):
+   *
+   *   "Seria da organização com divisão entre pessoas. Uma organização pode por
+   *    exemplo ter 5 pessoas/agendas diferentes."
+   *
+   * A divisão entre pessoas é sobre DE QUEM é cada compromisso dentro da semana
+   * comum — filtro e trilha de cor, que a grade já tem. Não é sobre fuso: cinco
+   * atendentes da mesma clínica olham a MESMA semana.
+   *
+   * ⚠️ `user.timezone` NÃO entra nesta conta, e a versão anterior deste arquivo
+   * o punha como degrau de cima. A escada com duas fontes trazia de volta a
+   * divergência que a issue existe para fechar: o servidor não conhece o fuso do
+   * NAVEGADOR de quem abre, então qualquer degrau que dependa da pessoa volta a
+   * ser palpite no primeiro render. `organizations.timezone` é `NOT NULL` com
+   * default (`baseline.sql`), então aqui sempre há resposta — e é a MESMA que o
+   * cliente vai usar, porque ela viaja como prop logo abaixo.
+   *
+   * `fusoUtilizavel` fica porque a coluna não é validada por escritor nenhum
+   * (`z.string().max(64)` sem `refine`, sem CHECK) e `Intl` LANÇA com fuso
+   * inválido: um acento no campo de configuração viraria tela branca.
+   */
+  const fusoDaAgenda = fusoUtilizavel(activeOrg.timezone);
+  const { de: inicio, ate: fim } = semanaSemente(new Date(), fusoDaAgenda);
+  /** A data de hoje NO FUSO DA ORGANIZAÇÃO, para o cliente ancorar na mesma. */
+  const hojeNaOrganizacao = diaDeHojeNoFuso(new Date(), fusoDaAgenda);
+
+  // `.eq("organization_id", activeOrg.orgId)` em TODA consulta desta página, e
+  // não só a RLS. A `fn_user_org_ids()` que as policies usam devolve TODAS as
+  // organizações do usuário: ela é PISO (impede vazamento entre inquilinos), não
+  // ESCOPO (não escolhe a org ativa). Sem o filtro, quem é membro de duas
+  // organizações via seis tipos onde há três — e clicar no da outra org dava
+  // "Tipo de agendamento não encontrado", porque a rota que marca ESCAPA a org
+  // certa e não achava o tipo que esta tela ofereceu.
+  const [{ data: tipos }, { data: linhas }] = await Promise.all([
+    supabase
+      .from("calendar_event_types")
+      .select(
+        "id, name, duration_minutes, location_kind, location_details, is_active, default_owner_user_id",
+      )
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("calendar_appointments")
+      .select(
+        "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, contacts(name, display_name)",
+      )
+      .eq("organization_id", activeOrg.orgId)
+      .gte("starts_at", inicio.toISOString())
+      .lt("starts_at", fim.toISOString())
+      .order("starts_at"),
+  ]);
+
+  /**
+   * A OCUPAÇÃO QUE VEM DO GOOGLE — o que o dono cria lá e não via aqui.
+   *
+   * ⚠️ ESTE FIO NUNCA EXISTIU, e é o Lado B do relato: "quando marco algo pelo
+   * calendar não mostra no deskcomm". Medido na VPS: 27 linhas em
+   * `calendar_external_events`, entrando certo. Mas essa tabela só alimentava o
+   * motor de disponibilidade (`lib/agenda/ocupados.ts`) — o horário ficava
+   * bloqueado e o bloco não aparecia. O dono via a agenda vazia e o horário
+   * indisponível ao mesmo tempo.
+   *
+   * ⚠️ E O `title` NÃO É LIDO, de propósito. A tabela tem a coluna — com nome só
+   * em linhas gravadas antes da v1.17.0, porque desde a migration 0225 o
+   * sincronizador a grava nula —; esta consulta a deixa de fora.
+   *
+   * A razão é medida, não estética, e está escrita inteira aqui de propósito:
+   * sem o argumento completo, a próxima pessoa lê a ausência do título como
+   * esquecimento e o acrescenta achando que está melhorando a tela.
+   *
+   * ─── O que o cal.com faz, medido no código deles (QUATRO provas) ───────────
+   *  1. o tipo de retorno da disponibilidade (`EventBusyDate`) não tem campo de
+   *     título — só `start`, `end`, `source`, `timeZone`;
+   *  2. o caminho antigo usa `freebusy.query`, que por definição não devolve
+   *     título nenhum;
+   *  3. o cache `CalendarCacheEvent` GRAVA `summary`/`description`/`location`, e
+   *     o `select` da leitura devolve só `start`/`end`/`timeZone`
+   *     (`packages/features/calendar-subscription/lib/cache/CalendarCacheEventRepository.ts`);
+   *  4. as duas telas deles escrevem "Busy" na mão, e a distinção visual é
+   *     contorno-sem-preenchimento, ou cor por origem.
+   *
+   * A terceira é a que decide: guardar e não ler não é limitação, é DECISÃO —
+   * alguém escreveu aquele `select` de propósito.
+   *
+   * ─── E o nosso caso é PIOR que o deles ─────────────────────────────────────
+   * No cal.com a tela é do próprio dono da agenda. Aqui a agenda conectada é
+   * PESSOAL de quem atende e a tela é multi-tenant, vista por gestor:
+   * "consulta médica", "terapia", "entrevista de emprego" apareceriam para o
+   * chefe. Não copiamos a decisão deles — medimos que a nossa exposição é maior.
+   *
+   * ─── A assimetria que decide sozinha ───────────────────────────────────────
+   * Mostrar o título é reversível no código; o vazamento não é. Quando há
+   * dúvida, o default certo é o mais restrito.
+   *
+   * Se o dono quiser o nome do evento, a decisão é dele — e o caminho é POR
+   * ORGANIZAÇÃO e com aviso de quem vê, nunca por default.
+   *
+   * ⚠️ Isto tem GUARDA, não só comentário:
+   * `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts`.
+   *
+   * O dono vem por `connection_id → calendar_connections.user_id`, porque esta
+   * tabela não tem `user_id` — é a mesma junção que `ocupados.ts` já faz.
+   */
+  // Leitura ÚNICA da ocupação da tela (`lib/agenda/ocupacao-externa`) — a mesma
+  // que a rota faz. O recorte é INTERSEÇÃO de intervalos, como no motor de
+  // disponibilidade: o compromisso que atravessa a virada do dia aparece no dia
+  // em que ele OCUPA, não só no dia em que ele começa (#525).
+  // A ocupação é perguntada POR DONO (`p_owner`), e quem ela deve cobrir é a
+  // organização inteira: a semente desenha a coluna de cada membro, e o Atendente
+  // precisa da ocupação da dona da agenda — antes, a leitura pela sessão
+  // escondia a conexão dela dele e a grade desenhava livre o que o motor recusa
+  // (#896, item 3).
+  const { donos, erro: erroDosDonos } = await donosDaAgenda(activeOrg.orgId);
+  if (erroDosDonos) {
+    logger.warn("[agenda.page] donos da agenda não vieram", { erro: erroDosDonos });
+  }
+
+  const { blocos: externos } = await lerOcupacaoExterna(
+    supabase,
+    {
+      organizationId: activeOrg.orgId,
+      de: inicio.toISOString(),
+      ate: fim.toISOString(),
+    },
+    donos,
+  );
+
+  // QUAL conta está conectada — o prop existia no cartão e NUNCA era passado,
+  // então o ramo "Agenda conectada" era código morto e o botão "Conectar Google"
+  // não sumia depois de conectar. Segunda conexão era um clique no mesmo botão.
+  const { data: conexoes } = await supabase
+    .from("calendar_connections")
+    .select("account_email, status")
+    .eq("organization_id", activeOrg.orgId)
+    .eq("user_id", user.id)
+    // ⚠️ A CONSTANTE, e não o literal. Isto era `.eq("provider", "google")` — um
+    // valor que o CHECK de `calendar_connections` PROÍBE existir, então a
+    // consulta casava zero linhas SEMPRE. O efeito na tela: `contaConectada`
+    // vinha `null`, o ramo "Agenda conectada" do cartão nunca entrava, e o botão
+    // "Conectar Google" continuava aparecendo depois de a pessoa já ter
+    // conectado. Ela reconectava, o ciclo repetia.
+    .eq("provider", PROVEDOR_GOOGLE)
+    .neq("status", "disconnected")
+    .order("account_email");
+
+  // `await`: a credencial pode vir do BANCO agora (migration 0201), não só do
+  // `.env`. `faltaParaConectarOGoogle` já só devolve nomes de variável quando as
+  // DUAS fontes estão vazias — mandar editar o `.env` de uma instalação que
+  // gravou a credencial pela tela seria pior que não dizer nada.
+  const googleConfigurado = await googleEstaConfigurado();
+  const faltaNoGoogle = googleConfigurado ? [] : await faltaParaConectarOGoogle();
+
+  return (
+    <AgendaClient
+      fusoDeApresentacao={fusoDeApresentacao}
+      // A MESMA data que a semente acima usou. Sem isto, o cliente recalcula com
+      // `new Date()` do navegador e a divergência volta INTEIRA — não só na
+      // janela de sábado, mas para todo usuário fora do fuso da organização.
+      hojeNaOrganizacao={hojeNaOrganizacao}
+      // QUEM ESTÁ LOGADO, do servidor. É o único jeito de a tela saber se o
+      // dono da agenda é ela mesma: sem isto, sem lista da equipe (papel abaixo
+      // de `agent`, que é o piso de `/api/v1/agenda/pessoas`) a agenda inventava
+      // uma pessoa chamada "Você" para a jornada de OUTRA pessoa — ver o painel
+      // em `_client.tsx`.
+      usuarioId={user.id}
+      googleConfigurado={googleConfigurado}
+      contaConectada={conexoes?.map((c) => c.account_email).join(", ") || null}
+      enderecoDeRetorno={enderecoDeRetorno(origemLocal ?? undefined)}
+      faltaNoGoogle={faltaNoGoogle}
+      // SÓ para quem administra a INSTALAÇÃO. A tela do app OAuth vive em
+      // `/admin` e faz `notFound()` para o resto — oferecer o link a quem não
+      // pode entrar seria trocar um beco por outro.
+      linkDeConfiguracaoDoGoogle={
+        user.is_platform_admin && !user.support ? "/admin/google" : undefined
+      }
+      // O piso da rota de marcar é `agent`; `viewer` — e o acompanhamento só de
+      // leitura, que `resolveActiveOrg` resolve como `viewer` — levaria 403. A
+      // tela esconder é cortesia: quem decide segue sendo a rota.
+      podeMarcar={ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent}
+      tiposIniciais={(tipos ?? []).map((t) => ({
+        id: t.id,
+        nome: t.name,
+        duracaoMin: t.duration_minutes,
+        // Quem DE FATO atende este tipo. Sem isto a tela mostrava o primeiro da
+        // lista de pessoas como responsável e marcava na agenda dele — enquanto
+        // os horários oferecidos vinham da jornada de outra pessoa.
+        donoId: t.default_owner_user_id ?? null,
+        // O LOCAL DE VERDADE. O `select` acima já trazia `location_kind` e
+        // `location_details`, e o mapeamento os descartava — então o painel caía
+        // no default de parâmetro e toda clínica de toda instalação lia
+        // "Presencial · Sala 2" numa tela real.
+        localKind: t.location_kind ?? null,
+        localDetalhes: t.location_details ?? null,
+      }))}
+      agendamentosIniciais={(
+        (linhas ?? []).map((a) => ({
+          id: a.id,
+          revision: a.revision,
+          titulo: a.title ?? "Agendamento",
+          responsavelId: a.owner_user_id ?? "",
+          comeca: a.starts_at,
+          termina: a.ends_at,
+          origem: "ui" as const,
+          situacao: a.status as "confirmed",
+          // "com quem" é a promessa do subtítulo desta tela, e era a única parte
+          // dela que o servidor não entregava: `contact_id` vinha no select e
+          // morria aqui. `dados-de-mentira.ts` preenche este campo nos 11 cards,
+          // então a tela pareceu pronta o tempo todo — e o `?? a.titulo` do
+          // histórico transformou a ausência em silêncio, não em erro.
+          // A ordem entre `name` e `display_name` não se decide aqui: vem de
+          // `lib/contacts/rotulo-do-contato.ts`. Este comentário apontava para
+          // `PreviewPanel.tsx` como precedente, e aquele arquivo deixou de remontar
+          // a cadeia — precedente por cópia envelhece; módulo, não. As duas colunas
+          // são reescritas pelo cascade de LGPD, então nenhuma vaza titular
+          // anonimizado.
+          quemSeraAtendido: contatoDoEmbed(a.contacts),
+        })) as AgendamentoDaTela[]
+      ).concat(
+        /**
+         * A ocupação do Google entra na MESMA lista, com `origem: "google_sync"`.
+         *
+         * A grade já sabia tratar essa origem — `GradeDaAgenda` desabilita o
+         * bloco, tira o clique, tira o arraste e diz "ocupado na agenda do
+         * Google" no rótulo acessível. O que faltava era alguém entregar os
+         * dados: o tratamento existia e nunca recebia uma linha.
+         *
+         * `titulo: "Ocupado"` é o rótulo, não o nome do evento — ver o
+         * comentário da consulta acima sobre por que o `title` não é lido.
+         * `quemSeraAtendido` fica ausente de propósito: o tipo já documenta essa
+         * ausência como o caso do Google.
+         */
+        externos.map((e) => {
+          return {
+            id: e.id,
+            titulo: "Ocupado",
+            responsavelId: e.donoId ?? "",
+            comeca: e.iniciaEm,
+            termina: e.terminaEm,
+            origem: "google_sync" as const,
+            situacao: "confirmed" as const,
+          };
+        }) as AgendamentoDaTela[],
+      )}
+    />
+  );
+}

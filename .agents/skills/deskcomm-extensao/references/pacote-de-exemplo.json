@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "profile": "declarative",
+  "publisher": "exemplo-clinica",
+  "name": "retorno-de-paciente",
+  "version": "1.0.0",
+  "license": "MIT",
+  "host_api": { "min": 2, "max": 2 },
+  "permissions": ["navigation.inbox", "navigation.agenda"],
+  "dependencies": [],
+  "data": { "mode": "none" },
+  "display": {
+    "title": { "pt-BR": "Retorno de paciente", "es": "Retorno del paciente" },
+    "summary": {
+      "pt-BR": "Duas rotinas curtas para a recepção não perder quem tratou e não remarcou: quem falar hoje e quais encaixes a semana ainda tem.",
+      "es": "Dos rutinas cortas para que la recepción no pierda a quien se trató y no volvió a agendar."
+    },
+    "category": "service",
+    "icon": "ListChecks"
+  },
+  "configuration": { "density": "comfortable", "show_description": true },
+  "contributions": {
+    "crm_cards": [
+      {
+        "id": "quem-nao-remarcou",
+        "title": { "pt-BR": "Quem tratou e não remarcou", "es": "Quién se trató y no volvió a agendar" },
+        "description": {
+          "pt-BR": "A conversa de quem esteve na clínica nas últimas semanas e saiu sem próxima data. Chame antes que vire mais um mês parado.",
+          "es": "La conversación de quien estuvo en la clínica y salió sin próxima fecha."
+        },
+        "icon": "BookOpen",
+        "blocks": [
+          {
+            "heading": { "pt-BR": "Comece pelo procedimento que pede retorno", "es": "Empiece por el procedimiento que pide retorno" },
+            "body": {
+              "pt-BR": "Limpeza, clareamento e ajuste de aparelho têm retorno previsto. Abra as conversas dessas pessoas primeiro: elas já decidiram tratar, e a ligação é lembrete, não venda.",
+              "es": "Limpieza, blanqueamiento y ajuste de ortodoncia tienen retorno previsto. Abra primero esas conversaciones."
+            }
+          },
+          {
+            "heading": { "pt-BR": "Uma mensagem, uma pergunta", "es": "Un mensaje, una pregunta" },
+            "body": {
+              "pt-BR": "Diga o procedimento, diga o prazo e ofereça dois horários concretos. Mensagem que termina em pergunta aberta volta como silêncio."
+            }
+          }
+        ],
+        "action": {
+          "label": { "pt-BR": "Abrir conversas", "es": "Abrir conversaciones" },
+          "capability": "inbox.open"
+        }
+      },
+      {
+        "id": "encaixes-da-semana",
+        "title": { "pt-BR": "Encaixes que a semana ainda tem", "es": "Huecos que la semana todavía tiene" },
+        "description": {
+          "pt-BR": "Antes de oferecer horário por telefone, olhe onde a agenda está vazia. Oferecer o que não existe custa a confiança de quem atendeu."
+        },
+        "icon": "Lightbulb",
+        "blocks": [
+          {
+            "heading": { "pt-BR": "Ofereça dois horários, nunca a agenda inteira" },
+            "body": {
+              "pt-BR": "Quem escolhe entre duas opções responde; quem recebe a semana toda adia. Escolha um horário cedo e um no fim do dia, e deixe o resto para quem insistir."
+            }
+          }
+        ],
+        "action": {
+          "label": { "pt-BR": "Abrir agenda", "es": "Abrir agenda" },
+          "capability": "agenda.open"
+        }
+      }
+    ]
+  }
+}

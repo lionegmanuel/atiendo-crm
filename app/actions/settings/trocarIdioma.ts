@@ -1,0 +1,60 @@
+"use server";
+
+import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+
+import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { audit } from "@/lib/audit";
+import { IDIOMAS, type Idioma } from "@/lib/i18n/idiomas";
+import { createClient } from "@/lib/supabase/server";
+
+/**
+ * Troca o idioma da interface pelo seletor do topo.
+ *
+ * ─── Por que uma ação PRÓPRIA, e não `updateProfile` ───────────────────────
+ *
+ * `updateProfile` valida o formulário INTEIRO — nome, fuso, avatar. Chamá-la
+ * daqui obrigaria o seletor do topo a conhecer e reenviar campos que ele não
+ * mostra, e um deles chegar vazio apagaria o dado de quem só queria trocar de
+ * idioma. Uma ação que faz uma coisa não tem esse modo de falha.
+ *
+ * ─── O que ela grava, e o que NÃO grava ────────────────────────────────────
+ *
+ * Escreve a PREFERÊNCIA da pessoa (`user_metadata.locale`), nunca o idioma da
+ * organização: trocar o próprio idioma no topo não pode mudar o que os colegas
+ * veem. O idioma da empresa continua onde tem dono — Configurações ›
+ * Organização, sob permissão de admin.
+ */
+export async function trocarIdioma(
+  idioma: Idioma,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(IDIOMAS as readonly string[]).includes(idioma)) {
+    return { ok: false, error: "idioma_desconhecido" };
+  }
+
+  const authUser = await loadAuthUser();
+  if (!authUser) return { ok: false, error: "unauthenticated" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ data: { locale: idioma } });
+  if (error) return { ok: false, error: error.message };
+
+  const hdrs = await headers();
+  const activeOrg = await resolveActiveOrg(authUser);
+  await audit({
+    action: "profile.updated",
+    actorUserId: authUser.id,
+    organizationId: activeOrg?.orgId ?? null,
+    resourceType: "user",
+    resourceId: authUser.id,
+    requestId: hdrs.get("x-request-id"),
+    ip: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    userAgent: hdrs.get("user-agent") ?? null,
+    metadata: { locale: idioma, origem: "seletor_do_topo" },
+  });
+
+  // O layout inteiro lê `user.idioma`; sem revalidar, a próxima navegação
+  // ainda viria montada no idioma anterior.
+  revalidatePath("/app", "layout");
+  return { ok: true };
+}

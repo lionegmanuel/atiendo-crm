@@ -1,0 +1,270 @@
+import { parseCsv } from "@/lib/contacts/csv";
+import { precoParaCentavos } from "@/lib/schemas/produtos";
+
+/**
+ * A PLANILHA DA LOJA — do arquivo que ela já tem para o catálogo.
+ *
+ * ─── Por que reusa o parser de contatos ─────────────────────────────────────
+ *
+ * `parseCsv` é RFC 4180, sem dependência, já testado, e detecta o delimitador
+ * (o Excel em português exporta com `;`). Copiá-lo para cá criaria a segunda
+ * verdade sobre o que é um CSV — e a segunda envelhece sozinha. O que é DESTE
+ * domínio é só o mapeamento: quais colunas, e o que fazer com cada valor.
+ *
+ * ─── A planilha vem suja, e recusar é a função ──────────────────────────────
+ *
+ * Loja de rua manda "R$ 5.499,00" e "5499", nome com espaço duplo, linha em
+ * branco no meio e coluna com acento. Nada disso é erro da pessoa — é o formato
+ * real. O que NÃO se aceita em silêncio é o ambíguo: preço que não dá para ler
+ * vira linha recusada com o motivo, nunca um chute. Um chute aqui é preço
+ * errado dito a um cliente depois.
+ */
+
+/**
+ * Como cada coluna pode vir escrita. A primeira forma é a que a gente sugere.
+ * As de espanhol (`nombre`, `precio`, `costo`, `cantidad`…) cumprem o que a tela
+ * promete a quem a usa nesse idioma; a comparação tira acento e caixa dos dois
+ * lados, então as formas novas entram sem acento.
+ */
+const COLUNAS: Record<string, readonly string[]> = {
+  codigo: ["codigo", "código", "sku", "ref", "referencia", "referência", "cod"],
+  nome: ["nome", "produto", "descricao", "descrição", "titulo", "título", "item", "nombre", "producto", "descripcion", "articulo"],
+  preco: ["preco", "preço", "valor", "preco de venda", "preço de venda", "venda", "precio", "precio de venta", "venta"],
+  custo: ["custo", "preco de custo", "preço de custo", "compra", "costo", "coste", "precio de costo", "precio de coste"],
+  marca: ["marca", "fabricante"],
+  categoria: ["categoria", "tipo", "departamento"],
+  quantidade: ["quantidade", "estoque", "qtd", "qtde", "qty", "cantidad", "existencias", "stock"],
+};
+
+function normalizarCabecalho(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Qual campo do produto esta coluna da planilha representa? */
+function campoDaColuna(cabecalho: string): string | null {
+  const alvo = normalizarCabecalho(cabecalho);
+  for (const [campo, formas] of Object.entries(COLUNAS)) {
+    if (formas.some((f) => normalizarCabecalho(f) === alvo)) return campo;
+  }
+  return null;
+}
+
+/**
+ * IDENTIDADE DO PRODUTO — é ela que faz reimportar ATUALIZAR em vez de duplicar.
+ *
+ * O código cabe em 60 caracteres (limite da coluna e do schema em
+ * `lib/schemas/produtos.ts`). Passando disso, o corte seco entregava o MESMO
+ * código a produtos diferentes: "…Tingidos Cor Manhã" e "…Tingidos Cor Noite"
+ * compartilham os 60 primeiros caracteres, e a segunda linha era recusada como
+ * código repetido — o produto não entrava no catálogo. O corte leva a
+ * assinatura do texto INTEIRO, como o slug de pergunta em
+ * `lib/webhooks/respondi.ts`.
+ */
+const LIMITE_DO_CODIGO = 60;
+
+/** 32 bits em hex, zero à esquerda: o tamanho não varia com o valor. */
+const TAMANHO_DA_ASSINATURA = 8;
+
+/** Espaço colapsado e sem sobra nas pontas: "IP15  128 " e "IP15 128" são a MESMA linha. */
+function normalizarIdentidade(texto: string): string {
+  return texto.replace(/\s+/g, " ").trim();
+}
+
+function codigoDoProduto(texto: string): string {
+  const base = normalizarIdentidade(texto);
+  if (base.length <= LIMITE_DO_CODIGO) return base;
+  // trimEnd: o corte pode cair no meio de um espaço e deixar "… -a1b2c3d4".
+  const corte = base.slice(0, LIMITE_DO_CODIGO - 1 - TAMANHO_DA_ASSINATURA).trimEnd();
+  return `${corte}-${assinaturaDoTexto(base)}`;
+}
+
+/** FNV-1a de 32 bits: distinguir dois textos de prefixo igual, não resistir a ataque. */
+function assinaturaDoTexto(texto: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i += 1) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(TAMANHO_DA_ASSINATURA, "0");
+}
+
+/**
+ * O código NÃO diferencia maiúsculas: "IP15" e "ip15" são o MESMO produto.
+ *
+ * A busca que o agente usa para responder o cliente ignora a caixa
+ * (`normalizar()` em `lib/catalogo/busca.ts`): dois produtos que só diferem
+ * nela chegariam à conversa como um só, com dois preços. O índice do banco
+ * compara o texto exato, então a regra é garantida AQUI e na rota de
+ * importação, que compara com o catálogo já cadastrado (decisão do mantenedor
+ * de 22/09/2026, #482).
+ */
+export function chaveDoCodigo(codigo: string): string {
+  return codigo.toLowerCase();
+}
+
+export interface LinhaImportada {
+  /** A linha como a pessoa a vê na planilha: 1 é o cabeçalho. */
+  linha: number;
+  codigo: string;
+  nome: string;
+  preco_cents: number;
+  custo_cents: number | null;
+  marca?: string;
+  categoria?: string;
+  quantidade: number;
+  controla_estoque: boolean;
+}
+
+export interface ErroDaLinha {
+  /** A linha como a pessoa a vê na planilha: 1 é o cabeçalho. */
+  linha: number;
+  motivo: string;
+}
+
+export interface ResultadoDaLeitura {
+  produtos: LinhaImportada[];
+  erros: ErroDaLinha[];
+  /** Colunas que a planilha trouxe e este importador não conhece. */
+  colunasIgnoradas: string[];
+}
+
+export function lerPlanilha(
+  conteudo: string,
+  t?: (text: string) => string,
+): ResultadoDaLeitura | { erro: string } {
+  const _t = t || ((x) => x);
+  const linhas = parseCsv(conteudo).filter((l) => l.some((c) => c.trim() !== ""));
+  if (linhas.length === 0) return { erro: _t("A planilha está vazia.") };
+
+  const cabecalho = linhas[0]!;
+  const mapa = new Map<number, string>();
+  const colunasIgnoradas: string[] = [];
+  cabecalho.forEach((titulo, i) => {
+    const campo = campoDaColuna(titulo);
+    if (campo) mapa.set(i, campo);
+    else if (titulo.trim() !== "") colunasIgnoradas.push(titulo.trim());
+  });
+
+  const campos = new Set(mapa.values());
+  // Sem nome ou sem preço não há catálogo — e dizer isso ANTES de processar 300
+  // linhas é o que evita um relatório com 300 erros iguais.
+  const faltando = ["nome", "preco"].filter((c) => !campos.has(c));
+  if (faltando.length > 0) {
+    // A recusa NOMEIA a coluna que falta, uma frase por combinação. Quem tem
+    // `nome` e não tem preço, se ler "precisa de uma coluna de nome e de
+    // preço", vai procurar a coluna que já tem — e o arquivo dele fica parado
+    // na primeira tela do catálogo. A frase inteira é a chave de tradução: em
+    // espanhol a ordem das palavras não é a mesma, e montar por pedaços
+    // entregaria frase torta.
+    const pedido =
+      faltando.length === 2
+        ? _t("A planilha precisa de uma coluna de nome e de preço. Encontrei: ")
+        : faltando[0] === "nome"
+          ? _t("A planilha precisa de uma coluna de nome. Encontrei: ")
+          : _t("A planilha precisa de uma coluna de preço. Encontrei: ");
+    return {
+      erro:
+        pedido + (cabecalho.filter((c) => c.trim()).join(", ") || _t("nenhuma coluna")) + ".",
+    };
+  }
+
+  const produtos: LinhaImportada[] = [];
+  const erros: ErroDaLinha[] = [];
+  /** Chave sem caixa → a primeira linha que trouxe o código, como foi escrito ali. */
+  const codigosVistos = new Map<string, { linha: number; codigo: string }>();
+
+  for (let i = 1; i < linhas.length; i += 1) {
+    const bruto = linhas[i]!;
+    const numeroNaPlanilha = i + 1;
+    const valor = (campo: string): string => {
+      for (const [idx, c] of mapa) if (c === campo) return (bruto[idx] ?? "").trim();
+      return "";
+    };
+
+    const nome = valor("nome").replace(/\s+/g, " ");
+    if (nome === "") {
+      erros.push({ linha: numeroNaPlanilha, motivo: _t("sem nome do produto") });
+      continue;
+    }
+
+    const preco_cents = precoParaCentavos(valor("preco"));
+    if (preco_cents === null) {
+      // O valor cru entra na mensagem: quem vai corrigir precisa achar a célula.
+      erros.push({
+        linha: numeroNaPlanilha,
+        motivo:
+          _t("preço não reconhecido (") + `"${valor("preco")}"` + ")" + _t(" — escreva assim: 5.499,00"),
+      });
+      continue;
+    }
+
+    const custoTexto = valor("custo");
+    const custo_cents = custoTexto === "" ? null : precoParaCentavos(custoTexto);
+    if (custoTexto !== "" && custo_cents === null) {
+      erros.push({
+        linha: numeroNaPlanilha,
+        motivo: _t("custo não reconhecido (") + `"${custoTexto}"` + ")",
+      });
+      continue;
+    }
+
+    // Sem código na planilha, o nome vira a identidade. É o que permite reimportar
+    // a mesma planilha atualizando em vez de duplicar — que é o gesto real da
+    // loja quando o preço muda. O corte em 60 caracteres fica em
+    // `codigoDoProduto`: cortar AQUI, antes de colapsar os espaços, fazia dois
+    // nomes longos chegarem ao banco com o mesmo código.
+    const codigo = codigoDoProduto(valor("codigo") || nome);
+    const anterior = codigosVistos.get(chaveDoCodigo(codigo));
+    if (anterior) {
+      // As DUAS linhas na mensagem: quem corrige precisa achar o par, e quando
+      // a diferença é só a caixa ("IP15" e "ip15") o motivo não salta aos olhos.
+      // A frase inteira é UMA chave com os valores como placeholder: traduzida
+      // aos pedaços, cada trecho novo é mais uma chave que pode faltar.
+      const frase =
+        anterior.codigo === codigo
+          ? _t('código repetido na planilha ("{codigo}") — já está na linha {linha}')
+          : _t(
+              'código repetido na planilha ("{codigo}") — já está na linha {linha}, escrito "{anterior}". Maiúsculas e minúsculas não mudam o código.',
+            );
+      const valores: Record<string, string> = {
+        codigo,
+        linha: String(anterior.linha),
+        anterior: anterior.codigo,
+      };
+      // Uma passada só, com função: o código vem da planilha e um "$&" ou um
+      // "{linha}" dentro dele não pode virar outra coisa.
+      erros.push({
+        linha: numeroNaPlanilha,
+        motivo: frase.replace(/\{(codigo|linha|anterior)\}/g, (_, nome: string) => valores[nome]!),
+      });
+      continue;
+    }
+    codigosVistos.set(chaveDoCodigo(codigo), { linha: numeroNaPlanilha, codigo });
+
+    // Coluna de estoque AUSENTE significa "esta loja não conta estoque" — e é
+    // diferente de estoque zero. Sem essa distinção, uma planilha sem a coluna
+    // deixaria o catálogo inteiro invisível para o agente.
+    const temColunaEstoque = campos.has("quantidade");
+    const qtdTexto = valor("quantidade");
+    const quantidade = temColunaEstoque ? Number(qtdTexto.replace(/\D/g, "")) || 0 : 0;
+
+    produtos.push({
+      linha: numeroNaPlanilha,
+      codigo,
+      nome,
+      preco_cents,
+      custo_cents,
+      ...(valor("marca") ? { marca: valor("marca") } : {}),
+      ...(valor("categoria") ? { categoria: valor("categoria") } : {}),
+      quantidade,
+      controla_estoque: temColunaEstoque,
+    });
+  }
+
+  return { produtos, erros, colunasIgnoradas };
+}

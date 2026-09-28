@@ -1,0 +1,174 @@
+{
+  "data": [
+    {
+      "name": "hello_world",
+      "language": "en_US",
+      "status": "APPROVED",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "TEXT",
+          "text": "Hello World"
+        },
+        {
+          "type": "BODY",
+          "text": "Welcome and congratulations!! This message demonstrates your ability to send a WhatsApp message notification from the Cloud API, hosted by Meta. Thank you for taking the time to test with us."
+        },
+        {
+          "type": "FOOTER",
+          "text": "WhatsApp Business Platform sample message"
+        }
+      ],
+      "id": "1715954029565688"
+    },
+    {
+      "name": "jaspers_market_media_carousel_v1",
+      "language": "en_US",
+      "status": "APPROVED",
+      "category": "MARKETING",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Our in-house chefs have prepared some delicious and fresh summer recipes."
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "Get free delivery",
+              "url": "https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates/utility-templates"
+            }
+          ]
+        },
+        {
+          "type": "CAROUSEL",
+          "cards": [
+            {
+              "components": [
+                {
+                  "type": "HEADER",
+                  "format": "IMAGE"
+                },
+                {
+                  "type": "BODY",
+                  "text": "Simple and Healthy Sheet Pan Dinner to Feed the Whole Family"
+                },
+                {
+                  "type": "BUTTONS",
+                  "buttons": [
+                    {
+                      "type": "URL",
+                      "text": "Get this recipe",
+                      "url": "https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates/media-card-carousel-templates"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "components": [
+                {
+                  "type": "HEADER",
+                  "format": "IMAGE"
+                },
+                {
+                  "type": "BODY",
+                  "text": "3 Plant-Powered Salad Bowls to Fuel Your Week"
+                },
+                {
+                  "type": "BUTTONS",
+                  "buttons": [
+                    {
+                      "type": "URL",
+                      "text": "Get this recipe",
+                      "url": "https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates/media-card-carousel-templates"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "id": "1632430928029785"
+    },
+    {
+      "name": "jaspers_market_image_cta_v1",
+      "language": "en_US",
+      "status": "APPROVED",
+      "category": "MARKETING",
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "IMAGE"
+        },
+        {
+          "type": "BODY",
+          "text": "Free delivery for all online orders with Jasper's Market"
+        },
+        {
+          "type": "FOOTER",
+          "text": "developers.facebook.com"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "Get free delivery",
+              "url": "https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates/utility-templates"
+            }
+          ]
+        }
+      ],
+      "id": "1616979502874643"
+    },
+    {
+      "name": "jaspers_market_order_confirmation_v1",
+      "language": "en_US",
+      "status": "APPROVED",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "TEXT",
+          "text": "Order confirmed"
+        },
+        {
+          "type": "BODY",
+          "text": "Hi {{1}},\n\nThank you for your purchase! Your order number is {{2}}.\n\nWe'll start getting your farm fresh groceries ready to ship.\n\nEstimated delivery:  {{3}}.\n\nWe will let you know when your order ships."
+        },
+        {
+          "type": "FOOTER",
+          "text": "developers.facebook.com"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "Visit order details",
+              "url": "https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates/utility-templates"
+            }
+          ]
+        }
+      ],
+      "id": "1012602094422872"
+    },
+    {
+      "name": "jaspers_market_plain_text_v1",
+      "language": "en_US",
+      "status": "APPROVED",
+      "category": "MARKETING",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Welcome to Jasper’s Market, your local grocery store providing farm-fresh produce and high-quality goods!"
+        }
+      ],
+      "id": "999668695790367"
+    }
+  ]
+}

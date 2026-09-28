@@ -1,0 +1,242 @@
+import { notFound, redirect } from "next/navigation";
+
+import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { ROLE_RANK } from "@/lib/auth/types";
+import { listSelectableChannels } from "@/lib/channels/selectable";
+import { createClient } from "@/lib/supabase/server";
+import type { AgentRow } from "@/hooks/ai/useAgent";
+import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
+import type { CredentialRow } from "@/hooks/ai/useCredentials";
+
+import { LegacyRecovery } from "./_components/LegacyRecovery";
+import { AgentOperation } from "./_components/AgentOperation";
+import type { MaterialDoAcervo } from "./_components/BasesDoAgente";
+import { AgentTabs } from "./_components/AgentTabs";
+import { AgentEditorClient } from "./_client";
+import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
+import { coberturaDoFunil, type EtapaDoMapa } from "@/lib/leads/agent-mapping";
+import type { CoberturaPorFunil } from "./_components/FunisDoAgente";
+import { lerAmbiente } from "@/lib/instalacao/ambiente";
+import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
+
+export const dynamic = "force-dynamic";
+
+const AGENT_COLUMNS =
+  "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, channel, priority, published_version_id, paused_at, operation_mode, operation_revision, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
+
+const VERSION_COLUMNS =
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
+
+const CREDENTIAL_COLUMNS =
+  "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
+
+/**
+ * Os provedores cuja chave veio na INSTALAÇÃO (`.env`), não da tela de
+ * Credenciais.
+ *
+ * Sai de `lerAmbiente`, a mesma leitura que o retrato da instalação usa — uma
+ * segunda lista de nomes de variável divergiria no dia em que um provedor novo
+ * entrasse.
+ */
+function provedoresDaInstalacao(): string[] {
+  const a = lerAmbiente();
+  return Object.entries(a.chavesDeProvedor)
+    .filter(([, tem]) => tem)
+    .map(([id]) => id);
+}
+
+export default async function AgentEditorPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  const user = await requireAuth();
+  const activeOrg = await resolveActiveOrg(user);
+  if (!activeOrg) redirect("/app");
+  if (ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
+    redirect("/403");
+  }
+
+  const supabase = await createClient();
+  const { data: agentRow } = await supabase
+    .from("ai_agents")
+    .select(AGENT_COLUMNS)
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
+    .maybeSingle();
+
+  if (!agentRow) notFound();
+
+  const agent = agentRow as unknown as AgentRow;
+  const readOnly = ROLE_RANK[activeOrg.role] < ROLE_RANK.admin;
+
+  // Agente de voz não passa pelo fluxo de versão/publicação (esse é todo
+  // desenhado em torno de `channel_session_id`, um número de WhatsApp
+  // conectado -- uma ligação nem tem isso). O editor simples
+  // (system_prompt + config direto em `ai_agents`, sem versão) é o que se
+  // aplica: mesma tela que já existe pra config geral/modelo/RAG/voz,
+  // sem forçar o agente de voz a fingir que tem canal do WhatsApp.
+  //
+  // ─── A EXCEÇÃO AO EDITOR LEGADO, E A CONDIÇÃO QUE A ENCERRA (issue #456) ───
+  //
+  // O editor legado é PROIBIDO no resto desta página, e com razão: editar o
+  // prompt por ele gravava em `ai_agents.system_prompt` enquanto o motor do
+  // WhatsApp lia a linha de `ai_agent_versions` apontada por
+  // `published_version_id` — a tela mostrava um texto e o agente respondia com
+  // outro. Aqui ele é o CERTO pelo mesmo critério: para voz, tela e motor leem
+  // o MESMO lugar (`getActiveVoiceAgent` em `lib/ai/agents.ts` busca
+  // `system_prompt` de `ai_agents`, e `workers/voice-agent/index.ts` manda esse
+  // texto para a Realtime).
+  //
+  // A exceção vale enquanto esse fato valer. No dia em que a voz ganhar versão
+  // publicada e passar a resolver por `published_version_id`, este ramo SAI e a
+  // tela passa ao editor de versões — e quem avisa não é a memória de ninguém:
+  // `tests/unit/prompt-editado-e-o-que-o-motor-executa.test.ts` reprova, no caso
+  // "o motor de voz lê a coluna que o editor legado grava".
+  if (agent.channel === "voice") {
+    return (
+      <div className="flex h-full flex-col gap-6 p-6">
+        <AgentEditorClient agentId={id} initialData={agent} readOnly={readOnly} />
+      </div>
+    );
+  }
+
+  // mcp_agent: busca versions + lookups.
+  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, funisRes, acervoRes] =
+    await Promise.all([
+      supabase
+        .from("ai_agent_versions")
+        .select(VERSION_COLUMNS)
+        .eq("organization_id", activeOrg.orgId)
+        .eq("agent_id", id)
+        .order("version_number", { ascending: false }),
+      supabase
+        .from("ai_provider_credentials_safe")
+        .select(CREDENTIAL_COLUMNS)
+        .eq("organization_id", activeOrg.orgId),
+      listSelectableChannels(supabase, activeOrg.orgId),
+      supabase
+        .from("ai_router_members")
+        .select("router_id, ai_routers(name)")
+        .eq("organization_id", activeOrg.orgId)
+        .eq("agent_id", id)
+        .limit(1)
+        .maybeSingle(),
+      // Os funis vêm com a página, não por fetch no cliente: a marcação usa
+      // "nenhum funil" para dizer algo importante, e uma lista que chega vazia no
+      // primeiro render diria isso por engano.
+      supabase
+        .from("crm_pipelines")
+        .select("id, name, slug, description, position, is_default")
+        .eq("organization_id", activeOrg.orgId)
+        .eq("is_archived", false)
+        .order("position"),
+      // O acervo vem com a página pelo mesmo motivo dos funis: a seção usa
+      // "nenhum material" para dizer algo importante, e uma lista que chega vazia
+      // no primeiro render diria isso por engano.
+      supabase
+        .from("ai_knowledge_sources")
+        .select("id, name, source_type, chunks_count, last_index_status, is_active")
+        .eq("organization_id", activeOrg.orgId)
+        .eq("is_active", true)
+        .order("created_at", { ascending: true }),
+    ]);
+
+  const versions = (versionsRes.data ?? []) as unknown as AgentVersionRow[];
+  const funis = (funisRes.data ?? []) as unknown as FunilDaResposta[];
+  const materiaisVivos = (acervoRes.data ?? []) as unknown as MaterialDoAcervo[];
+
+  // Quanto de cada funil o assistente sabe percorrer (spec 17 passo 4). Vem
+  // junto com a página porque a lacuna precisa aparecer no MESMO lugar em que o
+  // dono marca o funil — descobrir isso entrando funil por funil na tela de
+  // tradução é o que fez 3 dos 4 funis da produção ficarem mudos sem ninguém ver.
+  const { data: etapasRes } = await supabase
+    .from("crm_stages")
+    .select("id, name, is_won, is_lost, agent_stage_hint, pipeline_id")
+    .eq("organization_id", activeOrg.orgId)
+    .eq("is_archived", false);
+  const etapasPorFunil = new Map<string, EtapaDoMapa[]>();
+  for (const e of (etapasRes ?? []) as Array<EtapaDoMapa & { pipeline_id: string }>) {
+    etapasPorFunil.set(e.pipeline_id, [...(etapasPorFunil.get(e.pipeline_id) ?? []), e]);
+  }
+  const cobertura: CoberturaPorFunil = {};
+  for (const f of funis) {
+    const c = coberturaDoFunil(etapasPorFunil.get(f.id) ?? []);
+    cobertura[f.id] = { traduzidos: c.traduzidos, total: c.total, mudo: c.mudo };
+  }
+  const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
+  const routerMemberRow = routerMemberRes.data as {
+    router_id: string;
+    ai_routers: { name: string } | null;
+  } | null;
+  const routerMembership = routerMemberRow
+    ? {
+        routerId: routerMemberRow.router_id,
+        routerName: routerMemberRow.ai_routers?.name ?? "roteador",
+      }
+    : null;
+
+  // A regra mora em `lib/ai/agents/versoes-da-tela.ts` (pura e testada): rascunho
+  // VIGENTE > publicada > última versão que existiu. Antes, o rascunho vencia
+  // sempre — inclusive quando era mais antigo que a publicada — e um agente
+  // pausado (sem rascunho e sem publicada) abria no texto padrão, que é como o
+  // prompt "sumia".
+  const { draft, published, base, draftObsoleto } = escolherVersoesDaTela(
+    versions,
+    agent.published_version_id ?? null,
+  );
+
+  // Material ARQUIVADO que ficou MARCADO (issue #774). O acervo vem filtrado por
+  // `is_active = true`, então o id marcado e arquivado não voltava para a tela: o
+  // formulário seguia com ele em `knowledge_source_ids` (o `base` é a versão
+  // vigente, mesma régua do AgentForm), o salvar recusava com "um dos materiais
+  // marcados não existe mais, ou foi arquivado" e não havia onde desmarcar — a
+  // seção não desenhava a linha dele. A marcação é vínculo material-agente e não
+  // pode impedir o arquivamento: quem arquiva está certo. Aqui a linha volta só
+  // quando FALTA algum marcado, então o caminho comum — nada arquivado marcado —
+  // continua com a MESMA consulta de antes, sem ida extra ao banco.
+  const idsMarcadosForaDaLista = (base?.knowledge_source_ids ?? []).filter(
+    (id) => !materiaisVivos.some((m) => m.id === id),
+  );
+  const arquivadosMarcadosRes = idsMarcadosForaDaLista.length
+    ? await supabase
+        .from("ai_knowledge_sources")
+        .select("id, name, source_type, chunks_count, last_index_status, is_active")
+        .eq("organization_id", activeOrg.orgId)
+        .in("id", idsMarcadosForaDaLista)
+    : null;
+  const materiaisArquivadosMarcados = (arquivadosMarcadosRes?.data ??
+    []) as unknown as MaterialDoAcervo[];
+  const materiais = [...materiaisVivos, ...materiaisArquivadosMarcados];
+
+  return (
+    <div className="flex h-full flex-col gap-6 p-6">
+      <AgentOperation agent={agent} readOnly={readOnly} />
+      {(agent.kind ?? "rag_bot") !== "mcp_agent" && !agent.published_version_id && (
+        <LegacyRecovery
+          agent={agent}
+          channels={channelSessions}
+          credentials={credentials}
+          hasVersion={versions.length > 0 && !(versions.length===1 && (versions[0] as AgentVersionRow & {provisioning_origin?:string}).provisioning_origin==="legacy_reconciliation")}
+          readOnly={readOnly}
+        />
+      )}
+      <AgentTabs
+        agent={agent}
+        draft={draft}
+        published={published}
+        base={base}
+        draftObsoleto={draftObsoleto}
+        versions={versions}
+        credentials={credentials}
+        provedoresDaInstalacao={provedoresDaInstalacao()}
+        channelSessions={channelSessions}
+        funis={funis}
+        cobertura={cobertura}
+        materiais={materiais}
+        routerMembership={routerMembership}
+        readOnly={readOnly}
+        organizationTimezone={fusoUtilizavel(activeOrg.timezone)}
+      />
+    </div>
+  );
+}

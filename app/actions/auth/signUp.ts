@@ -1,0 +1,277 @@
+"use server";
+
+import { headers } from "next/headers";
+
+import { createClient } from "@/lib/supabase/server";
+import {
+  signupSchema,
+  signupComConviteSchema,
+  type SignupInput,
+  type SignupComConviteInput,
+} from "@/lib/auth/schemas";
+import { verifyInviteToken } from "@/lib/auth/invite-token";
+import { criarContaDeConvite, lerConfigPublicaDoGoTrue } from "@/lib/auth/convite-no-gotrue";
+import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
+import { audit, hashEmail } from "@/lib/audit";
+import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
+import { env } from "@/lib/env";
+
+export type SignUpResult =
+  | {
+      ok: true;
+      /**
+       * O provedor de auth JÁ abriu a sessão neste `signUp()` — quer dizer,
+       * "Confirm email" está DESLIGADO nele e não vai existir link nenhum para
+       * clicar. Quem chama precisa saber disto: a tela de "confirme seu e-mail"
+       * é uma instrução impossível de cumprir nesse estado, e a pessoa fica
+       * esperando para sempre um e-mail que nunca sai — autenticada, sem
+       * organização, sem motivo para navegar até a saída que existe.
+       *
+       * Medido em 2026-09-05 na `origin/main` @ `4d50f63f`, com
+       * `GOTRUE_MAILER_AUTOCONFIRM=true`: a tela dizia "Enviamos um link de
+       * confirmação para …", e ao mesmo tempo o cookie `sb-deskcomm-auth`
+       * estava no browser e `user_organizations` do usuário vinha `[]`.
+       *
+       * Achado de @KIRAzinx566, com um cliente real travado nessa tela.
+       */
+      sessao_ativa: boolean;
+    }
+  | {
+      ok: false;
+      /**
+       * `somente_convite`: a instalação está em modo `so_convite` e esta
+       * tentativa não trouxe convite válido. É recusa de POLÍTICA, não de
+       * dado — por isso não vira `validation_error`: a pessoa não tem o que
+       * corrigir no formulário.
+       *
+       * `conta_ja_existe`: só acontece COM convite na mão. Sem convite a
+       * resposta continua indistinguível de sucesso — ver o parágrafo de
+       * anti-enumeração abaixo. Os dois convivem sem se confundir: a recusa por
+       * política é decidida ANTES de tocar no GoTrue, então numa instalação
+       * fechada quem chega sem convite nunca chega a saber se o e-mail existe.
+       */
+      error:
+        | "validation_error"
+        | "rate_limited"
+        | "signup_failed"
+        | "somente_convite"
+        | "conta_ja_existe";
+      details?: Record<string, unknown>;
+    };
+
+/**
+ * Signup self-service: cria o usuário no GoTrue e dispara o e-mail de
+ * confirmação. O tenant só é provisionado quando o link é confirmado em
+ * /auth/confirm (evita orgs órfãs de cadastros nunca confirmados).
+ *
+ * Anti-enumeração: e-mail já cadastrado recebe a MESMA resposta de sucesso —
+ * o GoTrue devolve um usuário ofuscado (identities vazio) sem erro, e nós não
+ * diferenciamos. Rate limit de envio de e-mail é do próprio GoTrue.
+ */
+export async function signUp(
+  input: SignupInput | SignupComConviteInput,
+  /**
+   * Token de convite, quando a conta está sendo criada para ACEITAR um convite.
+   * Viaja até `/auth/confirm` pelo `user_metadata` — o mesmo canal que
+   * `org_name` já usa e que o e2e do signup exercita. Ele não dá acesso a nada
+   * sozinho: quem decide é `decidirConviteDoSignup`, comparando a assinatura do
+   * token com o e-mail que o provedor de auth confirmou.
+   */
+  inviteToken?: string,
+): Promise<SignUpResult> {
+  const temConvite = typeof inviteToken === "string" && inviteToken.trim() !== "";
+  const parsed = temConvite
+    ? signupComConviteSchema.safeParse(input)
+    : signupSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "validation_error",
+      details: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const hdrs = await headers();
+  const origin = hdrs.get("origin") ?? env.NEXT_PUBLIC_APP_URL;
+  const requestId = hdrs.get("x-request-id");
+  const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const userAgent = hdrs.get("user-agent") ?? null;
+
+  // Criar conta é fluxo raro por pessoa: teto baixo por IP evita fábrica de
+  // organizações (cada signup provisiona tenant). Issue #64.
+  if (await authRateLimited("signup", null, AUTH_LIMITS.signup)) {
+    return { ok: false, error: "rate_limited" };
+  }
+
+  // Só vira convite se o token verificar E for para este e-mail. Divergência
+  // aqui não é erro do usuário — é tentativa de entrar em organização alheia
+  // colando um token que chegou para outra pessoa.
+  let convite: string | null = null;
+  if (temConvite && inviteToken) {
+    const payload = verifyInviteToken(inviteToken);
+    if (!payload) {
+      return { ok: false, error: "validation_error", details: { invite: ["convite_invalido"] } };
+    }
+    if (payload.email.trim().toLowerCase() !== parsed.data.email.trim().toLowerCase()) {
+      return { ok: false, error: "validation_error", details: { invite: ["email_divergente"] } };
+    }
+    convite = inviteToken;
+  }
+
+  // ── A AUTORIDADE da política de cadastro ──────────────────────────────────
+  // A tela também recusa, mas a tela é adulterável: esta action é chamável
+  // direto, e sem esta guarda o modo `so_convite` seria decoração. A ordem
+  // importa — só se pergunta a política DEPOIS de o convite ter sido validado
+  // acima, senão um convite legítimo seria barrado.
+  if (convite === null && (await modoDeCadastro()) === "so_convite") {
+    await audit({
+      action: "auth.signup_failed",
+      metadata: { email_hash: hashEmail(parsed.data.email), reason: "somente_convite" },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: false, error: "somente_convite" };
+  }
+
+  // ── O GoTrue com o cadastro público FECHADO (#1653) ──────────────────────────
+  //
+  // Com `disable_signup` ligado no GoTrue — é o que fecha `POST /auth/v1/signup`
+  // para quem tem a anon key do navegador, o buraco que esta issue abre — o
+  // `supabase.auth.signUp()` de baixo também é recusado, inclusive para quem
+  // TEM convite. Só se entra aqui quando o próprio GoTrue diz que está fechado
+  // (`GET /auth/v1/settings`, público); nos outros casos — instalação aberta e
+  // até `so_convite` que ainda não sincronizou — o caminho de baixo continua
+  // exatamente o de antes.
+  //
+  // A ordem em relação à trava de política acima continua sendo a mesma: sem
+  // convite válido não se chega aqui.
+  if (convite !== null && (await lerConfigPublicaDoGoTrue())?.disable_signup === true) {
+    const criada = await criarContaDeConvite({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      inviteToken: convite,
+      fullName: (parsed.data as SignupComConviteInput).full_name,
+      emailRedirectTo: `${origin}/auth/confirm?type=signup`,
+    });
+
+    if (!criada.ok) {
+      await audit({
+        action: "auth.signup_failed",
+        metadata: {
+          email_hash: hashEmail(parsed.data.email),
+          // Mesmos motivos do caminho de baixo, para a trilha continuar
+          // distinguível sem mapa novo: `conta_ja_existe_com_convite` já é o
+          // vocabulário de quem chega com convite na mão.
+          reason: criada.motivo === "conta_ja_existe" ? "conta_ja_existe_com_convite" : criada.motivo,
+          detalhe: criada.detalhe ?? null,
+          via: "admin_convite",
+        },
+        requestId,
+        ip,
+        userAgent,
+      });
+      if (criada.motivo === "conta_ja_existe") return { ok: false, error: "conta_ja_existe" };
+      if (criada.motivo === "rate_limited") return { ok: false, error: "rate_limited" };
+      return { ok: false, error: "signup_failed" };
+    }
+
+    await audit({
+      action: "auth.signup_requested",
+      metadata: { email_hash: hashEmail(parsed.data.email), via: "admin_convite" },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: true, sessao_ativa: criada.sessao_ativa };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    options: {
+      // Ver comentário equivalente em requestPasswordReset.ts: ?type=signup
+      // sobrevive ao redirect do GoTrue e é o que distingue este fluxo do de
+      // recovery quando a verificação chega via `code` (PKCE), não `token_hash`.
+      emailRedirectTo: `${origin}/auth/confirm?type=signup`,
+      // O convite é revalidado no servidor mesmo tendo sido validado ao montar
+      // a tela: o campo de e-mail do formulário é adulterável no cliente, e a
+      // decisão que importa acontece com o e-mail JÁ confirmado pelo provedor.
+      // `full_name` vai junto no convite: sem ele a pessoa entra na equipe sem
+      // nome e aparece como um pedaço de identificador em toda tela que a
+      // nomeia. No caminho sem convite ele não existe — ali quem dá o nome é o
+      // onboarding, que o convidado não percorre.
+      data: convite
+        ? {
+            invite_token: convite,
+            full_name: (parsed.data as SignupComConviteInput).full_name,
+          }
+        : { org_name: (parsed.data as SignupInput).org_name },
+    },
+  });
+
+  if (error) {
+    if (error.status === 429) return { ok: false, error: "rate_limited" };
+
+    // ── O BECO SEM SAÍDA DE QUEM JÁ TEM CONTA ────────────────────────────
+    //
+    // Medido em produção em 2026-09-10: quem foi revogado e recebeu convite
+    // novo chega aqui, porque já tem conta. O GoTrue devolve
+    // "User already registered", e a tela dizia "Não foi possível criar a
+    // conta. Tente novamente." — instrução impossível: tentar de novo nunca
+    // vai funcionar. A pessoa tentou TRÊS vezes; está nas três linhas de
+    // `auth.signup_failed` da trilha.
+    //
+    // O caminho certo existe e é curto (entrar e aceitar o convite), mas a
+    // tela não levava até ele.
+    //
+    // ⚠️ POR QUE ISTO NÃO FURA A ANTI-ENUMERAÇÃO. O cabeçalho desta função
+    // explica que e-mail já cadastrado recebe a MESMA resposta de sucesso,
+    // para ninguém descobrir quem tem conta aqui testando endereços. A regra
+    // continua inteira: este ramo só existe quando há um CONVITE ASSINADO
+    // para este e-mail. Quem tem o convite já sabe que este endereço foi
+    // convidado — a assinatura é a prova. Sem convite, `convite` é `null` e a
+    // resposta segue sendo `signup_failed`, indistinguível como antes.
+    const jaExiste = /already\s*registered|already\s*exists/i.test(error.message);
+    if (jaExiste && convite !== null) {
+      await audit({
+        action: "auth.signup_failed",
+        metadata: {
+          email_hash: hashEmail(parsed.data.email),
+          reason: "conta_ja_existe_com_convite",
+        },
+        requestId,
+        ip,
+        userAgent,
+      });
+      return { ok: false, error: "conta_ja_existe" };
+    }
+
+    await audit({
+      action: "auth.signup_failed",
+      metadata: {
+        email_hash: hashEmail(parsed.data.email),
+        reason: error.message,
+      },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: false, error: "signup_failed" };
+  }
+
+  await audit({
+    action: "auth.signup_requested",
+    actorUserId: data.user?.id ?? null,
+    metadata: { email_hash: hashEmail(parsed.data.email) },
+    requestId,
+    ip,
+    userAgent,
+  });
+
+  // `data.session` é o único sinal confiável de que o provedor não vai mandar
+  // e-mail nenhum: ele vem preenchido exatamente quando a confirmação está
+  // desligada (ou já resolvida) e o GoTrue devolveu tokens junto do usuário.
+  return { ok: true, sessao_ativa: data.session !== null };
+}

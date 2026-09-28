@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "O acervo é da organização — e o agente escolhe o que lê",
+    "subtitle": "do material que a pessoa envia até o trecho que o assistente cita, e o que acontece quando falta a chave",
+    "output": "acervo-de-conhecimento.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que a pessoa vê" },
+    { "id": "borda", "label": "Borda HTTP (manager+)" },
+    { "id": "fila", "label": "Fila de eventos" },
+    { "id": "motor", "label": "Indexador" },
+    { "id": "dados", "label": "Banco e arquivos" },
+    { "id": "turno", "label": "Turno do agente" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": [
+    "acervo",
+    "criar",
+    "evento",
+    "indexador",
+    "chunks",
+    "busca",
+    "resposta"
+  ],
+  "nodes": [
+    {
+      "id": "acervo",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "/app/ai/knowledge/sources",
+      "sublabel": "a biblioteca da organização — antes eram 4 slots do agente padrão"
+    },
+    {
+      "id": "chave",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "ChaveDeConhecimento",
+      "sublabel": "diz se dá para preparar material, e deixa cadastrar a chave ali mesmo"
+    },
+    {
+      "id": "escolha",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "BasesDoAgente",
+      "sublabel": "\"o que ele consulta antes de responder\" — na tela do assistente"
+    },
+    {
+      "id": "trechos",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "TrechosDoMaterialDialog",
+      "sublabel": "o que o agente APRENDEU, não só quantos trechos"
+    },
+    {
+      "id": "criar",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "POST /ai/knowledge/sources",
+      "sublabel": "texto colado; documento vira blob .md e segue o caminho do arquivo"
+    },
+    {
+      "id": "upload",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "POST …/sources/upload",
+      "sublabel": "PDF, Markdown ou texto — a rota existia e nenhuma tela a chamava"
+    },
+    {
+      "id": "publicar",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "versões do agente",
+      "sublabel": "knowledge_source_ids entra na versão publicada, como pipeline_ids"
+    },
+    {
+      "id": "evento",
+      "lane": "fila",
+      "col": 3,
+      "type": "queue",
+      "label": "event_log",
+      "sublabel": "knowledge_source.updated, com o knowledge_source_id no payload"
+    },
+    {
+      "id": "indexador",
+      "lane": "motor",
+      "col": 4,
+      "type": "worker",
+      "label": "workers/rag-indexer.ts",
+      "sublabel": "indexa a FONTE que o evento nomeia — antes resolvia o agente pela organização"
+    },
+    {
+      "id": "chaveResolver",
+      "lane": "motor",
+      "col": 4,
+      "type": "lib",
+      "label": "resolverChaveDeEmbedding",
+      "sublabel": "binding do ponto → credencial da org → gateway → chave da instalação"
+    },
+    {
+      "id": "extrair",
+      "lane": "motor",
+      "col": 4,
+      "type": "lib",
+      "label": "extrairTextoDoArquivo",
+      "sublabel": "antes extraía, logava a contagem e DESCARTAVA os trechos"
+    },
+    {
+      "id": "blob",
+      "lane": "dados",
+      "col": 3,
+      "type": "storage",
+      "label": "bucket ai-policy",
+      "sublabel": "o arquivo é a fonte da verdade; o texto é recalculado ao indexar"
+    },
+    {
+      "id": "chunks",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "ai_chunks + ai_knowledge_versions",
+      "sublabel": "uma versão de índice POR FONTE — reindexar a FAQ não derruba o catálogo"
+    },
+    {
+      "id": "fonte",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "ai_knowledge_sources",
+      "sublabel": "agent_id vira histórico; active_kb_version_id aponta o índice da fonte"
+    },
+    {
+      "id": "busca",
+      "lane": "turno",
+      "col": 6,
+      "type": "lib",
+      "label": "fn_buscar_trechos_das_fontes",
+      "sublabel": "recebe a LISTA de materiais e o pin do modelo de embedding"
+    },
+    {
+      "id": "resposta",
+      "lane": "turno",
+      "col": 7,
+      "type": "worker",
+      "label": "search_knowledge no turno",
+      "sublabel": "a ferramenta some do turno quando o assistente não lê nada"
+    },
+    {
+      "id": "telemetria",
+      "lane": "retorno",
+      "col": 7,
+      "type": "table",
+      "label": "knowledge_searches",
+      "sublabel": "acertos, melhor nota, limiar — e agora QUEM perguntou e em QUE material"
+    },
+    {
+      "id": "central",
+      "lane": "retorno",
+      "col": 5,
+      "type": "table",
+      "label": "agent_inbox_items",
+      "sublabel": "conhecimento_nao_indexado — o material que não entrou aparece onde o humano olha"
+    },
+    {
+      "id": "estado",
+      "lane": "retorno",
+      "col": 5,
+      "type": "table",
+      "label": "last_index_status",
+      "sublabel": "indexando | sem_credencial | success | failed — a tela deixa de mentir"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "acervo", "to": "criar", "label": "a pessoa cola o conteúdo" },
+    { "id": "e2", "from": "acervo", "to": "upload", "label": "…ou envia o arquivo" },
+    { "id": "e3", "from": "chave", "to": "acervo", "label": "diz se dá para preparar, e conserta ali" },
+    { "id": "e4", "from": "upload", "to": "blob", "label": "guarda o arquivo" },
+    { "id": "e5", "from": "criar", "to": "blob", "label": "texto de documento vira .md" },
+    { "id": "e6", "from": "criar", "to": "fonte", "label": "cadastra o material" },
+    { "id": "e7", "from": "upload", "to": "fonte", "label": "cadastra o material" },
+    { "id": "e8", "from": "criar", "to": "evento", "label": "emite knowledge_source.updated" },
+    { "id": "e9", "from": "upload", "to": "evento", "label": "emite knowledge_source.updated" },
+    { "id": "e10", "from": "evento", "to": "indexador", "label": "o dreno acorda o worker" },
+    { "id": "e11", "from": "indexador", "to": "chaveResolver", "label": "resolve a chave UMA vez por indexação" },
+    { "id": "e12", "from": "indexador", "to": "extrair", "label": "documento: baixa e extrai" },
+    { "id": "e13", "from": "extrair", "to": "blob", "label": "lê o arquivo guardado" },
+    { "id": "e14", "from": "indexador", "to": "chunks", "label": "grava os trechos com vetor" },
+    { "id": "e15", "from": "indexador", "to": "fonte", "label": "aponta a versão ativa da fonte" },
+    { "id": "e16", "from": "indexador", "to": "estado", "label": "carimba o que aconteceu" },
+    { "id": "e17", "from": "indexador", "to": "central", "label": "sem chave ou falhou: abre aviso" },
+    { "id": "e18", "from": "estado", "to": "acervo", "label": "a tela mostra o estado real" },
+    { "id": "e19", "from": "escolha", "to": "publicar", "label": "marca o que este assistente lê" },
+    { "id": "e20", "from": "publicar", "to": "busca", "label": "a versão publicada carrega a lista" },
+    { "id": "e21", "from": "busca", "to": "chunks", "label": "top-K por fonte permitida" },
+    { "id": "e22", "from": "busca", "to": "fonte", "label": "casa (versão ativa, fonte)" },
+    { "id": "e23", "from": "busca", "to": "resposta", "label": "os trechos entram no turno" },
+    { "id": "e24", "from": "resposta", "to": "telemetria", "label": "registra acertos e melhor nota" },
+    { "id": "e25", "from": "chunks", "to": "trechos", "label": "a pessoa audita o que ele leu" },
+    { "id": "e26", "from": "fonte", "to": "escolha", "label": "o acervo alimenta o seletor" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "O defeito que a inversão apaga por construção",
+      "items": [
+        "workers/rag-indexer.ts resolvia o agente com resolveAgent(organizationId) — o `is_default` mais antigo — e ignorava o agent_id que os TRÊS emissores já mandavam no payload",
+        "app/app/ai/knowledge/sources/page.tsx resolvia `.eq(\"is_default\", true)`, e todo agente criado pela interface nasce is_default:false — a tela não existia para eles",
+        "resultado: numa organização com dois assistentes, o material do segundo nunca virava trecho, sem erro em lugar nenhum",
+        "com o acervo na organização e a escolha na versão publicada, não há mais um \"agente da vez\" a resolver"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Falta de chave é ESTADO, não acidente",
+      "items": [
+        "o worker devolvia skipped: openai_key_missing para o próprio log",
+        "lib/event-log/drain.ts conta `skipped` como sucesso e marca consumed_by — cadastrar a chave depois não reprocessava nada",
+        "agora: last_index_status='sem_credencial' + aviso na Central + retry em 1h, e o drain preserva o motivo do skip em last_error",
+        "e a tela diz ANTES do cadastro, com o conserto na própria tela"
+      ]
+    },
+    {
+      "dot": "sky",
+      "title": "Por que a versão de índice virou por FONTE",
+      "items": [
+        "ingestConversationsBatch criava a própria versão e chamava activate_kb_version, que DESATIVA as outras do agente",
+        "o worker de FAQ fazia o inverso: quem indexasse por último apagava o acervo do outro, em silêncio",
+        "com um ponteiro por fonte a competição some por construção, não por disciplina",
+        "as versões legadas (multi-fonte) continuam válidas: a busca casa (kb_version_id, knowledge_source_id) e devolve para cada fonte só o que é dela"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,519 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Dossiê do follow-up — o que já foi feito, e como uma pessoa intervém",
+    "subtitle": "a tabela de eventos que existia desde a 0054 e nenhuma tela lia; e as duas metades da corrida contra o motor",
+    "output": "followup-dossie.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "humano",
+      "label": "O que o humano vê"
+    },
+    {
+      "id": "borda",
+      "label": "Borda HTTP"
+    },
+    {
+      "id": "regra",
+      "label": "Regras puras"
+    },
+    {
+      "id": "dados",
+      "label": "Banco"
+    },
+    {
+      "id": "motor",
+      "label": "O motor (worker 24/7)"
+    }
+  ],
+  "mainPath": [
+    "fila",
+    "dossie",
+    "get",
+    "enrollments",
+    "eventos"
+  ],
+  "nodes": [
+    {
+      "id": "fila",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "QueueTab (aba Fila)",
+      "sublabel": "enrollments ∪ promessas · o nome do contato é a porta"
+    },
+    {
+      "id": "dossie",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "/app/ai/followups/enrollments/[id]",
+      "sublabel": "rota própria: link compartilhável, sobrevive ao F5"
+    },
+    {
+      "id": "timeline",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "LinhaDoTempo",
+      "sublabel": "1 linha por evento · marcador por autor (pessoa/motor/cliente)"
+    },
+    {
+      "id": "plano",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "PlanoDeTempoBloco",
+      "sublabel": "quanto a IA escolheu, por quê, e se bateu no limite"
+    },
+    {
+      "id": "acoes",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "Ações (manager+)",
+      "sublabel": "pausar · retomar · adiar · pular · cancelar"
+    },
+    {
+      "id": "card",
+      "lane": "humano",
+      "col": 5,
+      "type": "frontend",
+      "label": "LeadDossier (kanban)",
+      "sublabel": "onde o PRÓXIMO atendente vê que alguém segurou o fluxo"
+    },
+    {
+      "id": "get",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "GET /ai/followups/enrollments/[id]",
+      "sublabel": "viewer+ · projeta o grafo (sem prompt_hint) · resolve os autores"
+    },
+    {
+      "id": "pause",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "POST …/pause · /resume",
+      "sublabel": "manager+ · audit · atividade"
+    },
+    {
+      "id": "snooze",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "POST …/snooze · /skip",
+      "sublabel": "manager+ · body validado por Zod"
+    },
+    {
+      "id": "intervencao",
+      "lane": "regra",
+      "col": 3,
+      "type": "service",
+      "label": "lib/followup/intervencao.ts",
+      "sublabel": "guarda otimista + contagem de linhas · restante congelado · escolha de saída"
+    },
+    {
+      "id": "legiveis",
+      "lane": "regra",
+      "col": 2,
+      "type": "service",
+      "label": "lib/followup/eventos-legiveis.ts",
+      "sublabel": "evento do motor → frase pt-br · PONTO DE TROCA do vocabulário"
+    },
+    {
+      "id": "planoler",
+      "lane": "regra",
+      "col": 4,
+      "type": "service",
+      "label": "lib/followup/plano-de-tempo.ts",
+      "sublabel": "leitura desconfiada do timing_plan"
+    },
+    {
+      "id": "atividade",
+      "lane": "regra",
+      "col": 5,
+      "type": "service",
+      "label": "buildLeadActivityRow",
+      "sublabel": "a MESMA regra de linha que a API e o motor usam"
+    },
+    {
+      "id": "enrollments",
+      "lane": "dados",
+      "col": 2,
+      "type": "database",
+      "label": "followup_enrollments",
+      "sublabel": "status inclui paused_manual (0145) · timing_plan"
+    },
+    {
+      "id": "eventos",
+      "lane": "dados",
+      "col": 3,
+      "type": "database",
+      "label": "followup_enrollment_events",
+      "sublabel": "a história do motor — existia desde a 0054, invisível até aqui"
+    },
+    {
+      "id": "atividades",
+      "lane": "dados",
+      "col": 5,
+      "type": "database",
+      "label": "crm_lead_activities",
+      "sublabel": "actor_kind='user' — autoria humana da intervenção"
+    },
+    {
+      "id": "audit",
+      "lane": "dados",
+      "col": 4,
+      "type": "database",
+      "label": "api_audit_log",
+      "sublabel": "followup_enrollment.paused|resumed|snoozed|step_skipped"
+    },
+    {
+      "id": "claim",
+      "lane": "motor",
+      "col": 2,
+      "type": "database",
+      "label": "fn_claim_due_followup_enrollments",
+      "sublabel": "status in (active, waiting_reply) — pausado sai do relógio"
+    },
+    {
+      "id": "engine",
+      "lane": "motor",
+      "col": 3,
+      "type": "service",
+      "label": "engine.runFollowupTick",
+      "sublabel": "processa o que reclamou e limpa claimed_until"
+    },
+    {
+      "id": "bridge",
+      "lane": "motor",
+      "col": 4,
+      "type": "service",
+      "label": "turn-bridge.completeTurnForEnrollment",
+      "sublabel": "só active|waiting_reply avançam (lista POSITIVA)"
+    },
+    {
+      "id": "agenda-presenca",
+      "lane": "humano",
+      "col": 6,
+      "type": "frontend",
+      "label": "DetalheDoCompromisso · /app/agenda?compromisso=id",
+      "sublabel": "presença humana · revisão do rascunho · conflito pede revisão explícita · idioma da interface + fuso do compromisso"
+    },
+    {
+      "id": "agenda-command",
+      "lane": "borda",
+      "col": 6,
+      "type": "api",
+      "label": "PATCH agenda/agendamentos · fn_appointment_change",
+      "sublabel": "ator autenticado + revisão CAS; mensagem é evidência validada pela pessoa"
+    },
+    {
+      "id": "agenda-recibo",
+      "lane": "dados",
+      "col": 6,
+      "type": "database",
+      "label": "appointment_recovery_receipts",
+      "sublabel": "decisão terminal privada por compromisso/revisão; não é fila"
+    },
+    {
+      "id": "agenda-guarda",
+      "lane": "regra",
+      "col": 6,
+      "type": "service",
+      "label": "lib/agenda/protecao-followup.ts + efeito.ts",
+      "sublabel": "leitura completa · proteção + geração + aquisição original até transporte/callback"
+    },
+    {
+      "id": "agenda-consumer",
+      "lane": "motor",
+      "col": 6,
+      "type": "service",
+      "label": "followup-gatilho-presenca.v1 + fn_appointment_recover",
+      "sublabel": "falta confirmada → inscrição ou impedimento terminal visível"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "fila",
+      "to": "dossie",
+      "label": "clique no nome do contato — só enrollment (promessa não tem história para contar)"
+    },
+    {
+      "id": "e2",
+      "from": "dossie",
+      "to": "get",
+      "label": "useFollowupEnrollment · staleTime 10s (estado vivo)"
+    },
+    {
+      "id": "e3",
+      "from": "get",
+      "to": "enrollments",
+      "label": "select org-scoped + embeds de contato/fluxo/agente/versão"
+    },
+    {
+      "id": "e4",
+      "from": "get",
+      "to": "eventos",
+      "label": "order by created_at — o índice (enrollment_id, created_at) nasce na 0145"
+    },
+    {
+      "id": "e5",
+      "from": "get",
+      "to": "legiveis",
+      "label": "resumoDoNo projeta o grafo SEM o prompt_hint (a leitura é viewer)"
+    },
+    {
+      "id": "e6",
+      "from": "get",
+      "to": "planoler",
+      "label": "leituraDoPlano(timing_plan) — null quando não houve decisão de IA"
+    },
+    {
+      "id": "e7",
+      "from": "dossie",
+      "to": "timeline",
+      "label": "descreveEvento(evento, nós)"
+    },
+    {
+      "id": "e8",
+      "from": "dossie",
+      "to": "plano",
+      "label": "só renderiza com plano; sem ele, bloco nenhum"
+    },
+    {
+      "id": "e9",
+      "from": "dossie",
+      "to": "acoes",
+      "label": "canWrite (manager+) decide o que aparece; o gate real é a rota"
+    },
+    {
+      "id": "e10",
+      "from": "acoes",
+      "to": "pause",
+      "label": "pausar/retomar"
+    },
+    {
+      "id": "e11",
+      "from": "acoes",
+      "to": "snooze",
+      "label": "adiar/pular"
+    },
+    {
+      "id": "e12",
+      "from": "pause",
+      "to": "intervencao",
+      "label": "pausaEnrollment / retomaEnrollment"
+    },
+    {
+      "id": "e13",
+      "from": "snooze",
+      "to": "intervencao",
+      "label": "adiaEnrollment / pulaPassoDoEnrollment"
+    },
+    {
+      "id": "e14",
+      "from": "intervencao",
+      "to": "enrollments",
+      "label": "UPDATE com .eq(status lido) + claim livre → CONTA as linhas; 0 linhas é 409, não sucesso"
+    },
+    {
+      "id": "e15",
+      "from": "intervencao",
+      "to": "eventos",
+      "label": "insere paused_manual/resumed_manual/snoozed_manual/skipped_manual (idempotency_key NULO — a chave do motor não é ocupada)"
+    },
+    {
+      "id": "e16",
+      "from": "intervencao",
+      "to": "atividade",
+      "label": "resolveAlvoDoRetorno(contato→negócio) e emite com ator user"
+    },
+    {
+      "id": "e17",
+      "from": "atividade",
+      "to": "atividades",
+      "label": "insert; sem negócio para ancorar, a perda vira event_log"
+    },
+    {
+      "id": "e18",
+      "from": "atividades",
+      "to": "card",
+      "label": "o próximo atendente lê 'Follow-up pausado' no card — NUNCA colapsado (decisão humana)"
+    },
+    {
+      "id": "e19",
+      "from": "pause",
+      "to": "audit",
+      "label": "fire-and-forget"
+    },
+    {
+      "id": "e20",
+      "from": "snooze",
+      "to": "audit",
+      "label": "fire-and-forget"
+    },
+    {
+      "id": "e21",
+      "from": "claim",
+      "to": "enrollments",
+      "label": "reclama por 120s (claimed_until) — pausado NÃO entra"
+    },
+    {
+      "id": "e22",
+      "from": "engine",
+      "to": "claim",
+      "label": "tick"
+    },
+    {
+      "id": "e23",
+      "from": "engine",
+      "to": "eventos",
+      "label": "escreve a história que o dossiê lê"
+    },
+    {
+      "id": "e24",
+      "from": "bridge",
+      "to": "enrollments",
+      "label": "avança o nó — a lista POSITIVA impede que um turno stale desfaça a pausa"
+    },
+    {
+      "id": "e25",
+      "from": "intervencao",
+      "to": "claim",
+      "label": "corrida 1: claim ativo ⇒ recusa com 'o automático está executando agora'"
+    },
+    {
+      "id": "e26",
+      "from": "intervencao",
+      "to": "bridge",
+      "label": "corrida 2: turno em voo termina depois do clique ⇒ o resultado é descartado"
+    },
+    {
+      "id": "e27",
+      "from": "legiveis",
+      "to": "timeline",
+      "label": "descreveEvento também roda no client — a mesma tradução dos dois lados, nunca duas"
+    },
+    {
+      "id": "e28",
+      "from": "planoler",
+      "to": "plano",
+      "label": "descreveEspera monta as três frases (escolhido · limite · motivo)"
+    },
+    {
+      "id": "e29",
+      "from": "dossie",
+      "to": "fila",
+      "label": "voltar para a fila — o dossiê não é beco"
+    },
+    {
+      "id": "e30",
+      "from": "legiveis",
+      "to": "fila",
+      "label": "rotuloDoStatus/tomDoStatus: a fila e o dossiê nomeiam o MESMO status no mesmo lugar"
+    },
+    {
+      "id": "e31",
+      "from": "agenda-presenca",
+      "to": "agenda-command",
+      "label": "humano confirma após início; conflito mantém revisão explícita"
+    },
+    {
+      "id": "e32",
+      "from": "agenda-command",
+      "to": "agenda-consumer",
+      "label": "appointment.outcome_confirmed interno; relógio nunca emite falta"
+    },
+    {
+      "id": "e33",
+      "from": "agenda-consumer",
+      "to": "agenda-recibo",
+      "label": "mutex org/contato; decisão e inscrição atômicas"
+    },
+    {
+      "id": "e34",
+      "from": "agenda-recibo",
+      "to": "agenda-presenca",
+      "label": "resultado e interrupção com link para acompanhamento"
+    },
+    {
+      "id": "e35",
+      "from": "agenda-consumer",
+      "to": "enrollments",
+      "label": "fluxo pinado existente; ocupado/ambíguo não espera vaga"
+    },
+    {
+      "id": "e36",
+      "from": "agenda-presenca",
+      "to": "dossie",
+      "label": "abrir o acompanhamento iniciado"
+    },
+    {
+      "id": "e37",
+      "from": "agenda-command",
+      "to": "audit",
+      "label": "ator real + presença/alteração/cancelamento"
+    },
+    {
+      "id": "e38",
+      "from": "agenda-guarda",
+      "to": "engine",
+      "label": "adiamento sem avanço; indisponibilidade usa retry finito"
+    },
+    {
+      "id": "e39",
+      "from": "agenda-guarda",
+      "to": "bridge",
+      "label": "origem + job/source_step_key + CAS; queued não é sent"
+    },
+    {
+      "id": "e40",
+      "from": "enrollments",
+      "to": "agenda-guarda",
+      "label": "appointment_id/revision e recibo invalidado por inbound"
+    },
+    {
+      "id": "e41",
+      "from": "agenda-guarda",
+      "to": "agenda-presenca",
+      "label": "Radar/Central abrem o compromisso que explica a proteção"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "A corrida contra o motor tem DUAS metades, e só uma é óbvia",
+      "items": [
+        "**O tick em curso.** O worker pode ter reclamado o enrollment (`claimed_until`) no instante do clique; o `updateEnrollment` do engine escreveria por cima da pausa. Defesa: guarda otimista (`.eq(status)` + claim livre) e CONTAGEM de linhas — 0 linhas não é sucesso silencioso, vira 409 com o motivo relido do banco.",
+        "**O turno em voo.** O envio/classificação pode terminar DEPOIS da pausa, com resultado calculado ANTES dela. Defesa: `completeTurnForEnrollment` passou a usar lista POSITIVA (`active`/`waiting_reply`).",
+        "A lista negativa que existia lá tem o modo de falha embutido: todo estado NOVO passa por omissão. Já custou o `paused_handoff` na Task 5.2 e custaria o `paused_manual` aqui — em silêncio, desfazendo a decisão de uma pessoa."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Não-ligações declaradas (ausência de aresta ≠ aresta esquecida)",
+      "items": [
+        "O dossiê **não** escreve no grafo do fluxo: pular um passo move o enrollment, nunca edita a versão pinada — o mesmo fluxo continua valendo para os outros contatos.",
+        "`reactToHandoffClose` **não** retoma `paused_manual`: ele procura `paused_handoff`. Quem pausou pela tela decide quando volta; o fim de um atendimento humano não desfaz a decisão de uma pessoa.",
+        "A intervenção **não** cria job na fila do agente: ela mexe no relógio e no passo, e quem enfileira turno continua sendo o motor.",
+        "O bloco do tempo da IA **não** aparece sem `timing_plan` — placeholder ali afirmaria que houve decisão do modelo onde não houve."
+      ]
+    },
+    {
+      "dot": "sky",
+      "title": "Por que o dossiê é rota e não painel",
+      "items": [
+        "É endereço que se manda para um colega (\"olha o que aconteceu com este lead\") e sobrevive ao F5 no meio de uma intervenção.",
+        "Como o segmento é `[id]`, `tests/unit/navegacao-completude.test.ts` não cobra porta de menu: tela de detalhe se alcança pela lista, e a lista é a aba Fila.",
+        "A promessa (`cron_jobs`) NÃO ganha link: ela é uma linha só — um horário e um motivo — e um link para uma tela vazia ensinaria que o dossiê às vezes não funciona."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,578 @@
+name: release
+
+# Os dois atos do ciclo, e nenhum deles cria tag na máquina de ninguém.
+#
+#   1. VOCÊ dispara "Run workflow" → ele lê `.changes/`, calcula o número, monta
+#      a seção do CHANGELOG e abre um PR de release em português dizendo o que
+#      vai sair. Nada é publicado ainda.
+#   2. VOCÊ faz merge desse PR → ele cria a tag `vX.Y.Z`, e é a tag que faz o
+#      `publish-image.yml` publicar as três imagens que a VPS puxa.
+#
+# Quem escreve (branch, PR, tag) é o token de um GitHub App, NUNCA o
+# GITHUB_TOKEN. A razão é uma armadilha documentada pelo próprio GitHub: evento
+# disparado com o GITHUB_TOKEN não cria novo workflow run. Se a tag nascesse
+# dele, o `publish-image.yml` jamais rodaria — a tag existiria, ninguém veria
+# erro, e NENHUMA VPS receberia a atualização. Falha silenciosa, descoberta só
+# quando um cliente tentasse atualizar.
+#
+# Por isso o ato 2 não confia: ele espera a publicação e CONFERE as três imagens
+# no registro, falhando alto se não aparecerem.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+# O GITHUB_TOKEN aqui só clona e lê. Todo escopo de escrita vem do App, o que
+# mantém `tests/unit/workflows-tem-permissions.test.ts` sem entrada nova.
+permissions:
+  contents: read
+
+jobs:
+  abrir-pr-de-release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          # `fetch-depth: 0` porque o corte compara com as tags, e o checkout
+          # raso padrão não traz nenhuma.
+          fetch-depth: 0
+          token: ${{ steps.token.outputs.token }}
+
+      - uses: ./.github/actions/preparar-node
+        # O teto do preâmbulo mora aqui porque passo de composite action não
+        # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
+        timeout-minutes: 5
+
+      - name: Calcular o número e montar a seção
+        id: corte
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/cortar-release.ts --escrever | tee /tmp/corte.txt
+          versao=$(pnpm exec tsx scripts/cortar-release.ts --versao-do-changelog)
+          echo "versao=${versao}" >> "$GITHUB_OUTPUT"
+
+      - name: Abrir o PR
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          VERSAO: ${{ steps.corte.outputs.versao }}
+        run: |
+          set -euo pipefail
+          git config user.name  'deskcomm-release[bot]'
+          git config user.email '${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          git checkout -b "release/${VERSAO}"
+          git add CHANGELOG.md .changes
+          git commit -m "release(${VERSAO}): a versão montada a partir dos fragmentos declarados"
+          git push origin "release/${VERSAO}"
+          {
+            echo "Esta versão sai como **${VERSAO}**, e o número foi CALCULADO a partir do que cada PR declarou — ninguém digitou."
+            echo
+            echo '```'
+            cat /tmp/corte.txt
+            echo '```'
+            echo
+            echo "Ao fazer merge deste PR, a tag \`v${VERSAO}\` é criada automaticamente e as três imagens são publicadas."
+            echo "Se algo aqui estiver errado, **feche o PR** em vez de editar o número: corrija o fragmento e dispare o workflow de novo."
+          } > /tmp/corpo.md
+          gh pr create --base main --head "release/${VERSAO}" \
+            --title "Release ${VERSAO}" --body-file /tmp/corpo.md
+
+  cortar-tag:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # A guarda pergunta à API quem abriu o PR de origem do merge
+      # (`commits/{sha}/pulls`, issue #478) e esse endpoint é de pull request:
+      # sem esta linha a resposta é 403 e a guarda recusaria corte legítimo.
+      # Leitura só — quem escreve continua sendo o token do App.
+      pull-requests: read
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.token.outputs.token }}
+
+      - uses: ./.github/actions/preparar-node
+        # O teto do preâmbulo mora aqui porque passo de composite action não
+        # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
+        timeout-minutes: 5
+
+      - name: Este push foi um corte de release?
+        id: pendente
+        env:
+          # Token de leitura para perguntar à API do GitHub quem abriu o PR de
+          # origem do merge (issue #478). É o token do próprio workflow, e não
+          # o do App: a guarda pergunta, ela não escreve nada.
+          GH_TOKEN: ${{ github.token }}
+          # `app-slug` é o slug do App que emitiu o token do passo anterior; o
+          # login do bot é `<slug>[bot]` — a MESMA montagem que o passo da tag
+          # usa no e-mail do commit, no `git config user.email` lá embaixo.
+          APP_SLUG: ${{ steps.token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+
+          # ─── O QUE IDENTIFICA UM CORTE DE RELEASE ─────────────────────────
+          #
+          # Só a primeira condição ("o CHANGELOG anuncia versão que não tem
+          # tag") deixaria QUALQUER PR cortar a release: bastaria escrever
+          # `## [1.7.0]` no CHANGELOG à mão e a tag nasceria no merge dele,
+          # pulando o PR de release inteiro — e com ela as três imagens e o
+          # canal `stable`. Não é hipótese: medido em 2026-08-27, o PR #354
+          # (RAG) já trazia uma seção de versão escrita à mão no CHANGELOG.
+          #
+          # ⚠️ A SEGUNDA CONDIÇÃO ERA "O DIRETÓRIO FICOU VAZIO", E ISSO ESTAVA
+          # ERRADO — issue #472, medido no run 33494815423:
+          #
+          #     fragmentos em .changes/: antes=4 depois=1
+          #
+          # A v1.11.1 foi anunciada no CHANGELOG e NUNCA virou tag. Sem tag,
+          # sem release, sem as três imagens, sem `stable`: nenhuma VPS a
+          # recebeu, e o workflow saiu `success` — ele só decidiu não cortar.
+          #
+          # A causa é uma CORRIDA, não uma forja: o PR #460 mergeou entre o
+          # corte e o merge da release, deixando o fragmento dele vivo. O
+          # branch de release foi cortado ANTES daquele fragmento existir,
+          # então o merge apagou os 3 que consumiu e o 4º continuou lá.
+          # "Esvaziou o diretório" é falso para todo corte que corre em
+          # paralelo com um merge comum — e merge comum é o estado normal de
+          # um repo vivo.
+          #
+          # A assinatura correta é REMOVER: PR comum ACRESCENTA fragmento e
+          # nunca apaga; só o corte apaga. Conferido no commit real que
+          # falhou (f6f91377): a guarda antiga via depois=1 e recusava; a
+          # nova vê 3 removidos e corta.
+          #
+          # ⚠️ A TERCEIRA CONDIÇÃO É IDENTIDADE, NÃO NOME — issue #478.
+          #
+          # A versão anterior desta guarda procurava `%an` igual a
+          # `deskcomm-release[bot]`, e isso não é identidade: `%an` é o NOME DO
+          # AUTOR, campo de texto que qualquer um define.
+          # `git -c user.name='deskcomm-release[bot]' commit` devolve exatamente
+          # a string procurada. A versão anterior deste comentário ainda dizia
+          # que a identidade do App "vive em secrets" — isso também é FALSO.
+          #
+          # Nem adianta trocar por conferência criptográfica: os cinco cortes
+          # reais desta main têm `%G? = N` — não há assinatura para conferir.
+          #
+          # Então a pergunta saiu do git e foi para a API, que sabe qual PR deu
+          # origem a este commit e quem o abriu. Medido em 2026-09-18 nos dois
+          # cortes reais mais recentes da main: o PR #1160 (`release/1.34.0`,
+          # commit 3a4df3cb) e o PR #1136 (`release/1.33.0`, 577c46e9) respondem
+          # `login=deskcommcrm-release[bot]`, `user.type=Bot`, head `release/*`
+          # no próprio repositório. É o App — e o autor do commit não escolhe
+          # esse dado. (O `user.name` que o ato 1 grava no git é
+          # `deskcomm-release[bot]`, sem o "crm": nome de exibição e login vivem
+          # separados, e é o login que a API devolve.)
+          #
+          # A guarda aceita duas provas, as duas fora do git: (1) o PR de origem
+          # foi aberto pelo bot do App que este workflow usa, ou (2) o head do PR
+          # é um branch `release/*` do PRÓPRIO repositório de cima — o caminho
+          # que o ato 1 abre, e o que a issue #478 dá como alternativa. Fork não
+          # conta: quem não tem escrita no repositório de cima não cria branch
+          # por lá nem mergeia um PR dele.
+          #
+          # A forja que cai: nome de autor igual ao do bot num PR aberto por
+          # outra pessoa — coberto em
+          # tests/unit/guarda-da-release-confere-identidade.test.ts.
+          #
+          # E o caso comum — alguém apaga fragmento de `.changes/` sem querer num
+          # PR que não é corte: não passa por nenhuma das duas provas, e a guarda
+          # faz barulho (`::error::`, passo vermelho) em vez de silêncio. É por
+          # isso que a condição fica.
+          versao=$(pnpm exec tsx scripts/cortar-release.ts --versao-do-changelog)
+
+          # `--diff-filter=D` conta o que este commit APAGOU de `.changes/`.
+          # `|| true` porque `grep -c` sai 1 quando não casa nada, e `set -e`
+          # mataria o passo justamente no caso normal (PR comum, zero removidos).
+          # `--find-renames` fecha a borda: esta máquina roda o git com a
+          # configuração dela, e com `diff.renames=false` um fragmento
+          # RENOMEADO (mesmo commit, `a.md` → `b.md`) entra na lista como D —
+          # o caminho antigo contaria como "fragmento consumido" sem ninguém
+          # ter consumido nada. Medido em 2026-09-18 (git 2.43.0):
+          #   sem a flag, diff.renames=false  → `.changes/a.md` aparece
+          #   com --find-renames              → nada aparece
+          removidos=$(git diff --find-renames --diff-filter=D --name-only HEAD^ HEAD -- .changes/ | grep -c '\.md$' || true)
+
+          # ─── QUEM ABRIU O PR DE ORIGEM (fora do git) ──────────────────────
+          #
+          # Num merge commit, `HEAD^2` é a ponta do branch de release; num
+          # squash não há segundo pai. Nos dois casos a pergunta é a mesma, e a
+          # resposta não está no git: a API sabe qual PR deu origem a este
+          # commit e quem o abriu — dado que o autor do commit não escolhe.
+          #
+          # `|| true` para capturar a falha (rede, 403, commit sem PR) em vez
+          # de deixar o `set -e` derrubar o passo: quem decide o que fazer com
+          # a falha é o `if` lá embaixo, e ele RECUSA.
+          # O login com que a API apresenta o App é `<slug>[bot]`, e o slug é o
+          # mesmo dado que o passo do token já usa no e-mail do commit lá
+          # embaixo. Medido em 2026-09-18 nos dois cortes reais da main: o `%an`
+          # do git diz `deskcomm-release[bot]` e a API diz
+          # `deskcommcrm-release[bot]` — o nome que a guarda antiga procurava nem
+          # é o login da identidade. (O e-mail do commit confirma o slug:
+          # `deskcommcrm-release[bot]@users.noreply.github.com`.)
+          #
+          # Slug vazio NÃO derruba a guarda: ela segue com a Prova 2, que cobre
+          # todo corte legítimo (o ato 1 sempre empurra `release/<versão>` deste
+          # repositório). Derrubar aqui barraria release legítimo — o defeito da
+          # #472 pelo outro lado.
+          #
+          # Só pergunta quando há fragmento apagado. Num push comum para a main
+          # (zero removidos) a resposta não decide nada — o `elif` de baixo já
+          # sai com "não é corte" —, e perguntar mesmo assim fazia um soluço da
+          # API pintar de vermelho o workflow num merge que não corta nada.
+          corte_do_app=nao
+          quem_abriu="(não consultado: este push não apagou fragmento)"
+          if [ "${removidos}" -gt 0 ]; then
+            if [ -n "${APP_SLUG}" ]; then
+              esperado="${APP_SLUG}[bot]"
+            else
+              esperado=""
+              echo "::warning::app-slug vazio: a guarda não pôde conferir o login do App e decide pelo head release/* do PR de origem."
+            fi
+
+            prs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+                --jq '.[] | "\(.user.login)\t\(.user.type)\t\(.head.ref)\t\(.head.repo.full_name // "-")\t\(.number)"' 2>/dev/null) || {
+              echo "::error::A guarda não conseguiu perguntar à API quem abriu o PR de origem de ${GITHUB_SHA:0:8} — sem prova de identidade a tag NÃO é criada."
+              exit 1
+            }
+
+            quem_abriu="(nenhum PR de origem: o commit foi empurrado direto para a main)"
+            primeiro=""
+            while IFS="$(printf '\t')" read -r login tipo ref repo numero; do
+              [ -n "${numero:-}" ] || continue
+              descricao="${login} (${tipo}) — PR #${numero}, head ${ref} em ${repo}"
+              [ -n "${primeiro}" ] || primeiro="${descricao}"
+              if [ -n "${esperado}" ] && [ "${login}" = "${esperado}" ] && [ "${tipo}" = "Bot" ]; then
+                # Prova 1: o PR de origem foi aberto pelo bot do App que este
+                # workflow usa. Só quem tem a chave do App se apresenta assim.
+                corte_do_app=sim
+                quem_abriu="${descricao}"
+              elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+                case "${ref}" in
+                  # Prova 2 (a alternativa da issue #478): head `release/*` do
+                  # PRÓPRIO repositório de cima — o caminho que o ato 1 daqui
+                  # abre. Fork não vale: aí `repo` seria o fork.
+                  release/*)
+                    corte_do_app=sim
+                    quem_abriu="${descricao}"
+                    ;;
+                esac
+              fi
+            done <<< "${prs}"
+            [ "${corte_do_app}" = "sim" ] || quem_abriu="${primeiro:-${quem_abriu}}"
+          fi
+
+          # ─── O QUE SOBROU, E POR QUE ISSO IMPORTA ─────────────────────────
+          #
+          # A guarda antiga garantia, sem dizer, uma segunda coisa: `depois==0`
+          # significava que a versão anunciada dá conta de TUDO que estava
+          # pendente na main. Trocar por "removeu" abre mão disso — e há um caso
+          # em que abrir mão FAZ DANO.
+          #
+          # O caso: um PR com `impacto: exige_acao` mergeia durante a janela da
+          # release. O fragmento dele sobrevive (vai para a próxima versão), a
+          # tag sai, e `stable` passa a apontar para uma main que EXIGE ação do
+          # operador — enquanto a seção do CHANGELOG que ele lê antes de rodar o
+          # `update.sh` diz que nada mudou. O aviso fica na gaveta e o contêiner
+          # não sobe.
+          #
+          # `nada_mudou` e `capacidade_nova` sobrevivendo são inofensivos: entram
+          # na versão seguinte e ninguém quebra no meio. `exige_acao` não é.
+          exigem_acao=$(
+            # Mesma borda da contagem de removidos lá em cima, pelo mesmo
+            # motivo: renomear fragmento não é consumir fragmento.
+            git diff --find-renames --diff-filter=D --name-only HEAD^ HEAD -- .changes/ > /tmp/removidos.txt || true
+            for f in $(git ls-tree -r --name-only HEAD -- .changes/ | grep '\.md$' || true); do
+              if git show "HEAD:${f}" | head -20 | grep -q '^impacto:[[:space:]]*exige_acao'; then
+                echo "${f}"
+              fi
+            done
+            # Fecha a substituição com status conhecido, para que o `set -e` do
+            # passo nunca dependa de qual foi o último `grep` do laço.
+            true
+          )
+
+          echo "fragmentos removidos por este commit: ${removidos}"
+          echo "quem abriu o PR de origem: ${quem_abriu}"
+          echo "fragmentos vivos que exigem ação: ${exigem_acao:-nenhum}"
+
+          if git rev-parse -q --verify "refs/tags/v${versao}" >/dev/null; then
+            echo "v${versao} já existe — nada a cortar"
+            echo "cortar=nao" >> "$GITHUB_OUTPUT"
+          elif [ "${removidos}" -eq 0 ]; then
+            echo "::notice::O CHANGELOG anuncia ${versao} sem tag, mas este push não apagou fragmento nenhum."
+            echo "::notice::Tag não criada. Uma release sai do workflow 'release' (Run workflow), nunca de um merge comum."
+            echo "cortar=nao" >> "$GITHUB_OUTPUT"
+          elif [ "${corte_do_app}" != "sim" ]; then
+            # Alto, e não `notice`: alguém apagou fragmento de `.changes/` num
+            # commit cujo PR de origem a API não reconhece como corte. Ou é
+            # forja, ou é engano — e o silêncio é exatamente o que fez a #472
+            # passar dias sem ninguém ver.
+            echo "::error::Este commit apagou ${removidos} fragmento(s) de .changes/ mas o PR de origem não foi aberto pelo App da release — o GitHub diz: ${quem_abriu}."
+            echo "::error::A tag v${versao} NÃO foi criada. Um corte legítimo sai do workflow 'release' (Run workflow), com o PR aberto pelo App e head release/<versão> deste repositório."
+            exit 1
+          elif [ -n "${exigem_acao}" ]; then
+            # Alto, e de novo não `notice`: este é o único caso em que NÃO cortar
+            # é o certo, e ele precisa de gente. Cortar publicaria `stable` sem o
+            # aviso que o operador precisa ler ANTES de atualizar.
+            echo "::error::Sobrou fragmento com 'impacto: exige_acao' em .changes/ — a v${versao} sairia sem o aviso que o operador precisa ler antes de atualizar."
+            echo "::error::Fragmentos: ${exigem_acao}"
+            echo "::error::Tag NÃO criada. Rode o workflow de release de novo, agora que ele consome também esse fragmento."
+            exit 1
+          else
+            echo "corte de release: ${removidos} fragmento(s) consumido(s), v${versao} ainda não existe"
+            echo "cortar=sim"       >> "$GITHUB_OUTPUT"
+            echo "versao=${versao}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Criar e empurrar a tag
+        if: steps.pendente.outputs.cortar == 'sim'
+        env:
+          VERSAO: ${{ steps.pendente.outputs.versao }}
+        run: |
+          set -euo pipefail
+          git config user.name  'deskcomm-release[bot]'
+          git config user.email '${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          # Tag ANOTADA: guarda autor e data, e é o que `git describe
+          # --exact-match` do agent.sh espera encontrar na VPS.
+          git tag -a "v${VERSAO}" -m "v${VERSAO}"
+          git push origin "v${VERSAO}"
+
+      # A tag basta para a VPS (o `agent.sh` faz `git fetch --tags`), mas não
+      # para quem chega pelo GitHub: sem a release publicada, a página do
+      # projeto continua anunciando a versão anterior como a mais recente.
+      # Medido em 2026-08-27: a v1.7.0 nasceu como tag e o `gh release list`
+      # seguiu mostrando a v1.6.0 como Latest até alguém publicar à mão.
+      #
+      # Publicar a release NÃO reconstrói imagem: `publish-image.yml` reage a
+      # `push: tags`, e o gatilho `release:` é proibido lá por teste — ele já
+      # esteve, e o efeito medido na v1.3.0 foi o mesmo commit construído duas
+      # vezes, movendo uma tag de versão já publicada.
+      - name: Publicar a release no GitHub
+        if: steps.pendente.outputs.cortar == 'sim'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          VERSAO: ${{ steps.pendente.outputs.versao }}
+        run: |
+          set -euo pipefail
+          pnpm exec tsx -e '
+            import fs from "node:fs";
+            import { extractChangelogSection } from "./lib/system/changelog";
+            const v = process.env.VERSAO ?? "";
+            const s = extractChangelogSection(fs.readFileSync("CHANGELOG.md", "utf8"), v);
+            if (!s) { console.error(`seção [${v}] não achada no CHANGELOG`); process.exit(1); }
+            const atencao = s.requiresAttention ? `### ⚠️ Requer atenção\n\n${s.requiresAttention}\n\n` : "";
+            fs.writeFileSync("/tmp/notas.md", atencao + s.body);
+          '
+          gh release create "v${VERSAO}" --title "v${VERSAO}" --notes-file /tmp/notas.md
+
+      # A falha desta cadeia é silenciosa por natureza — a tag existe e ninguém
+      # vê erro —, então o workflow prova a CONSEQUÊNCIA em vez de supô-la.
+      - name: As três imagens existem nesta versão?
+        if: steps.pendente.outputs.cortar == 'sim'
+        env:
+          VERSAO: ${{ steps.pendente.outputs.versao }}
+        run: |
+          set -euo pipefail
+          # A mesma sonda do runbook (docs/runbooks/ativar-packaging.md): token
+          # anônimo de pull do próprio registro. Não usa o GITHUB_TOKEN de
+          # propósito — o que interessa provar é que a imagem está alcançável
+          # para QUEM INSTALA, e quem instala não tem credencial nossa.
+          #
+          # E ela lê DIGEST, não código de status. A sonda ingênua ("a tag
+          # responde 200?") é satisfeita pelo canal `stable` desde a 1.11.0 — ele
+          # existe sempre, apontando para o que quer que seja. Foi assim que a
+          # v1.12.0 saiu com `stable` do app na 1.11.0 e o das outras duas na
+          # 1.12.0 sem ninguém ver (issue #488): quem instalava por `stable`
+          # recebia um parque MISTURADO, e nenhum gate tinha opinião.
+          ghcr_digest() {
+            local t
+            t=$(curl -s "https://ghcr.io/token?scope=repository:${GITHUB_REPOSITORY_OWNER}/$1:pull&service=ghcr.io" \
+                | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+            curl -sI -H "Authorization: Bearer $t" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json' \
+              -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+              "https://ghcr.io/v2/${GITHUB_REPOSITORY_OWNER}/$1/manifests/$2" \
+              | tr -d '\r' | tr '[:upper:]' '[:lower:]' \
+              | sed -n 's/^docker-content-digest: //p'
+          }
+          echo "esperando a publicação de v${VERSAO}…"
+          for _ in $(seq 1 60); do
+            faltando=""
+            for img in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-voice-agent; do
+              [ -n "$(ghcr_digest "$img" "${VERSAO}")" ] || faltando="${faltando} ${img}"
+            done
+            if [ -z "$faltando" ]; then
+              echo "as três imagens respondem em ${VERSAO}"
+              break
+            fi
+            sleep 30
+          done
+          if [ -n "$faltando" ]; then
+            echo "::error::A tag v${VERSAO} foi criada, mas as imagens não apareceram:${faltando}"
+            echo "::error::O parque instalado NÃO consegue atualizar para esta versão."
+            echo "::error::Confira o run de publish-image.yml para a tag v${VERSAO}."
+            exit 1
+          fi
+
+          # ─── O CANAL ACOMPANHOU? ──────────────────────────────────────────
+          #
+          # `stable` é o que o instalador escreve por padrão, então ele é o que
+          # o parque realmente recebe. Um canal que ficou para trás numa das três
+          # imagens é pior que uma imagem ausente: a instalação SOBE, misturada,
+          # e o defeito aparece semanas depois como comportamento inexplicável.
+          echo "conferindo se o canal stable acompanhou v${VERSAO}…"
+          divergentes=""
+          for _ in $(seq 1 20); do
+            divergentes=""
+            for img in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-voice-agent; do
+              d_versao=$(ghcr_digest "$img" "${VERSAO}")
+              d_stable=$(ghcr_digest "$img" stable)
+              echo "  ${img}: ${VERSAO}=${d_versao:-ausente} stable=${d_stable:-ausente}"
+              [ -n "${d_versao}" ] && [ "${d_versao}" = "${d_stable}" ] || divergentes="${divergentes} ${img}"
+            done
+            [ -z "${divergentes}" ] && break
+            sleep 30
+          done
+          if [ -n "${divergentes}" ]; then
+            echo "::error::v${VERSAO} publicou, mas o canal stable NÃO acompanhou em:${divergentes}"
+            echo "::error::Quem instalar por stable agora recebe um parque MISTURADO — serviços do mesmo"
+            echo "::error::repositório em versões diferentes, estado que nenhum teste cobre."
+            echo "::error::Confira o job promover-stable no run de publish-image.yml da tag v${VERSAO}."
+            exit 1
+          fi
+          echo "stable e ${VERSAO} são o mesmo manifesto nas três imagens"
+
+      # ─── A VERSÃO CHEGOU À VITRINE? ───────────────────────────────────────
+      #
+      # Lei em docs/doctrine/versionamento.md, seção "A vitrine". A página de
+      # changelog da LP (deskcomm-site) lê o CHANGELOG.md da `main` e revalida a
+      # cada 10 min; somando o cache de 5 min do raw.githubusercontent.com, a
+      # versão aparece em até ~15 min. Ninguém escreve release no site — por isso
+      # o que se confere aqui é a CONSEQUÊNCIA, nos três idiomas, e não um passo
+      # de "atualizar a LP" que poderia rodar verde sem mudar nada.
+      #
+      # Cada sonda também é o que DISPARA a regeneração: numa página vencida, o
+      # primeiro acesso recebe a versão velha e agenda a nova. Por isso a sonda
+      # repete em vez de esperar parada.
+      #
+      # Só no repositório oficial: um fork herda este workflow, e a LP dele não é
+      # a nossa. A release em si já saiu quando este passo roda — vermelho aqui
+      # quer dizer "a vitrine não mostra", não "a versão não existe".
+      - name: A versão aparece na página de changelog da LP?
+        if: steps.pendente.outputs.cortar == 'sim' && github.repository == 'melgarafael/DeskcommCRM'
+        # O teto cobre o pior caso, para o diagnóstico rodar antes de o GitHub matar o passo:
+        # 35 tentativas × (3 páginas × 10 s de curl + 50 s de espera) ≈ 47 min, mais o
+        # diagnóstico e as páginas das versões. Com 40 min e curl de 30 s, um site que aceita a
+        # conexão e não responde estourava o teto e o log não dizia qual página faltou.
+        timeout-minutes: 55
+        env:
+          VERSAO: ${{ steps.pendente.outputs.versao }}
+          LP: https://www.deskcomm.com.br
+        run: |
+          set -euo pipefail
+          paginas="/changelog /en/changelog /es/changelog"
+          faltando="$paginas"
+          corpo=$(mktemp)
+          # Status que NENHUMA espera conserta: a vitrine inteira está fora do ar,
+          # não é a versão que ainda não propagou. Medido em 19/09/2026, quando a
+          # Vercel desativou o deploy por cobrança e devolveu `402` com
+          # `x-vercel-error: DEPLOYMENT_DISABLED` — este passo teria gasto os 47
+          # minutos inteiros para então dizer "a versão não aparece", que é o
+          # diagnóstico errado. O comentário acima já raciocinava sobre isso
+          # ("404 é a vitrine fora do ar, nenhuma espera conserta") e mesmo assim
+          # esperava; agora o raciocínio vira código.
+          definitivo() { case "$1" in 401|402|403|404|410|5??) return 0 ;; *) return 1 ;; esac; }
+          fora_do_ar_seguidas=0
+          for tentativa in $(seq 1 35); do
+            faltando=""
+            codigos=""
+            for p in $paginas; do
+              # UMA requisição serve o corpo E o status. A versão anterior usava
+              # `curl -f`, que descarta o corpo do erro, e só ia buscar o status
+              # depois do laço — então durante 47 minutos ninguém sabia se a
+              # página estava viva.
+              # `|| true`, NUNCA `|| echo 000`: quando a conexão não completa, o
+              # curl já imprime `000` pelo `-w` E sai != 0, então o `echo` de
+              # socorro CONCATENA e a variável vira `000000`. Medido em bancada.
+              codigo=$(curl -sL -o "$corpo" -w '%{http_code}' --max-time 10 "${LP}${p}" 2>/dev/null || true)
+              codigos="${codigos} ${p}=${codigo}"
+              # O link para a página da versão, e não o número solto: "1.2.1"
+              # aparece dentro de "1.2.10"; o href fecha a aspa.
+              # Sem pipeline: sob pipefail, `printf | grep -q` dá "faltando" com a
+              # versão listada assim que o HTML tiver quebra de linha depois do link
+              # (o grep sai cedo e o printf morre de SIGPIPE, 141).
+              # A sonda do link fica com a FORMA que `release-chega-na-lp.test.ts`
+              # reconhece como segura (sem pipeline: sob `pipefail`, um
+              # `printf | grep -q` dá falso-faltando por SIGPIPE). O status entra
+              # como guarda ANTES dela, em vez de virar um `&&` na própria linha:
+              # alargar a cerca para caber no meu código seria trocar a régua pelo
+              # que eu escrevi.
+              html=""
+              if [ "$codigo" = "200" ]; then html=$(cat "$corpo"); fi
+              if [[ "$html" == *"href=\"${p}/${VERSAO}\""* ]]; then
+                echo "  ${p}: v${VERSAO} listada"
+              else
+                faltando="${faltando} ${p}"
+              fi
+            done
+            [ -z "$faltando" ] && break
+            # Só desiste cedo quando TODAS as páginas devolvem um status definitivo
+            # em DUAS tentativas seguidas: uma página só pode estar sendo regerada,
+            # e um 5xx isolado durante um deploy se resolve sozinho. As três ao
+            # mesmo tempo, duas vezes, é o site.
+            todas_fora=sim
+            for p in $paginas; do
+              c=$(printf '%s' "$codigos" | tr ' ' '\n' | sed -n "s#^${p}=##p")
+              definitivo "$c" || todas_fora=nao
+            done
+            if [ "$todas_fora" = sim ]; then
+              fora_do_ar_seguidas=$((fora_do_ar_seguidas + 1))
+              if [ "$fora_do_ar_seguidas" -ge 2 ]; then
+                echo "::error::A VITRINE está fora do ar, não é a versão que falta:${codigos}"
+                echo "::error::v${VERSAO} SAIU — tag, release e as três imagens já foram conferidas nos passos anteriores. Quem instalou numa VPS puxa do GHCR e não é alcançado por isto."
+                echo "::error::Não redispare o corte: a tag já existe. Conserte ${LP} e a página se atualiza sozinha."
+                exit 1
+              fi
+            else
+              fora_do_ar_seguidas=0
+            fi
+            echo "tentativa ${tentativa}: ainda falta em${faltando} (status:${codigos})"
+            sleep 50
+          done
+          if [ -n "$faltando" ]; then
+            # Chegar aqui com status 200 é o outro desfecho: a página está viva e
+            # não lista a versão — a versão não chegou ao CHANGELOG que a LP lê.
+            for p in $faltando; do
+              echo "::error::${LP}${p} respondeu $(curl -sL -o /dev/null -w '%{http_code}' --max-time 10 "${LP}${p}")"
+            done
+            echo "::error::v${VERSAO} saiu (tag, release e imagens conferidas), mas a LP não a lista em:${faltando}"
+            echo "::error::Confira se ${LP}/changelog responde e se o CHANGELOG.md da main tem a seção '## [${VERSAO}] — AAAA-MM-DD'."
+            echo "::error::Se o formato do cabeçalho mudou, o leitor da LP (lib/changelog.ts em deskcomm-site) precisa mudar junto."
+            exit 1
+          fi
+          # A página da própria versão é gerada no primeiro acesso: confirma que ela abre.
+          for p in $paginas; do
+            codigo=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "${LP}${p}/${VERSAO}")
+            if [ "$codigo" != "200" ]; then
+              echo "::error::${LP}${p}/${VERSAO} respondeu ${codigo}."
+              exit 1
+            fi
+          done
+          echo "a LP mostra v${VERSAO} em pt-BR, en e es"

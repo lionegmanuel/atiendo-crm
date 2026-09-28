@@ -1,0 +1,19 @@
+SABOTAGEM: aviso movido para DEPOIS de performHumanHandoff (a inversão que o stopGate mata em silêncio)
+Comando: pnpm test:db tests/invariants/handoff-avisa-o-lead.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/invariants/handoff-avisa-o-lead.test.ts > pedido explícito de atendente > o lead RECEBE uma resposta — e ela não é vazia
+AssertionError: o defeito original: pedido explícito de humano e ZERO mensagens ao lead: expected [] to have a length of 1 but got +0
+ FAIL  tests/invariants/handoff-avisa-o-lead.test.ts > pedido explícito de atendente > o aviso saiu ANTES de a trava ser armada
+ FAIL  tests/invariants/handoff-avisa-o-lead.test.ts > pedido explícito de atendente > a Central registra que o cliente FOI avisado
+AssertionError: expected 'Motivo: requested_human. Resumo da co…' to match /JÁ FOI avisado/u
+ FAIL  tests/invariants/handoff-avisa-o-lead.test.ts > pedido explícito de atendente > lead já em handoff não recebe aviso de novo
+AssertionError: expected [] to have a length of 1 but got +0
+      Tests  4 failed | 4 passed (8)
+
+--- o mecanismo, no log do turno sabotado ---
+{"ts":"2026-08-26T18:49:31.708Z","level":"info","msg":"before_send gate avaliado","job_id":"a1b8b60c-18ee-4c20-aa65-5137e3cc7a3c","tenant_id":"eeee0000-0000-4000-8000-000000000001","lead_id":"eeee0000-0000-4000-8000-000000000002","channel_session_id":"eeee0000-0000-4000-8000-000000000003","gate":"stop","verdict":"veto","code":"contato_bloqueado"}
+{"ts":"2026-08-26T18:49:32.272Z","level":"info","msg":"aviso de escalação vetado pela cadeia — a passagem acontece assim mesmo","job_id":"a1b8b60c-18ee-4c20-aa65-5137e3cc7a3c","tenant_id":"eeee0000-0000-4000-8000-000000000001","lead_id":"eeee0000-0000-4000-8000-000000000002","code":"contato_bloqueado"}
+
+--- CONTROLE: mesmo arquivo, código íntegro ---
+      Tests  8 passed (8)

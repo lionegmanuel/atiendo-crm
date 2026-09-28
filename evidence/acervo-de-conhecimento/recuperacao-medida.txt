@@ -1,0 +1,20 @@
+# Recuperação medida pelo CAMINHO DE PRODUÇÃO (searchKnowledge), não por SQL
+
+SHA: 3d1246f4   |   Data: 2026-08-26T19:35:35-03:00
+
+Contra o material que a spec de tela acabou de indexar com chave real.
+É a mesma função que a tool search_knowledge do agente chama.
+
+```
+fontes indexadas: E2E FAQ (2 trechos) | E2E Documento (2 trechos)
+
+0.649  quanto tempo demora pra chegar em BH?      paráfrase do prazo de entrega
+0.745  posso pagar com pix?                       pergunta direta
+0.209  qual a capital da franca?                  irrelevante — o controle
+```
+
+É isto que decide o limiar. O código usava 0.72 em três sítios, contra os
+0.40 que a migration 0097 calibrou: com 0.72 a PARÁFRASE (0.649) seria
+descartada — a pergunta que o cliente realmente faz. O controle irrelevante
+em 0.209 mostra que 0.40 não é frouxo: ele fica a meio caminho, com folga
+dos dois lados.

@@ -1,0 +1,41 @@
+#1151  reportados=4/5 concluídos=4/5  NÃO CONCLUÍDO · MERGEABLE/BLOCKED · head 58b8233a4
+   faltam imagens-ok (controle OK: ausência medida)  [58b8233a4]
+   e2e-parte (3)          = CANCELLED → classe=teto  [58b8233a4]
+                            cancelado aos 30m16s com timeout-minutes=30: estourou o teto, não reprovou teste
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6
+#1163  reportados=5/5 concluídos=5/5  VERMELHO · CONFLICTING/DIRTY · head 2909a7640
+   obrigatórios vermelhos: verify  [2909a7640]
+   verify                 = FAILURE   → classe=erro_de_suite  [2909a7640]
+                            "Errors 1 error" com Tests 0 failed
+                            originou em tests/unit/composer-colar-imagem.test.tsx
+                            NÃO está no diff deste PR (3 arquivos), nem a falha cita arquivo do diff → não é do autor
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6
+#1130  reportados=0/5 concluídos=0/5  NÃO MEDIDO · CONFLICTING/DIRTY · head fff7b072a
+   zero runs e o PR está CONFLITANTE: sem ref de merge o GitHub não cria o run  [fff7b072a]
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6
+#1122  reportados=5/5 concluídos=5/5  VERDE NOS CINCO · MERGEABLE/CLEAN · head fd5c01bd7
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6
+#1025  reportados=5/5 concluídos=5/5  VERMELHO · CONFLICTING/DIRTY · head d217af8f1
+   obrigatórios vermelhos: verify  [d217af8f1]
+   verify                 = FAILURE   → classe=real  [d217af8f1]
+                            o teste está fora do diff, mas a falha cita lib/plataformas-de-anuncio/google/conversions.ts, que ESTÁ no diff
+                            tests/unit/branding.test.ts fora do diff, mas a falha cita lib/plataformas-de-anuncio/google/conversions.ts, que ESTÁ no diff → pode ser do autor
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6
+#1056  reportados=5/5 concluídos=5/5  VERMELHO · MERGEABLE/BLOCKED · head cdc76893f
+   obrigatórios vermelhos: e2e  [cdc76893f]
+   e2e-parte (2)          = FAILURE   → classe=teto  [cdc76893f]
+                            passo morto por teto interno (exit 124): a suíte rodou 1325s e foi interrompida 1325s depois de entrar, o job já tinha 355s de preparo e o teto é de 30 min (orçamento: 24 min). Não 
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6
+#988  reportados=5/5 concluídos=5/5  VERMELHO · MERGEABLE/BLOCKED · head 4e020d760
+   obrigatórios vermelhos: verify  [4e020d760]
+   verify                 = FAILURE   → classe=real  [4e020d760]
+                            o arquivo que falhou está no diff: tests/unit/funil-arquivado-caminho-de-volta.test.ts
+                            falha fora dos testes: tests/unit/funil-arquivado-caminho-de-volta.test.ts(68,17): error TS2339: Property 'arquivados' does not exist on type '{ pipelines: { id: s
+                            tests/unit/funil-arquivado-caminho-de-volta.test.ts ESTÁ no diff deste PR
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6
+#796  reportados=5/5 concluídos=5/5  VERMELHO · CONFLICTING/DIRTY · head 5130f95c2
+   obrigatórios vermelhos: invariants  [5130f95c2]
+   invariants             = FAILURE   → classe=herdado  [5130f95c2]
+                            run criado 2026-09-14T12:26:52Z; a main mudou tests/invariants/rls-completude-varredura.test.ts, tests/invariants/hardening-definer-varredura.test.ts, tests/invariants/lgpd-cascata-alcanca-quem-guarda-pessoa.test.ts depois (704104aa1 2026-09-15T00:56:08-03:00 "feat(extensions): integra guias declarativos com estado e re") — a árvore testada venceu: re-execute ANTES de atribuir a alguém
+                            tests/invariants/rls-completude-varredura.test.ts, tests/invariants/hardening-definer-varredura.test.ts, tests/invariants/lgpd-cascata-alcanca-quem-guarda-pessoa.test.ts NÃO está no diff deste PR (15 arquivos)
+   régua: branch protection · controle: main d86fcea95: checks=14 runs=6

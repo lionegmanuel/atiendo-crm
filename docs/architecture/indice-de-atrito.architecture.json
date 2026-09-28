@@ -1,0 +1,523 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Índice de Atrito e a Demanda — medir o propósito, não a atividade",
+    "subtitle": "a unidade que faltava no modelo, de onde ela nasce, e os três lugares onde o vazamento aparece",
+    "output": "indice-de-atrito.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "entrada",
+      "label": "De onde a demanda nasce (e por onde acaba)"
+    },
+    {
+      "id": "demanda",
+      "label": "A unidade do propósito"
+    },
+    {
+      "id": "medida",
+      "label": "A medida — e a régua dela"
+    },
+    {
+      "id": "humano",
+      "label": "Onde a pessoa vê e age"
+    },
+    {
+      "id": "agente",
+      "label": "Onde a IA vê e age"
+    }
+  ],
+  "mainPath": [
+    "messages",
+    "trgabre",
+    "demandas",
+    "libradar",
+    "toolradar",
+    "toolfollowup"
+  ],
+  "nodes": [
+    {
+      "id": "messages",
+      "lane": "entrada",
+      "col": 0,
+      "type": "table",
+      "label": "messages (inbound)",
+      "sublabel": "a pessoa escreveu — é aqui que a demanda começa"
+    },
+    {
+      "id": "trgabre",
+      "lane": "entrada",
+      "col": 1,
+      "type": "table",
+      "label": "trg_demanda_abre_no_inbound",
+      "sublabel": "trigger · abre se não houver demanda aberta do contato"
+    },
+    {
+      "id": "conversations",
+      "lane": "entrada",
+      "col": 0,
+      "type": "table",
+      "label": "conversations",
+      "sublabel": "o canal — não a unidade"
+    },
+    {
+      "id": "trgfecha",
+      "lane": "entrada",
+      "col": 1,
+      "type": "table",
+      "label": "trg_demanda_fecha_com_conversa",
+      "sublabel": "só fecha se TODAS as conversas da demanda encerraram"
+    },
+    {
+      "id": "demandas",
+      "lane": "demanda",
+      "col": 2,
+      "type": "table",
+      "label": "demandas",
+      "sublabel": "dono nunca vazio · proximo_passo é CAMPO, não derivação"
+    },
+    {
+      "id": "demandaconversas",
+      "lane": "demanda",
+      "col": 3,
+      "type": "table",
+      "label": "demanda_conversas",
+      "sublabel": "N:N — um assunto atravessa canais; um canal carrega assuntos"
+    },
+    {
+      "id": "agentcases",
+      "lane": "demanda",
+      "col": 3,
+      "type": "table",
+      "label": "agent_cases",
+      "sublabel": "caso de ESCALADA · segue vivo, nada foi removido"
+    },
+    {
+      "id": "fnatrito",
+      "lane": "medida",
+      "col": 4,
+      "type": "table",
+      "label": "fn_atrito_metrics",
+      "sublabel": "SECURITY INVOKER — definer vazaria entre inquilinos"
+    },
+    {
+      "id": "fnjaccard",
+      "lane": "medida",
+      "col": 5,
+      "type": "table",
+      "label": "fn_atrito_jaccard",
+      "sublabel": "SQL puro · sem extensão, sem chave de API"
+    },
+    {
+      "id": "regua",
+      "lane": "medida",
+      "col": 4,
+      "type": "config",
+      "label": "organizations.settings→atrito",
+      "sublabel": "abandono_horas · a régua viaja COM o número"
+    },
+    {
+      "id": "libatrito",
+      "lane": "medida",
+      "col": 5,
+      "type": "lib",
+      "label": "lib/metrics/atrito.ts",
+      "sublabel": "monta PARES eficiência/dano · razão() devolve null, nunca 0"
+    },
+    {
+      "id": "rotaatrito",
+      "lane": "medida",
+      "col": 6,
+      "type": "route",
+      "label": "GET/PATCH /v1/metrics/atrito",
+      "sublabel": "GET piso agent · PATCH piso manager, com audit"
+    },
+    {
+      "id": "painelatrito",
+      "lane": "humano",
+      "col": 7,
+      "type": "frontend",
+      "label": "AtritoPanel",
+      "sublabel": "eficiência NUNCA sozinha — dano no mesmo card"
+    },
+    {
+      "id": "libradar",
+      "lane": "humano",
+      "col": 5,
+      "type": "lib",
+      "label": "lib/leads/radar-de-risco.ts",
+      "sublabel": "7 leituras com service role — o filtro de org é a única defesa"
+    },
+    {
+      "id": "rotaradar",
+      "lane": "humano",
+      "col": 6,
+      "type": "route",
+      "label": "GET /v1/leads/at-risk",
+      "sublabel": "leads frios + demandas sem próximo passo"
+    },
+    {
+      "id": "radar",
+      "lane": "humano",
+      "col": 7,
+      "type": "frontend",
+      "label": "RiskRadarList",
+      "sublabel": "o vazio exige as DUAS listas vazias"
+    },
+    {
+      "id": "rotasummary",
+      "lane": "humano",
+      "col": 6,
+      "type": "route",
+      "label": "GET /v1/contacts/:id/crm-summary",
+      "sublabel": "client de SESSÃO · um pedido, um veredito"
+    },
+    {
+      "id": "inbox",
+      "lane": "humano",
+      "col": 7,
+      "type": "frontend",
+      "label": "CRMSidePanel (inbox)",
+      "sublabel": "demandas ANTES dos negócios · só campos do funil editáveis no lugar"
+    },
+    {
+      "id": "crmleads",
+      "lane": "demanda",
+      "col": 6,
+      "type": "table",
+      "label": "crm_leads",
+      "sublabel": "só os campos do funil no inbox — título e valor ficam no dossiê"
+    },
+    {
+      "id": "rotalead",
+      "lane": "humano",
+      "col": 8,
+      "type": "route",
+      "label": "PATCH /v1/leads/:id",
+      "sublabel": "o mesmo handler do dossiê — uma cópia no inbox divergiria"
+    },
+    {
+      "id": "ponte",
+      "lane": "agente",
+      "col": 6,
+      "type": "lib",
+      "label": "pickToolsFromMcp",
+      "sublabel": "monta a description do HANDLER — o catálogo não tem cópia"
+    },
+    {
+      "id": "toolradar",
+      "lane": "agente",
+      "col": 7,
+      "type": "tool",
+      "label": "crm_list_at_risk_leads",
+      "sublabel": "a descrição declara sem_proximo_passo E as duas saídas"
+    },
+    {
+      "id": "toolfollowup",
+      "lane": "agente",
+      "col": 8,
+      "type": "tool",
+      "label": "crm_schedule_followup",
+      "sublabel": "aceita contact_id — que é o que a lista traz"
+    },
+    {
+      "id": "toolclose",
+      "lane": "agente",
+      "col": 8,
+      "type": "tool",
+      "label": "crm_close_demand",
+      "sublabel": "a outra saída: registrar o desfecho"
+    },
+    {
+      "id": "cronjobs",
+      "lane": "agente",
+      "col": 9,
+      "type": "table",
+      "label": "cron_jobs (one-shot)",
+      "sublabel": "o próximo passo vira compromisso datado"
+    },
+    {
+      "id": "rotademanda",
+      "lane": "humano",
+      "col": 8,
+      "type": "route",
+      "label": "PATCH /v1/demandas/:id",
+      "sublabel": "piso agent — quem atende é quem sabe o que vem a seguir"
+    },
+    {
+      "id": "passagens",
+      "lane": "entrada",
+      "col": 1,
+      "type": "table",
+      "label": "passagens_de_atendimento",
+      "sublabel": "uma linha por passagem IA→humano (0291): e o marco a partir do qual se mede se o cliente repetiu"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "messages",
+      "to": "trgabre",
+      "label": "AFTER INSERT, só direction='inbound'"
+    },
+    {
+      "id": "e2",
+      "from": "trgabre",
+      "to": "demandas",
+      "label": "abre se o contato não tem demanda aberta"
+    },
+    {
+      "id": "e3",
+      "from": "trgabre",
+      "to": "demandaconversas",
+      "label": "vincula o canal por onde falou"
+    },
+    {
+      "id": "e4",
+      "from": "conversations",
+      "to": "trgfecha",
+      "label": "AFTER UPDATE OF status"
+    },
+    {
+      "id": "e5",
+      "from": "trgfecha",
+      "to": "demandas",
+      "label": "resolvida — e só se nenhum outro canal seguir aberto"
+    },
+    {
+      "id": "e6",
+      "from": "demandaconversas",
+      "to": "conversations",
+      "label": "N:N"
+    },
+    {
+      "id": "e7",
+      "from": "demandas",
+      "to": "demandaconversas",
+      "label": "N:N"
+    },
+    {
+      "id": "e8",
+      "from": "demandas",
+      "to": "agentcases",
+      "label": "ponteiro agent_case_id — de onde vem insistência e toque humano"
+    },
+    {
+      "id": "e9",
+      "from": "demandas",
+      "to": "fnatrito",
+      "label": "DENOMINADOR — antes era agent_cases (escopo parcial)"
+    },
+    {
+      "id": "e10",
+      "from": "agentcases",
+      "to": "fnatrito",
+      "label": "insistência e retrabalho, com denominador PRÓPRIO declarado"
+    },
+    {
+      "id": "e11",
+      "from": "fnjaccard",
+      "to": "fnatrito",
+      "label": "repergunta ≥ 0.7 — limiar calibrado, publicado como PISO"
+    },
+    {
+      "id": "e12",
+      "from": "regua",
+      "to": "rotaatrito",
+      "label": "abandono_horas lido da org, com fallback defensivo"
+    },
+    {
+      "id": "e13",
+      "from": "fnatrito",
+      "to": "rotaatrito",
+      "label": "RPC"
+    },
+    {
+      "id": "e14",
+      "from": "rotaatrito",
+      "to": "libatrito",
+      "label": "payload cru vira pares"
+    },
+    {
+      "id": "e15",
+      "from": "libatrito",
+      "to": "painelatrito",
+      "label": "cada eficiência entra COM seu dano"
+    },
+    {
+      "id": "e16",
+      "from": "painelatrito",
+      "to": "regua",
+      "label": "PATCH — ver e mudar no mesmo lugar (invariante 6)"
+    },
+    {
+      "id": "e17",
+      "from": "demandas",
+      "to": "libradar",
+      "label": "abertas sem proximo_passo, mais antigas primeiro"
+    },
+    {
+      "id": "e18",
+      "from": "libradar",
+      "to": "rotaradar",
+      "label": "mesma função para a tela e para a IA"
+    },
+    {
+      "id": "e19",
+      "from": "rotaradar",
+      "to": "radar",
+      "label": "lista + contadores"
+    },
+    {
+      "id": "e20",
+      "from": "libradar",
+      "to": "toolradar",
+      "label": "MESMA fonte — tela e agente não podem discordar"
+    },
+    {
+      "id": "e21",
+      "from": "demandas",
+      "to": "rotasummary",
+      "label": "abertas do contato, com o próximo passo"
+    },
+    {
+      "id": "e22",
+      "from": "rotasummary",
+      "to": "inbox",
+      "label": "junto com negócio, pedido e histórico"
+    },
+    {
+      "id": "e23",
+      "from": "ponte",
+      "to": "toolradar",
+      "label": "monta a tool para o turno"
+    },
+    {
+      "id": "e24",
+      "from": "toolradar",
+      "to": "toolfollowup",
+      "label": "SAÍDA 1 — marcar o próximo passo"
+    },
+    {
+      "id": "e25",
+      "from": "toolradar",
+      "to": "toolclose",
+      "label": "SAÍDA 2 — registrar o desfecho"
+    },
+    {
+      "id": "e26",
+      "from": "toolfollowup",
+      "to": "cronjobs",
+      "label": "one-shot datado"
+    },
+    {
+      "id": "e27",
+      "from": "cronjobs",
+      "to": "messages",
+      "label": "o retorno dispara e a conversa continua — o laço fecha"
+    },
+    {
+      "id": "e28",
+      "from": "fnatrito",
+      "to": "painelatrito",
+      "label": "demandas_sem_proximo_passo — o invariante 4 como NÚMERO"
+    },
+    {
+      "id": "e29",
+      "from": "libradar",
+      "to": "radar",
+      "label": "e como LISTA acionável — contagem sem lugar de agir viola o invariante 5"
+    },
+    {
+      "id": "e30",
+      "from": "inbox",
+      "to": "rotademanda",
+      "label": "marcar o próximo passo SEM sair da conversa"
+    },
+    {
+      "id": "e31",
+      "from": "rotademanda",
+      "to": "demandas",
+      "label": "update com filtro de org e `fechada_em is null` · audit"
+    },
+    {
+      "id": "e32",
+      "from": "crmleads",
+      "to": "rotasummary",
+      "label": "negócio do contato, com o schema do funil"
+    },
+    {
+      "id": "e33",
+      "from": "inbox",
+      "to": "rotalead",
+      "label": "grava o campo SEM sair da conversa"
+    },
+    {
+      "id": "e34",
+      "from": "rotalead",
+      "to": "crmleads",
+      "label": "PATCH · audit + lead_edited só do que mudou"
+    },
+    {
+      "id": "e35",
+      "from": "passagens",
+      "to": "fnatrito",
+      "label": "denominador = passagens em que o cliente VOLTOU a falar em 24h; sem fala nova nao ha repeticao a medir"
+    },
+    {
+      "id": "e36",
+      "from": "fnjaccard",
+      "to": "passagens",
+      "label": "o MESMO limiar 0,7 da repergunta compara a fala de depois com a de antes da passagem"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "O laço de retorno (invariante 7): o que muda no sistema quando isto erra",
+      "items": [
+        "uma demanda fica aberta sem `proximo_passo` e o número **sobe em três lugares ao mesmo tempo**: contagem no `AtritoPanel`, lista no `RiskRadarList`, e a demanda em destaque no painel do inbox",
+        "é o único número deste subsistema cujo alvo é ZERO — os outros são leitura, este é dívida",
+        "antes da migration 0119 isso não era sequer enumerável: a unidade não existia no modelo"
+      ]
+    },
+    {
+      "dot": "red",
+      "title": "Três não-ligações DELIBERADAS",
+      "items": [
+        "`demandas` NÃO substitui `agent_cases` — o passo 1 do cap. 5 cria ao lado, e o ponteiro `agent_case_id` preserva as métricas de toque humano que vivem lá",
+        "o índice NÃO é quebrado por atendente: atrito é propriedade do sistema, e quebrá-lo por pessoa convida à otimização local que degrada o todo",
+        "a repergunta NÃO usa embedding — `lib/ai/embed.ts` depende de env OPCIONAL, e num self-host sem chave a métrica ficaria em ZERO em silêncio, lendo como 'ninguém precisou repetir'"
+      ]
+    },
+    {
+      "dot": "blue",
+      "title": "Por que `proximo_passo` é campo e não derivação",
+      "items": [
+        "derivado, ele desapareceria exatamente nos casos em que a derivação falha — que são os casos em que ele importa",
+        "como campo, `where fechada_em is null and proximo_passo is null` é uma consulta barata com índice parcial próprio",
+        "é o que transforma o invariante 4 de promessa em número verificável"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "A defesa que o banco NÃO faz",
+      "items": [
+        "`libradar` usa **service role**, que bypassa RLS: as 7 leituras dependem do `.eq('organization_id', …)` no TypeScript",
+        "medido: sem o filtro na leitura de `demandas`, a org A recebia a demanda da org B — e a suíte seguia verde, porque o teste exercitava UMA das sete",
+        "guardado em duas camadas: unit (o filtro é emitido nas 7) e `tests/sonda-radar-isolamento-orgs.ts` (ele separa, com 2 inquilinos reais)"
+      ]
+    },
+    {
+      "dot": "green",
+      "title": "A aresta que o gate dos mapas obrigou a existir",
+      "items": [
+        "o node do inbox tinha UMA aresta, só de entrada: a tela DENUNCIAVA o vazamento e não deixava resolver",
+        "`tests/unit/mapas-de-arquitetura.test.ts` reprovou com 'inbox com menos de 2 arestas — é ilha pelo invariante 1'",
+        "o remédio não era afrouxar o gate: era `PATCH /v1/demandas/:id` e o botão no painel, fechando o invariante 4 no lugar onde a pessoa já está"
+      ]
+    }
+  ]
+}

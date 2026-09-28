@@ -1,0 +1,132 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import {
+  TETO_DE_LEMBRETES_EXTRAS,
+  deMinutos,
+  desempacotarLembretes,
+  empacotarLembretes,
+  lerPassosDoFormulario,
+  minutosLivres,
+  moldeDoDegrau,
+  paraMinutos,
+} from "./lembretes";
+
+describe("empacotarLembretes", () => {
+  it("o mais antecipado vira principal; o resto, extra com texto próprio", () => {
+    const r = empacotarLembretes([
+      { minutes: 180, body: "Falta pouco" },
+      { minutes: 1440, body: "Amanhã tem" },
+    ]);
+    expect(r.principal).toBe(1440);
+    expect(r.corpoPrincipal).toBe("Amanhã tem");
+    expect(r.extras).toEqual([180]);
+    expect(r.corposExtras).toEqual({ "180": "Falta pouco" });
+  });
+
+  it("extra sem texto não entra no mapa — cai na frase de fábrica, não na do principal", () => {
+    const r = empacotarLembretes([
+      { minutes: 1440, body: "Amanhã tem" },
+      { minutes: 180, body: "   " },
+    ]);
+    expect(r.corposExtras).toEqual({});
+  });
+
+  it("duplicata no mesmo minuto não vira aviso em dobro", () => {
+    const r = empacotarLembretes([
+      { minutes: 180, body: "a" },
+      { minutes: 180, body: "b" },
+    ]);
+    expect(r.principal).toBe(180);
+    expect(r.extras).toEqual([]);
+    expect(r.corpoPrincipal).toBe("a");
+  });
+
+  it("fora da faixa some, e lista vazia cai no default do banco", () => {
+    const r = empacotarLembretes([
+      { minutes: 5, body: "cedo demais" },
+      { minutes: 20_000, body: "convite" },
+    ]);
+    expect(r.principal).toBe(1440);
+    expect(r.extras).toEqual([]);
+    expect(r.corpoPrincipal).toBe("");
+  });
+});
+
+describe("desempacotarLembretes", () => {
+  it("monta a lista que a tela edita, principal + extras com texto próprio", () => {
+    expect(
+      desempacotarLembretes({
+        reminder_minutes_before: 1440,
+        reminder_extra_offsets_minutes: [180, 60],
+        reminder_body: "Amanhã",
+        reminder_bodies: { "180": "Falta pouco" },
+      }),
+    ).toEqual([
+      { minutes: 1440, body: "Amanhã" },
+      { minutes: 180, body: "Falta pouco" },
+      { minutes: 60, body: "" },
+    ]);
+  });
+});
+
+describe("moldeDoDegrau", () => {
+  const tipo = {
+    reminder_minutes_before: 1440,
+    reminder_body: "Amanhã tem",
+    reminder_bodies: { "180": "Falta pouco, {{nome}}" },
+  };
+
+  it("extra usa o próprio texto", () => {
+    expect(moldeDoDegrau(tipo, 180)).toBe("Falta pouco, {{nome}}");
+  });
+
+  it("principal usa reminder_body", () => {
+    expect(moldeDoDegrau(tipo, 1440)).toBe("Amanhã tem");
+  });
+
+  it("extra sem texto NÃO herda o do principal", () => {
+    expect(moldeDoDegrau(tipo, 60)).toBeNull();
+  });
+});
+
+describe("unidade de antecedência", () => {
+  it("1440 min é 1 dia; 180 min é 3 horas", () => {
+    expect(deMinutos(1440)).toEqual({ quantidade: 1, unidade: "dias" });
+    expect(deMinutos(180)).toEqual({ quantidade: 3, unidade: "horas" });
+    expect(deMinutos(45)).toEqual({ quantidade: 45, unidade: "minutos" });
+    expect(paraMinutos(1, "dias")).toBe(1440);
+    expect(paraMinutos(3, "horas")).toBe(180);
+  });
+});
+
+describe("minutosLivres", () => {
+  it("não sugere um horário que já está na lista", () => {
+    expect(minutosLivres([1440, 180])).toBe(60);
+  });
+});
+
+describe("lerPassosDoFormulario", () => {
+  it("JSON da tela vira passos; lixo vira vazio", () => {
+    expect(lerPassosDoFormulario('[{"minutes":60,"body":"oi"}]')).toEqual([
+      { minutes: 60, body: "oi" },
+    ]);
+    expect(lerPassosDoFormulario("não é json")).toEqual([]);
+    expect(lerPassosDoFormulario(null)).toEqual([]);
+  });
+});
+
+describe("o teto do TypeScript é o teto do CHECK", () => {
+  it("a constante e a função do banco dizem o mesmo número", () => {
+    // Se alguém subir o teto num lado só, o PATCH aceita o que o CHECK recusa
+    // (500) ou o CHECK aceita o que a rota recusa — as duas mentiras.
+    const sql = readFileSync(
+      join(process.cwd(), "supabase/migrations/20260919151100_0329_mensagem_por_lembrete.sql"),
+      "utf8",
+    );
+    expect(sql).toContain(`<= ${TETO_DE_LEMBRETES_EXTRAS}`);
+    expect(TETO_DE_LEMBRETES_EXTRAS).toBe(20);
+  });
+});

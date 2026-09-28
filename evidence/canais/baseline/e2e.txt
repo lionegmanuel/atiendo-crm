@@ -1,0 +1,220 @@
+[WebServer] ⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+[seed] radar lead existing: ed013ae5-084f-4a17-a476-d92b79ba3ee4
+
+✅ Radar seed completo. lead=ed013ae5-084f-4a17-a476-d92b79ba3ee4 conv=320391d3-87aa-4c9a-83c1-6f78641a3346 (frio desde 2026-07-22T15:54:52.616Z)
+
+Running 58 tests using 1 worker
+
+  ✓   1 [chromium] › tests/e2e/auth.spec.ts:5:7 › auth flow › anon GET /app/inbox redirects to /login (639ms)
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✓   2 [chromium] › tests/e2e/auth.spec.ts:12:7 › auth flow › invalid login shows error (1.9s)
+  ✓   3 [chromium] › tests/e2e/auth.spec.ts:22:7 › auth flow › login form is keyboard navigable in tab order (313ms)
+  ✓   4 [chromium] › tests/e2e/auth.spec.ts:34:7 › auth flow › login page has no serious or critical a11y violations (576ms)
+  ✘   5 [chromium] › tests/e2e/degradacao-silenciosa.spec.ts:86:7 › degradação silenciosa do tempo real › com a entrega morta, a tela avisa que pode estar desatualizada (17.7s)
+  ✓   6 [chromium] › tests/e2e/error-pages.spec.ts:4:7 › error pages › /404 renders PT-BR copy (359ms)
+  ✓   7 [chromium] › tests/e2e/error-pages.spec.ts:11:7 › error pages › /403 renders sem permissão (331ms)
+  ✘   8 [chromium] › tests/e2e/error-pages.spec.ts:16:7 › error pages › /500 renders erro interno (5.2s)
+  ✓   9 [chromium] › tests/e2e/error-pages.spec.ts:21:7 › error pages › /503 renders manutenção (339ms)
+  ✓  10 [chromium] › tests/e2e/followup-builder.spec.ts:88:7 › followup flows — lista + criação (Task 6.1) › manager cria um fluxo e ele aparece na lista com badge Rascunho (2.9s)
+  ✓  11 [chromium] › tests/e2e/followup-builder.spec.ts:116:7 › followup flows — lista + criação (Task 6.1) › viewer não vê o botão de criar fluxo (RBAC) (948ms)
+  ✓  12 [chromium] › tests/e2e/followup-builder.spec.ts:168:7 › followup flow builder — canvas visual (Task 6.2) › manager cria um fluxo, clica na linha e o canvas React Flow abre (2.0s)
+  ✓  13 [chromium] › tests/e2e/followup-builder.spec.ts:192:7 › followup flow builder — canvas visual (Task 6.2) › adiciona os 4 nós via paleta e conecta trigger→wait→action→end (3.2s)
+  ✓  14 [chromium] › tests/e2e/followup-builder.spec.ts:239:7 › followup flow builder — canvas visual (Task 6.2) › clica no nó Aguardar e configura 10min; clica no nó Ação e configura o prompt_hint (2.5s)
+  ✓  15 [chromium] › tests/e2e/followup-builder.spec.ts:283:7 › followup flow builder — canvas visual (Task 6.2) › fluxo completo: montar, publicar incompleto (422 ancorado), corrigir, publicar, recarregar, rollback desabilitado (7.4s)
+  ✓  16 [chromium] › tests/e2e/followup-builder.spec.ts:455:7 › followup flow builder — editor de condição de aresta / ai_classify (Task 6.3) › ai_classify só publica depois de configurar class_match/no_reply/always nas arestas de saída (9.2s)
+
+✅ Followup agent fixtures seed completo. credential=da54f96d-a690-4ebc-be23-b365c97b5600 channel_session=e3a4e9f2-ba0f-4ecc-979f-7c9d564594bc
+  ✓  17 [chromium] › tests/e2e/followup-builder.spec.ts:603:7 › followup flow selector no editor do agente (Task 7.2) › admin vincula um fluxo publicado ao agente, salva, e a persistência é provada via API (4.4s)
+  ✓  18 [chromium] › tests/e2e/followup-builder.spec.ts:707:7 › followup flow builder — controle de gatilho na PublishBar (Task 8.5) › operador arma o gatilho de Silêncio (threshold) pela UI; oferece só Manual/Silêncio; PATCH round-trips (3.0s)
+
+✅ Followup agent fixtures seed completo. credential=da54f96d-a690-4ebc-be23-b365c97b5600 channel_session=e3a4e9f2-ba0f-4ecc-979f-7c9d564594bc
+[WebServer] [ai_agents/publish] event_log error null value in column "entity_kind" of relation "event_log" violates not-null constraint
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: 'a2e23a46-4471-4763-81aa-86d6de15861d',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: 'aebd918e-1de9-449b-bf10-383a429d9b5c',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: '09c7652c-aa1c-4b3c-a86a-128965468922',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: '133f3f2d-4ebf-4fc2-a390-b82108ed7483',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: 'b0652b67-fc3f-4ad0-9af9-0c8569923d85',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: 'a796066d-a893-4dc3-8ae5-c203e3214d9c',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: '21d7b82b-dd80-4a45-8415-f31fe1091708',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: '81a40c60-abcf-49e9-9c67-f14e8ef52183',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+  ✓  19 [chromium] › tests/e2e/followup-journey.spec.ts:193:7 › followup — jornada completa (Task 8.3) › silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila (33.2s)
+
+✅ Follow-up promise seed completo. cron_job=a819f2eb-5fb6-40fd-8e1a-80a8605e31e1 contact=c0cf3d6d-e8a4-44c5-a98b-753a5230da1e
+  ✓  20 [chromium] › tests/e2e/followup-queue.spec.ts:147:7 › followup queue — fila unificada (Task 7.1) › manager vê enrollment na fila, filtra por status/fluxo, cancela, e a promessa seedada aparece (4.8s)
+  ✓  21 [chromium] › tests/e2e/followup-queue.spec.ts:251:7 › followup queue — fila unificada (Task 7.1) › viewer vê a fila (leitura) mas não consegue cancelar — 403 client E server-side (3.2s)
+  ✓  22 [chromium] › tests/e2e/inbox-scope.spec.ts:32:7 › G4-02 — inbox com escopo › agent em modo own*: vê Minhas e Fila, NÃO vê Todas (943ms)
+  ✓  23 [chromium] › tests/e2e/inbox-scope.spec.ts:41:7 › G4-02 — inbox com escopo › manager: vê a visão Todas (1.2s)
+  ✓  24 [chromium] › tests/e2e/inbox-scope.spec.ts:48:7 › G4-02 — inbox com escopo › deep-link para conversa fora do escopo → estado vazio claro (sem stack trace) (2.9s)
+  ✓  25 [chromium] › tests/e2e/invite-lifecycle.spec.ts:177:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 1. ciclo feliz: convidar → aceitar → vira agent → cai no inbox (2.8s)
+  ✓  26 [chromium] › tests/e2e/invite-lifecycle.spec.ts:216:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 2. escopo pós-aceite: agent vê inbox/kanban, bloqueado em billing/api-tokens (2.0s)
+  ✓  27 [chromium] › tests/e2e/invite-lifecycle.spec.ts:233:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 3. permissão pós-aceite: agent NÃO consegue convidar (403) (724ms)
+  ✓  28 [chromium] › tests/e2e/invite-lifecycle.spec.ts:241:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 4. reuso do token: aceitar 2x é idempotente (sem membership duplicada) (1.3s)
+  ✘  29 [chromium] › tests/e2e/invite-lifecycle.spec.ts:268:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 5. already_member: reconvidar quem já é membro → failed already_member (4.8s)
+  -  30 [chromium] › tests/e2e/invite-lifecycle.spec.ts:277:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 6. token expirado → convite inválido ou expirado
+  -  31 [chromium] › tests/e2e/invite-lifecycle.spec.ts:289:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 7. token adulterado (HMAC quebrado) → inválido
+  -  32 [chromium] › tests/e2e/invite-lifecycle.spec.ts:303:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 8. email não corresponde: logado com outra conta → mismatch
+  -  33 [chromium] › tests/e2e/invite-lifecycle.spec.ts:317:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 9. não autenticado → CTA de login, não o formulário de aceite
+  ✓  34 [chromium] › tests/e2e/kanban-owner-filter.spec.ts:51:5 › filtro por responsável reflete na URL e esconde leads com dono (1.5s)
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✓  35 [chromium] › tests/e2e/password-recovery.spec.ts:65:5 › recuperar senha: forgot → e-mail → nova senha → login com a nova (1.9s)
+[seed] conversation reset to queue state: e85b3416-0ac4-4689-8e31-dca29247353f
+
+✅ Queue seed completo. conversation=e85b3416-0ac4-4689-8e31-dca29247353f
+  ✓  36 [chromium] › tests/e2e/queue-assign.spec.ts:70:7 › G5-03 — fila com posição + atribuição › conversa aparece na Fila com posição → worker atribui → move para Minhas (3.4s)
+  ✓  37 [chromium] › tests/e2e/rbac-roles.spec.ts:88:7 › rbac role matrix (spec 13 §4) › agent é bloqueado em api-tokens e billing (403) (1.7s)
+  ✓  38 [chromium] › tests/e2e/rbac-roles.spec.ts:102:7 › rbac role matrix (spec 13 §4) › admin acessa api-tokens e billing (login com MFA TOTP) (2.5s)
+  ✓  39 [chromium] › tests/e2e/rbac-roles.spec.ts:115:7 › rbac role matrix (spec 13 §4) › agent vê inbox e kanban (2.0s)
+  ✓  40 [chromium] › tests/e2e/rbac-roles.spec.ts:131:7 › rbac role matrix (spec 13 §4) › viewer não consegue enviar mensagem (403 no POST /api/v1/messages) (746ms)
+  ✓  41 [chromium] › tests/e2e/reset-password-mfa.spec.ts:53:5 › reset de senha com MFA pede o código TOTP e conclui (879ms)
+[seed] radar lead existing: ed013ae5-084f-4a17-a476-d92b79ba3ee4
+
+✅ Radar seed completo. lead=ed013ae5-084f-4a17-a476-d92b79ba3ee4 conv=320391d3-87aa-4c9a-83c1-6f78641a3346 (frio desde 2026-07-22T15:57:18.289Z)
+  ✓  42 [chromium] › tests/e2e/risk-radar.spec.ts:59:5 › o atendente vê no Radar a demanda aberta que esfriou sem próximo passo (1.6s)
+  ✓  43 [chromium] › tests/e2e/risk-radar.spec.ts:70:5 › o atendente assume a demanda direto do Radar e vira o responsável (1.9s)
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✓  44 [chromium] › tests/e2e/signup-journey.spec.ts:17:5 › criar conta: signup → e-mail de confirmação → onboarding → re-login (1.2s)
+  ✓  45 [chromium] › tests/e2e/smoke.spec.ts:3:5 › home returns 200 and no console errors (202ms)
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✓  46 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:103:7 › J1 — onboarding do dono numa instalação fresca › J1.2 senha errada → mensagem clara, sem stack (380ms)
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✘  47 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:111:7 › J1 — onboarding do dono numa instalação fresca › J1.1 login do bootstrap cai no wizard (org sem onboarded_at) (20.3s)
+  -  48 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:120:7 › J1 — onboarding do dono numa instalação fresca › J1.12 /app/inbox antes de concluir → volta pro onboarding
+  -  49 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:127:7 › J1 — onboarding do dono numa instalação fresca › J1.3 + J1.4 welcome: termos obrigatórios; salva nome/timezone e avança
+  -  50 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:149:7 › J1 — onboarding do dono numa instalação fresca › J1.5 WAHA ativo → QR code aparece de verdade
+  -  51 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:167:7 › J1 — onboarding do dono numa instalação fresca › J1.11 + J1.6 abandona e volta → retoma no step pendente; pular WhatsApp avança
+  -  52 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:180:7 › J1 — onboarding do dono numa instalação fresca › J1.7 setup IA: cria agente default e avança
+  -  53 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:194:7 › J1 — onboarding do dono numa instalação fresca › J1.8 convite SEM Resend: a UI não pode mentir que enviou email
+  -  54 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:221:7 › J1 — onboarding do dono numa instalação fresca › J1.9 done → onboarded_at setado e cai no inbox
+  -  55 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:233:7 › J1 — onboarding do dono numa instalação fresca › J1.10 gate MFA: enrola TOTP e VÊ os códigos de recuperação (regressão do bug do gate)
+  -  56 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:296:7 › J1 — onboarding do dono numa instalação fresca › J1.13 wizard não reabre depois de concluído
+[WebServer] {"level":"warn","msg":"[ai-dispatcher.rate-limit] redis incr failed; falling back to in-memory","ts":"2026-07-27T15:57:54.064Z","error":"fetch failed","bucket":"webhook_in:VU4ZX-9CgP1P4YxeaM68v8KB_4-IQ6Zi"}
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✓  57 [chromium] › tests/e2e/vps-webhook-outbound-ssrf.spec.ts:95:7 › J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta) › regra call_webhook para host interno → run falha e receiver recebe ZERO hits (10.8s)
+[WebServer] {"level":"warn","msg":"[ai-dispatcher.rate-limit] redis incr failed; falling back to in-memory","ts":"2026-07-27T15:58:04.161Z","error":"fetch failed","bucket":"webhook_in:e7loOe-Np4N1LjkTAPgvzoaPh1XuTmse"}
+[WebServer] {"level":"warn","msg":"[ai-dispatcher.rate-limit] redis incr failed; falling back to in-memory","ts":"2026-07-27T15:58:10.112Z","error":"fetch failed","bucket":"webhook_in:e7loOe-Np4N1LjkTAPgvzoaPh1XuTmse"}
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✘  58 [chromium] › tests/e2e/webhooks.spec.ts:102:7 › webhooks & automações — fluxo completo › cria fonte, cria automação, dispara lead real, confere atividade e kanban; agent sem acesso (23.8s)
+
+
+  1) [chromium] › tests/e2e/error-pages.spec.ts:16:7 › error pages › /500 renders erro interno ─────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/erro interno/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/erro interno/i)
+
+
+      16 |   test("/500 renders erro interno", async ({ page }) => {
+      17 |     await page.goto("/500");
+    > 18 |     await expect(page.getByText(/erro interno/i)).toBeVisible();
+         |                                                   ^
+      19 |   });
+      20 |
+      21 |   test("/503 renders manutenção", async ({ page }) => {
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/error-pages.spec.ts:18:51
+
+    Error Context: test-results/error-pages-error-pages-500-renders-erro-interno-chromium/error-context.md
+
+  2) [chromium] › tests/e2e/invite-lifecycle.spec.ts:268:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 5. already_member: reconvidar quem já é membro → failed already_member 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      271 |     await loginAdminTotp(page);
+      272 |     const { failed } = await issueInvite(page, inv.invitee_email, "agent");
+    > 273 |     expect(failed.some((f) => f.email === inv.invitee_email && f.reason === "already_member")).toBe(true);
+          |                                                                                                ^
+      274 |     await ctx.close();
+      275 |   });
+      276 |
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/invite-lifecycle.spec.ts:273:96
+
+    Error Context: test-results/invite-lifecycle-ciclo-de--5cd10-bro-→-failed-already-member-chromium/error-context.md
+
+  3) [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:111:7 › J1 — onboarding do dono numa instalação fresca › J1.1 login do bootstrap cai no wizard (org sem onboarded_at) 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      113 |     expect(before.onboarded_at).toBeNull();
+      114 |     await login(page);
+    > 115 |     await page.waitForURL(/\/onboarding/, { timeout: 20_000 });
+          |                ^
+      116 |     await expect(page).toHaveURL(/\/onboarding\/welcome/);
+      117 |     await snap(page, "j1.1-welcome");
+      118 |   });
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/vps-fresh-onboarding.spec.ts:115:16
+
+    Error Context: test-results/vps-fresh-onboarding-J1-—--3d906-izard-org-sem-onboarded-at--chromium/error-context.md
+
+  4) [chromium] › tests/e2e/webhooks.spec.ts:102:7 › webhooks & automações — fluxo completo › cria fonte, cria automação, dispara lead real, confere atividade e kanban; agent sem acesso 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'Ana E2E 1785167877522' }).locator('xpath=ancestor::div[contains(concat(\' \', normalize-space(@class), \' \'), \' border-border \')][1]').getByText('e2e-tag')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: 'Ana E2E 1785167877522' }).locator('xpath=ancestor::div[contains(concat(\' \', normalize-space(@class), \' \'), \' border-border \')][1]').getByText('e2e-tag')
+
+
+      236 |         "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' border-border ')][1]",
+      237 |       );
+    > 238 |       await expect(leadCard.getByText(TAG)).toBeVisible();
+          |                                             ^
+      239 |
+      240 |       // --- Step 9: AGENT não vê "Webhooks" e é redirecionado ---
+      241 |       const agentContext = await browser.newContext();
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/webhooks.spec.ts:238:45
+
+    Error Context: test-results/webhooks-webhooks-automaçõ-64c41-e-e-kanban-agent-sem-acesso-chromium/error-context.md
+
+  4 failed
+    [chromium] › tests/e2e/error-pages.spec.ts:16:7 › error pages › /500 renders erro interno ──────
+    [chromium] › tests/e2e/invite-lifecycle.spec.ts:268:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 5. already_member: reconvidar quem já é membro → failed already_member 
+    [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:111:7 › J1 — onboarding do dono numa instalação fresca › J1.1 login do bootstrap cai no wizard (org sem onboarded_at) 
+    [chromium] › tests/e2e/webhooks.spec.ts:102:7 › webhooks & automações — fluxo completo › cria fonte, cria automação, dispara lead real, confere atividade e kanban; agent sem acesso 
+  13 did not run
+  41 passed (3.6m)
+exit=1

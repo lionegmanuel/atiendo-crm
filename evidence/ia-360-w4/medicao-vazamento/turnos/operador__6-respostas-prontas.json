@@ -1,0 +1,64 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "6-respostas-prontas",
+  "mensagem": "Que respostas prontas a gente já tem cadastradas? Lista o nome de cada uma pra mim.",
+  "esperado": "crm_list_message_templates",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Temos 3 respostas prontas cadastradas:\n\n1. **Resposta QA 1785966451563**\n2. **Resposta QA 1785965730905**\n3. **Resposta QA 1785944501033**",
+  "ferramentas": [
+    "crm_list_message_templates"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 2168,
+      "tokens_out": 16,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_message_templates",
+          "args": {},
+          "result": {
+            "modelos": [
+              {
+                "id": "deb0d36c-d36b-494e-bd1b-aa247f51858c",
+                "titulo": "Resposta QA 1785966451563",
+                "corpo": "Olá {{nome}}, recebemos seu contato e retornamos em breve.",
+                "atalho": null,
+                "compartilhado": false
+              },
+              {
+                "id": "1d99ce13-996b-44a0-9c47-0fbaecfad5fb",
+                "titulo": "Resposta QA 1785965730905",
+                "corpo": "Olá {{nome}}, recebemos seu contato e retornamos em breve.",
+                "atalho": null,
+                "compartilhado": false
+              },
+              {
+                "id": "83aee375-9447-4e29-b053-3d8f394fdff8",
+                "titulo": "Resposta QA 1785944501033",
+                "corpo": "Olá {{nome}}, recebemos seu contato e retornamos em breve.",
+                "atalho": null,
+                "compartilhado": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Temos 3 respostas prontas cadastradas:\n\n1. **Resposta QA 1785966451563**\n2. **Resposta QA 1785965730905**\n3. **Resposta QA 1785944501033**",
+      "finish_reason": "stop",
+      "tokens_in": 2399,
+      "tokens_out": 50,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 3219,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "db986d8b-d6ac-411e-87f9-37427871b2e6",
+  "medido_em": "2026-08-06T16:17:57.019Z"
+}

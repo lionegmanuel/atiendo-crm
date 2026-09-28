@@ -1,0 +1,1453 @@
+import { assertAgentOperationPg, type AgentOperationContext } from '@/lib/ai/agents/operation';
+import { assertApprovedReplyPg, type ApprovedReplyContext } from '@/lib/ai/replies/delivery';
+import { assertMeetingDeliveryPg, type MeetingDeliveryContext } from '@/lib/agenda/meet-delivery';
+/**
+ * Cadeia de guardrails `before_send` (F2-13; edge-contract §2, blueprint 5.2) — o
+ * seam determinístico entre a decisão do modelo (tool `send_message`) e o canal.
+ * Estilo exit-2 do Claude Code: cada gate pode VETAR e a razão volta AO MODELO
+ * como erro instrutivo (o modelo a vê no turno seguinte); só se TODOS passarem a
+ * mensagem alcança o `ChannelAdapter` (e, por baixo, o sink idempotente F2-06).
+ *
+ * Ordem FINAL v6 (DECLARATIVA + VERSIONADA — `BEFORE_SEND_GATES`/`BEFORE_SEND_CHAIN_VERSION`,
+ * F4-08/F4-09): (1) stop/opt-out — irrevogável; (2) lgpd — anonimização/base legal de
+ * prospecção (F4-09); (3) anti-ban (janela/throttle/warm-up/caps — F2-11); (3.5) janela de
+ * atendimento; (4) spinning (F2-12); (5) promise determinística (F4-01); (6) promise
+ * semântica (F4-02); (6.5) case promise — anti-alucinação de casos humanos (spec 15 §10.2,
+ * Wave 4); (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente
+ * (`docs/doctrine/separacao-fala-e-operacao.md`); (7) disclosure
+ * (F4-05). A ordem é código-constante DE PROPÓSITO, não config de
+ * runtime: "stop primeiro" é invariante de segurança (regra dura nº 2) e mudar a ordem sem
+ * bumpar a versão quebra o CI — deixá-la mutável em disco seria um footgun.
+ *
+ * ⚠️ Nota de 2026-07-28: a frase acima descrevia um guarda que **não existia**. Medido —
+ * `BEFORE_SEND_CHAIN_VERSION` e `BEFORE_SEND_GATES` só apareciam neste arquivo, e nenhum
+ * teste os referenciava. Agora existe: `tests/unit/before-send-chain-shape.test.ts`, que
+ * trava ordem, tamanho, versão e unicidade. Ao mudar a cadeia de propósito, ele vermelha
+ * PRIMEIRO — é o sinal de que a mudança foi vista, e não presumida. Cada gate
+ * AVALIADO por tentativa vira registro estruturado de auditoria (gate + veredito + código)
+ * pelo logger de obs/ E linha durável em `before_send_traces` (exportável por run — o
+ * comando `pnpm audit:run`, acceptance 3).
+ *
+ * SERIALIZAÇÃO por número (INBOX-008): o read-then-act (ler estado de pacing/copies
+ * → decidir → enviar → registrar) roda sob `pg_advisory_xact_lock(hashtext(
+ * channel_session_id))` numa transação dedicada. Dois workers no MESMO número não
+ * leem cap-1 ambos e estouram o cap em 1 (nem enviam copy duplicada): o segundo
+ * espera o lock, relê o estado JÁ com o envio do primeiro contabilizado e veta.
+ * O `channel.send` (POST ao CRM) roda na sua PRÓPRIA conexão/tx — o advisory lock
+ * do nosso client serializa os concorrentes enquanto ele acontece.
+ * ponytail: o lock fica retido durante o POST ao CRM (bounded por CRM_MCP_TIMEOUT_MS)
+ * — aceitável no volume do MVP (throttle já espaça o número); se um número virar
+ * gargalo, o upgrade é reservar o slot antes do POST e reconciliar no watchdog.
+ */
+import type pg from 'pg';
+import type { ChannelSendResult } from '../channel-adapter';
+
+import type { Logger } from '../obs/logger';
+import { emitVetoActivity } from '@/lib/leads/veto-activity';
+import type { Queryable } from '../queue/queue';
+import { decidePacing } from '../pacing/engine';
+import type { PacingState } from '../pacing/engine';
+import type { PacingKnobs } from '../pacing/defaults';
+import { loadChannelKnobs, loadPacingState, recordSend } from '../pacing/store';
+import { decideSpinning } from '../spinning/engine';
+import type { RecentCopy } from '../spinning/engine';
+import { loadRecentCopies, loadSpinningKnobs, recordCopy } from '../spinning/store';
+import type { SpinningKnobs } from '../spinning/defaults';
+import { decidePromise } from './promise/engine';
+import { loadPromiseTable } from './promise/table';
+import type { PromiseTable } from './promise/table';
+import { renderSemanticPromiseVeto } from './promise/semantic';
+import type { PromiseClassification } from './promise/semantic';
+import {
+  bodyContainsDisclosure,
+  countPriorAcceptedSends,
+  loadDisclosureTemplate,
+  prependDisclosure,
+} from './disclosure/template';
+import type { DisclosureMode } from './disclosure/template';
+import { escalateLgpdVeto, isLegalBasisValid } from './lgpd/legal-basis';
+import type { LgpdInput } from './lgpd/legal-basis';
+import { detectHumanPromise } from './human-promise';
+import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-interno';
+// Módulo PURO de propósito (`capabilities`, não `index`): o seam não arrasta o
+// adapter — e com ele o cliente HTTP do canal — para dentro do worker.
+import { capabilitiesOf, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
+import { isWindowOpen } from './messaging-window';
+import type { ChannelProvider } from '@/lib/channels/capabilities';
+import { aplicarAjustesDeEstilo, lerAjustesDeEstiloDaOrg } from './ajustes-de-estilo-da-org';
+import type { AjusteDeEstilo, LeituraDosAjustes } from './ajustes-de-estilo-da-org';
+
+/** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
+export interface GateContext {
+  now: Date;
+  /** corpo candidato (para o gate de spinning). */
+  body: string;
+  /**
+   * STOP irrevogável: `contacts.is_blocked` OR `contacts.force_human`, lidos DIRETO da
+   * fonte (mesmo banco pós-fusão — não existe mais cache) SOB o lock desta tentativa,
+   * OR o sinal lido no `get_lead_context` deste turno.
+   */
+  optedOut: boolean;
+  /**
+   * Canal desta tentativa. Nenhum gate pergunta QUEM é o provider (invariante 1
+   * de `docs/doctrine/restricao-de-canal.md`) — só o entrega a `capabilitiesOf`
+   * para perguntar o que o canal permite.
+   */
+  provider: ChannelProvider;
+  /**
+   * Insumo da janela de 24h. Guardamos o CARIMBO, não o veredito: a janela é
+   * derivada (ver `messaging-window.ts`), e passar um booleano já decidido faria o
+   * gate confiar numa conta feita em outro lugar, em outro instante.
+   *
+   * **OPCIONAL de propósito, diferente de `provider`** — e a razão não é conveniência.
+   * Ausente vale `lastInboundAt: null`, que a janela lê como FECHADA: um chamador que
+   * esqueça o campo produz VETOS visíveis, não envios errados silenciosos. `provider`
+   * não tinha default seguro (qualquer escolha mente sobre metade dos canais), então
+   * lá a obrigatoriedade se paga; aqui o default é a direção segura, e mantê-lo
+   * opcional evita tocar num invariante congelado só para satisfazer o compilador.
+   */
+  messagingWindow?: {
+    /** `conversations.last_inbound_at`. `null` = contato nunca escreveu. */
+    lastInboundAt: Date | null;
+    /**
+     * Esta tentativa é um TEMPLATE aprovado? Fora da janela, template é
+     * exatamente o que a plataforma permite — então o gate passa.
+     *
+     * Só ESTE gate muda; `stop`, `lgpd`, `pacing` e os demais continuam valendo.
+     * Sem esta flag haveria só duas saídas, ambas erradas: o `send_template`
+     * seria vetado pelo gate que ele existe para resolver, ou pularia a cadeia
+     * inteira — e aí template viraria bypass de opt-out, LGPD e horário.
+     */
+    isTemplate?: boolean;
+  };
+  pacing: {
+    knobs: PacingKnobs;
+    state: PacingState;
+    crmDailyLimit: number | null;
+    rng?: () => number;
+  };
+  spinning: {
+    knobs: SpinningKnobs;
+    window: RecentCopy[];
+  };
+  /**
+   * Tabela de preços/promessas versionada da org (F4-01), carregada por ponteiro
+   * sob o lock. null = org não fiscaliza promessa (gate no-op).
+   */
+  promise: {
+    table: PromiseTable | null;
+    versionId?: string;
+  };
+  /**
+   * Resultado da camada SEMÂNTICA de promessa (F4-02), classificado ASSÍNCRONO na carga do
+   * ctx (sob o lock) via camada de modelo agnóstica — o complemento da camada determinística
+   * (`promise`) para texto livre que a regex não pega. null = camada não rodou (sem
+   * classificador injetado → gate no-op). suspectPhrase é trecho da PRÓPRIA candidata: volta
+   * ao modelo no veto (erro de ensino), mas nunca vai a log (PII fora de log).
+   */
+  semanticPromise: PromiseClassification | null;
+  /**
+   * Disclosure "assistente virtual" (F4-05; blueprint 5.7) — carregado por ponteiro sob o
+   * lock. `template` null = org não configurou disclosure (gate no-op). `isFirstOutbound`
+   * = não há envio `accepted` prévio a ESTE contato (send_ledger F2-06). `mode` (knob) decide o
+   * que fazer quando a 1ª mensagem sai sem disclosure: 'veto' (bloqueia + ensina) ou 'inject'
+   * (o gate devolve `amendBody` com o disclosure prependado).
+   */
+  disclosure: {
+    template: string | null;
+    versionId?: string;
+    isFirstOutbound: boolean;
+    mode: DisclosureMode;
+  };
+  /**
+   * Conformidade LGPD (F4-09) lida do CRM no turno (get_lead_context) — fonte da verdade,
+   * nunca do body. null = não injetado (gate no-op; testes que não exercitam LGPD). `isAnonymized`
+   * veta QUALQUER envio; a base legal veta o 1º toque de PROSPECÇÃO. `isFirstOutbound` é o mesmo
+   * sinal do disclosure (send_ledger accepted == 0), computado uma vez sob o lock.
+   */
+  lgpd: (LgpdInput & { isFirstOutbound: boolean }) | null;
+  /**
+   * Guardrail anti-alucinação de casos humanos (spec 15 §10.2, Wave 4) — a invariante
+   * sagrada é: o lead NUNCA recebe promessa-de-humano sem um caso aberto. `casesEnabled`
+   * false = feature off para a org → `casePromiseGate` no-op (default retrocompatível para
+   * TODOS os outros callers de `runBeforeSend`, que nem sabem desta camada). `hasOpenCase`
+   * (lido no turno via `hasOpenCaseForContact`) OU `openedCaseThisTurn` (a IA já chamou
+   * `open_human_case` neste turno) tornam o gate no-op também — só veta quando a candidata
+   * promete humano E não há caso nenhum.
+   */
+  casesEnabled: boolean;
+  hasOpenCase: boolean;
+  openedCaseThisTurn: boolean;
+  /**
+   * Nome(s) próprio(s) que o PROMPT do tenant usa para a retaguarda humana (ex.:
+   * "Fulano"), somados ao vocabulário genérico do `casePromiseGate`
+   * (`detectHumanPromise`/`human-promise.ts`). Ausente/vazio = só os cargos
+   * genéricos (comportamento anterior, retrocompatível). Sem isto, um agente cujo
+   * prompt nomeia a pessoa em vez do cargo escapa 100% do detector — medido em
+   * produção, num tenant: dezenas de promessas nomeando o gerente pelo nome, 1 só
+   * detecção em 3 dias.
+   */
+  humanPromiseExtraTargets?: readonly string[];
+  /**
+   * Arma o `internalVocabularyGate` (vazamento de vocabulário interno ao cliente).
+   *
+   * **OPCIONAL, e ausente = DESARMADO — a direção segura AQUI é o oposto da do
+   * `messagingWindow`, e a diferença é o que acontece com o veto em cada caminho.**
+   *
+   * No caminho do AGENTE (`send_message` do inbound-turn) existe um modelo no laço: o
+   * veto volta a ele como erro instrutivo, ele reescreve, e o fail-safe libera se
+   * insistir. Lá o gate arma.
+   *
+   * No caminho DETERMINÍSTICO (`followup-turn.ts`, re-entrada por template versionado)
+   * não há ninguém para ensinar: veto ali é DROP SILENCIOSO — o follow-up morre sem
+   * sintoma, desligando por dentro o invariante 4 de `docs/doctrine/sistema-vivo.md`
+   * ("nada morre sem próximo passo"). Um default ARMADO faria exatamente isso em todo
+   * chamador que não conhece este campo. Por isso ausente = no-op: na pior hipótese o
+   * vazamento continua (o defeito que já existe e que este gate veio MEDIR), nunca o
+   * cliente mudo.
+   *
+   * O contra-risco — um caller do agente esquecer o campo e desarmar o guarda em
+   * silêncio — é coberto por `tests/unit/gate-vazamento-interno.test.ts`, que cobra a
+   * fiação nos dois sentidos: presente no `send_message`, ausente no follow-up.
+   */
+  internalVocabularyEnforced?: boolean;
+  /**
+   * Arma o `spinningGate`. **Ausente = ARMADO** — a direção segura aqui é a
+   * oposta do `internalVocabularyEnforced` logo acima, e a assimetria é
+   * deliberada: aquele protege o CLIENTE de uma palavra feia, este protege o
+   * NÚMERO de um banimento. Um default desarmado desligaria a proteção
+   * anti-ban em todo chamador que não conhece este campo.
+   *
+   * O único que o desarma é o AVISO DE ESCALAÇÃO
+   * (`lib/agent-engine/agent/aviso-de-escalacao.ts`), e a razão é aritmética,
+   * não preferência. `decideSpinning` conta as candidatas idênticas ou
+   * quase-idênticas (Jaccard ≥ 0,8) nas últimas `windowSize` (20) mensagens do
+   * NÚMERO — janela que cruza leads — e veta a partir da terceira
+   * (`repetitionThreshold: 2`). O aviso é texto de código: por mais variantes
+   * que tenha, a terceira pessoa a pedir um atendente na mesma janela cairia no
+   * veto, e veto ali é DROP SILENCIOSO — exatamente o silêncio que o aviso
+   * existe para acabar, produzido pelo guardrail. Medido antes de escrever esta
+   * linha: com 3 variantes, 14 de 20 avisos seguidos eram vetados
+   * (`tests/unit/aviso-ao-lead.test.ts` congela a conta).
+   *
+   * O risco de ban que isto abre é coberto do outro lado: as variantes seguem
+   * existindo (o número não repete UMA frase), o aviso é UM por escalação e
+   * responde a quem acabou de escrever — o oposto do blast de template que este
+   * gate persegue —, e ele continua contando no cap diário (`recordSend`).
+   */
+  spinningEnforced?: boolean;
+  /**
+   * Arma o `agendaStallGate`. Ausente = no-op — mesma direção segura de
+   * `internalVocabularyEnforced` (caller que não conhece o campo não arma nada).
+   *
+   * `active` é o agente ter QUALQUER ferramenta de agenda neste turno, e não só a de
+   * marcar. ⚠️ Já foi `crm_book_appointment` sozinho, e isso desarmava o gate exatamente
+   * onde ele é mais necessário: no agente que CONSULTA a agenda e não marca — o arranjo
+   * de quem quer que uma pessoa confirme cada horário (clínica, salão, consultório).
+   * Esse agente tem `crm_find_free_slots`, promete "vou verificar e te aviso" do mesmo
+   * jeito, e ficava sem a única cura determinística que existe para isso.
+   *
+   * `ferramentas` não arma nem desarma: é o TEXTO do veto — as ferramentas de agenda que
+   * ESTE agente tem, e só elas. Mandar um agente que só consulta "chamar
+   * crm_book_appointment", ou o que só tem a conjunta chamar a avulsa, é ensinar uma
+   * ferramenta que ele não tem — o modelo tenta, falha, e a correção vira um segundo
+   * defeito. Já foi um booleano (`podeMarcar`), e um booleano não diz QUAL.
+   *
+   * `toolCalledThisTurn` é se alguma delas já foi chamada neste turno (rastreado no call
+   * site, que é quem monta as tools).
+   */
+  agenda?: { active: boolean; ferramentas: readonly string[]; toolCalledThisTurn: boolean };
+}
+
+/**
+ * Veredito de UM gate. `waitMs` (só no pacing) é o throttle a respeitar antes do
+ * envio. `detail` (só em veto, ex.: promise) leva valores estruturados detectado vs
+ * permitido ao trace — números/rótulos curtos, NUNCA o corpo (sem PII).
+ */
+export type GateVerdict =
+  // `amendBody` (só o disclosureGate F4-05 o usa hoje): o gate PASSA mas pede que o corpo a
+  // enviar seja reescrito (disclosure prependado). O runner aplica ao ctx.body (gates
+  // seguintes veem o corpo emendado) E ao corpo que vai ao `send` — sem novo status de veredito.
+  //
+  // `skipped: 'not_applicable'` (invariante 4 de `docs/doctrine/restricao-de-canal.md`): a
+  // restrição não existe NESTE canal. Passa, mas o trace registra que não se aplicava — um
+  // `pass` silencioso apagaria a diferença entre "não regrediu" e "provo que não regrediu".
+  | { pass: true; waitMs?: number; amendBody?: string; skipped?: 'not_applicable' }
+  | {
+      pass: false;
+      code: string;
+      reason: string;
+      nextAllowedAt?: Date;
+      detail?: Record<string, string | number>;
+    };
+
+export interface Gate {
+  readonly name: string;
+  evaluate(ctx: GateContext): GateVerdict;
+}
+
+/** Gate 1 — STOP/opt-out/força-humano: veto IRREVOGÁVEL (regra dura nº 2), 1ª linha. */
+const stopGate: Gate = {
+  name: 'stop',
+  evaluate: (ctx) =>
+    ctx.optedOut
+      ? {
+          pass: false,
+          code: 'contato_bloqueado',
+          reason:
+            'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
+            'possível enviar nada a ele; encerre o turno sem tentar de novo.',
+        }
+      : { pass: true },
+};
+
+/**
+ * Gate LGPD (F4-09; edge-contract §5 achado 5.6) — veto de conformidade HARD, agrupado com o
+ * stop entre os vetos IRREVOGÁVEIS de negócio, ANTES do anti-ban (posição 2 de
+ * `BEFORE_SEND_GATES`): checar base legal/anonimização não faz sentido depois de gastar janela.
+ *   - `isAnonymized` → veta QUALQUER envio (`lgpd_anonymized`), sempre (anonimização é irreversível);
+ *   - 1º toque de PROSPECÇÃO (isProspecting && isFirstOutbound) sem base legal válida →
+ *     `lgpd_missing_legal_basis`. Responder a inbound (isProspecting=false, o MVP) NÃO dispara.
+ * Sem contexto LGPD injetado (null) = no-op. A escala à agent_inbox_items acontece no runner (precisa
+ * de DB), não aqui — o gate é puro/síncrono como os demais.
+ */
+export const lgpdGate: Gate = {
+  name: 'lgpd',
+  evaluate: (ctx) => {
+    const lgpd = ctx.lgpd;
+    if (lgpd === null) return { pass: true };
+    if (lgpd.isAnonymized) {
+      return {
+        pass: false,
+        code: 'lgpd_anonymized',
+        reason:
+          'este contato está anonimizado no CRM (LGPD) — é proibido enviar qualquer mensagem a ' +
+          'ele; encerre o turno sem tentar de novo.',
+      };
+    }
+    if (lgpd.isProspecting && lgpd.isFirstOutbound && !isLegalBasisValid(lgpd.legalBasis)) {
+      return {
+        pass: false,
+        code: 'lgpd_missing_legal_basis',
+        reason:
+          'não há base legal válida (LGPD) para o 1º contato de prospecção com este lead ' +
+          '(consentimento, ou legítimo interesse com LIA registrada); não é possível iniciar a ' +
+          'abordagem — encerre o turno, o time comercial vai regularizar a base legal no CRM.',
+      };
+    }
+    return { pass: true };
+  },
+};
+
+/**
+ * Gate de promessa (F4-01) — validação determinística de preço/desconto/parcelamento
+ * candidato contra a tabela versionada da org; contradição clara vira veto instrutivo
+ * (anti-"vendo por R$1", blueprint 6.5). Sem tabela = no-op. Posição 4 de
+ * `BEFORE_SEND_GATES` (F4-08), após spinning e antes da camada semântica.
+ */
+export const promiseGate: Gate = {
+  name: 'promise',
+  evaluate: (ctx) => {
+    if (ctx.promise.table === null) return { pass: true };
+    const decision = decidePromise({ candidate: ctx.body, table: ctx.promise.table });
+    return decision.allow
+      ? { pass: true }
+      : {
+          pass: false,
+          code: decision.code ?? 'promise_out_of_table',
+          reason: decision.reason ?? '',
+          ...(decision.detail !== undefined ? { detail: decision.detail } : {}),
+        };
+  },
+};
+
+/**
+ * Gate semântico de promessa (F4-02) — lê o veredito do classificador binário barato
+ * (rodado async na carga do ctx, DEPOIS da camada determinística `promiseGate`) e veta
+ * promessa em texto livre que a regex não pega ("faço de graça", "garanto entrega amanhã").
+ * Sem classificação (camada off) ou sem promessa = no-op. O veto devolve ao modelo a frase
+ * suspeita destacada (erro de ensino). Posição 5 de `BEFORE_SEND_GATES` (F4-08), logo após
+ * a camada determinística `promiseGate`.
+ */
+export const semanticPromiseGate: Gate = {
+  name: 'semantic_promise',
+  evaluate: (ctx) => {
+    if (ctx.semanticPromise === null || !ctx.semanticPromise.isPromise) return { pass: true };
+    return {
+      pass: false,
+      code: 'promise_semantic',
+      reason: renderSemanticPromiseVeto(ctx.semanticPromise.suspectPhrase),
+      // detail é LOGADO: só o rótulo da camada, nunca a frase (trecho da candidata — sem PII).
+      detail: { promise_layer: 'semantic' },
+    };
+  },
+};
+
+/**
+ * Gate anti-alucinação de casos humanos (spec 15 §10.2, Wave 4) — a garantia DURA da
+ * invariante "o lead nunca recebe promessa-de-humano sem caso aberto". Off (`casesEnabled`
+ * false) ou já há caso (`hasOpenCase`/`openedCaseThisTurn` — a IA abriu um NESTE turno) =
+ * no-op. Só veta quando o detector determinístico (`detectHumanPromise`) acha uma promessa
+ * clara na candidata E nenhum caso existe. O fail-safe de 2ª camada (auto-abre caso e
+ * re-roda a cadeia) vive na orquestração do `send_message` (inbound-turn.ts), não aqui — o
+ * gate em si é síncrono/puro como os demais. Posição 6.5 de `BEFORE_SEND_GATES` (logo após
+ * `semanticPromiseGate`, antes do `disclosureGate`): roda depois das duas camadas de
+ * promessa comercial (preço/desconto) porque é uma categoria distinta de promessa
+ * (envolvimento humano, não oferta).
+ */
+export const casePromiseGate: Gate = {
+  name: 'case_promise',
+  evaluate: (ctx) => {
+    if (!ctx.casesEnabled) return { pass: true };
+    if (ctx.hasOpenCase || ctx.openedCaseThisTurn) return { pass: true };
+    if (!detectHumanPromise(ctx.body, ctx.humanPromiseExtraTargets)) return { pass: true };
+    return {
+      pass: false,
+      code: 'case_promise_without_case',
+      reason:
+        'Você prometeu envolver um humano mas não abriu um caso. Chame a tool ' +
+        'open_human_case (descrevendo o que precisa) OU reformule a mensagem sem prometer humano.',
+    };
+  },
+};
+
+/**
+ * Gate de VAZAMENTO DE VOCABULÁRIO INTERNO (`docs/doctrine/separacao-fala-e-operacao.md`)
+ * — barra a mensagem ao cliente final que carrega nome de ferramenta, tabela/coluna,
+ * papel de acesso, termo de arquitetura ou erro cru. Desarmado (campo ausente) = no-op;
+ * a razão do default e a assimetria entre os caminhos estão em `GateContext`.
+ *
+ * ⚠️ É REDE, NÃO CURA. A cura é o Conversador nunca ter visto esse vocabulário (a
+ * separação falar/operar da doutrina). O valor imediato e independente deste gate é
+ * transformar "acho que vaza" em NÚMERO: cada veto vira linha em `before_send_traces`
+ * com a categoria do vazamento, antes de qualquer refatoração.
+ *
+ * Posição 6.7 de `BEFORE_SEND_GATES`: DEPOIS do `casePromiseGate` e ANTES do
+ * `disclosureGate`. Antes do disclosure de propósito — o disclosure pode EMENDAR o corpo
+ * (`amendBody`), e o que se quer inspecionar é o texto que o MODELO escreveu, não um
+ * texto já costurado pelo runtime (o disclosure é template do tenant; vetá-lo devolveria
+ * ao modelo a culpa por uma frase que não é dele).
+ */
+export const internalVocabularyGate: Gate = {
+  name: 'internal_vocabulary',
+  evaluate: (ctx) => {
+    if (ctx.internalVocabularyEnforced !== true) return { pass: true };
+    const achado = detectarVazamentoInterno(ctx.body);
+    if (!achado.achou) return { pass: true };
+    return {
+      pass: false,
+      code: 'internal_vocabulary_leak',
+      reason: renderVetoDeVazamento(achado.termos),
+      // detail é LOGADO e persistido: contagem + CATEGORIAS (rótulos nossos, fechados),
+      // nunca os termos — termo casado é trecho da candidata, e um snake_case pode ter
+      // vindo de um dado do lead. A medição que a doutrina pede cabe nestes dois campos.
+      detail: { leaked_count: achado.termos.length, leaked_kinds: achado.categorias.join(',') },
+    };
+  },
+};
+
+/**
+ * Padrão determinístico de "prometi verificar/confirmar agenda sem checar" — verbo de
+ * intenção (vou/estou/iremos) + verbo de checagem (verificar/confirmar/consultar) perto
+ * (≤80 chars) de um substantivo de agenda. Curto de propósito: cobre as frases MEDIDAS em
+ * produção (2026-08-29, gpt-5.6-terra) — "vou verificar as opções de horário
+ * [...] e te passo assim que tiver a confirmação", "estou confirmando com a equipe os
+ * horários disponíveis" — não uma gramática geral de intenção, que erraria para o lado do
+ * falso positivo em texto livre de WhatsApp.
+ *
+ * ─── #1019: o SERVIÇO também é substantivo de agenda, e "organizar" é checagem ──
+ *
+ * Medido no relato: com as três capacidades de agenda ligadas, o agente chamou
+ * `crm_list_event_types` 7× (todas com sucesso no `api_audit_log`) e zero vezes
+ * `crm_find_free_slots`; o texto que saiu foi "vou verificar/organizar seu atendimento".
+ * O gate estava armado e passou batido — duas faltas na lista, uma por frase:
+ *
+ *   - SUBSTANTIVO: "atendimento" não estava lá, e é a palavra que este produto usa para
+ *     o serviço que se agenda — o rótulo da capacidade é literalmente "Marcar consulta ou
+ *     sessão". Quem marca é `crm_book_appointment`; quem tem agenda marcada é o serviço,
+ *     com o nome que a TELA dá a ele. `consulta` e `sess[aã]?o` entram pelo mesmo motivo
+ *     (e `sess[aã]?o` aceita a forma sem acento porque o corpo chega normalizado).
+ *   - VERBO: "organizar" não estava na lista. O modelo não prometeu verificar — prometeu
+ *     ORGANIZAR, que é a mesma promessa vazia vista de outro ângulo.
+ *
+ * O falso positivo que se abre com isto é texto de conversa comum ("o atendimento de vocês
+ * é ótimo") — que NÃO casa, porque o padrão continua exigindo as três partes na ordem
+ * (intenção + checagem + substantivo, a ≤80 chars). O preço aceito é o outro lado: com
+ * agenda ativa e sem ferramenta chamada, "vou organizar seu atendimento" não tem versão
+ * aceitável — o agente tem como checar antes de prometer.
+ *
+ * ─── #1038 (item A): o substantivo do SERVIÇO colado ao verbo de checagem ──────
+ *
+ * O recorte da #1019 VETAVA DEMAIS, e isso foi MEDIDO, não suposto: extraído o literal
+ * deste arquivo e rodado contra nove frases, SEIS casavam no head e não casavam na main.
+ * A classe atingida é a de dois dos nichos centrais do produto — clínica e suporte:
+ *
+ *   "Vou confirmar se o plano cobre a consulta"
+ *   "Vou verificar o valor da sessão de fisioterapia"
+ *   "Vou consultar o resultado da sua consulta com o médico"
+ *   "Estou verificando o histórico do seu atendimento anterior"
+ *   "Vou verificar o status do seu pedido e já retorno sobre o atendimento"
+ *   "Vou organizar as informações do seu atendimento"
+ *
+ * Em todas, o substantivo do serviço aparece LONGE do verbo, como ASSUNTO (plano, valor,
+ * resultado, histórico, status, informações) — e o `[^.!?\n]{0,80}` casava assim mesmo.
+ * Com a agenda armada e sem ferramenta chamada no turno, cada uma dessas respostas era
+ * vetada: conteúdo legítimo sobre cobertura de plano, preço e histórico descartado por um
+ * substantivo que estava ali de passagem.
+ *
+ * O recorte estreitado (a "opção 1" do mantenedor): só para os substantivos do SERVIÇO
+ * (`atendimento`, `consulta`, `sess[aã]?o`) o casamento passa a exigir OBJETO DIRETO
+ * COLADO — verbo de checagem, artigo/possessivo OPCIONAL ("o", "a", "seu", "sua",
+ * "nosso"…) e o substantivo, sem nada entre eles. Daí: "vou verificar seu atendimento"
+ * casa (é a promessa do relato #1019, com ou sem artigo), "vou verificar o valor da
+ * sessão" não casa. Os substantivos de AGENDA (`horário`, `agenda`, `disponibilidade`,
+ * `agendamento`, `marcação`, `encaixe`, `vaga`) mantêm a folga de 80 chars: são eles que
+ * carregam as duas frases medidas do incidente original, em que o substantivo vem
+ * QUALIFICADO ("as opções de horário", "os horários disponíveis") e nunca colado.
+ *
+ * Preço declarado: com a agenda armada e sem ferramenta chamada, uma promessa em que o
+ * serviço aparece só como assunto deixa de ser vetada — é o que se paga para parar de
+ * vetar as seis. O que guarda esta fronteira é `tests/unit/gate-agenda-stall.test.ts`
+ * (as SEIS como controle NEGATIVO, ao lado dos controles que continuam vetando e do que
+ * continua passando). Nada aqui foi medido em produção; o custo real de um veto indevido
+ * segue não medido neste repo.
+ */
+const AGENDA_STALL_PATTERN =
+  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar|organizando|organizar)\b(?:[^.!?\n]{0,80}\b(?:hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b|\s+(?:[oa]s?\s+)?(?:meu\s+|minha\s+|seu\s+|sua\s+|nosso\s+|nossa\s+|teu\s+|tua\s+)?(?:atendimento|consulta|sess[aã]?o)\b)/i;
+
+/**
+ * A janela de 10 chars entre "vou" e o verbo de checagem não alcança a
+ * construção medida "vou chamar a responsável pra ver os horários": o
+ * verbo útil é "ver", e ele vem depois da pessoa. Sem isto o gate passa
+ * e o modelo encerra o turno sem crm_find_free_slots. Continua exigindo
+ * substantivo de agenda. `\bver\b` não casa "verificar".
+ *
+ * "Ver" é verbo comum demais para a janela larga dos outros padrões, e este gate
+ * não tem fail-safe: o veto se repete até o modelo chamar a ferramenta ou mudar a
+ * frase. A primeira versão (80 caracteres antes do "ver", 40 depois) vetou 9 de 12
+ * frases que não prometem consultar agenda, e 9 de 10 num segundo conjunto escrito
+ * antes de testar o corte. Três cortes, cada um nomeando a família que ele tira:
+ *
+ * - quem vê é o CLIENTE: `voce`/`vc`/`ce`/`tu` perto do "ver" ("pra você ver a
+ *   agenda do evento", "ver o que você precisa: agendamento…");
+ * - "a ver" não é verbo de checagem ("nada a ver com o seu agendamento", "te
+ *   ajudar a ver horários"), nem "ver" seguido de `:`/`;`/`,` ("vamos ver: horário
+ *   de funcionamento é…");
+ * - o substantivo vem logo depois (≤25: "ver se tem vaga", "ver quais horários"),
+ *   não uma oração inteira adiante ("ver se faz sentido marcar um horário").
+ *
+ * Nos mesmos dois conjuntos, com este corte: 1 de 12 e 1 de 10, e 10 de 12
+ * promessas vetadas (a versão larga: 11 de 12). O que ficou de fora dos dois lados
+ * está em `tests/unit/gate-agenda-stall.test.ts`. As frases são escritas, não
+ * tráfego de produção.
+ */
+const PRONOME_DO_CLIENTE = String.raw`\b(?:voce|vc|ce|tu)\b`;
+const AGENDA_STALL_VER_PATTERN = new RegExp(
+  String.raw`\b(vou|estou|iremos|vamos)\b(?:(?!${PRONOME_DO_CLIENTE})[^.!?\n]){0,50}` +
+    String.raw`(?<!\ba )\bver\b(?!\s*[:;,])(?:(?!${PRONOME_DO_CLIENTE})[^.!?\n]){0,25}` +
+    String.raw`\b(hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b`,
+  'i',
+);
+
+/**
+ * Padrão irmão do `AGENDA_STALL_PATTERN`, mas para a outra metade do mesmo defeito: não
+ * uma PROMESSA de checar ("vou verificar"), e sim uma AFIRMAÇÃO de fato já consumado
+ * ("está confirmado/agendado/marcado/certinho") — o texto exato do incidente original
+ * que deu origem a este gate ("Seu agendamento está confirmado para amanhã às 9h",
+ * "Confirmando: seu agendamento está certinho para amanhã às 9h"), medido em produção
+ * 2026-08-29 ANTES de o `AGENDA_STALL_PATTERN` existir. O padrão de
+ * promessa sozinho não cobre essa frase (não há "vou/estou" + verbo de checagem nela),
+ * então uma confirmação categórica sem chamada de ferramenta passava batido mesmo com o
+ * gate armado. Mesma disciplina: substantivo de agenda perto de "está/ficou/fica" perto
+ * de um particípio de confirmação — curto e ancorado nas frases medidas, não uma
+ * gramática geral (evita falso positivo em "o agendamento está uma bagunça", por ex.).
+ */
+const AGENDA_CONFIRMED_PATTERN =
+  /\b(agendamento|hor[aá]rio|encaixe|vaga|visita)\b[^.!?\n]{0,30}\b(esta|está|ficou|fica|segue)\b[^.!?\n]{0,20}\b(confirmad[oa]|agendad[oa]|marcad[oa]|certinh[oa])\b/i;
+
+/**
+ * `\b` do JS é ASCII-only ("word char" = `[A-Za-z0-9_]`): `á` não conta como letra
+ * pra ele. Isso faz `\best[aá]\b` NUNCA casar "está" (acentuado) seguido de espaço —
+ * o `á` fica "sem fronteira" com o espaço seguinte (nem um nem outro é \w) e o `\b`
+ * final falha. Medido: as DUAS frases do incidente original ("está confirmado", "está
+ * certinho") não vetavam com o padrão como foi escrito, porque as duas usam "está"
+ * com acento — o próprio caso que este gate existe pra pegar. Normaliza (remove
+ * acento) antes de testar; a alternativa "esta" (sem acento) no padrão acima cobre o
+ * texto já normalizado, e os demais grupos ([aá]/[oa]/[çc][aã]) seguem funcionando
+ * porque não são o ÚLTIMO caractere antes de um `\b`.
+ */
+function semAcento(texto: string): string {
+  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * Nomes de ferramenta como o modelo os lê num texto de ensino: "`a`", "`a` ou `b`",
+ * "`a`, `b` ou `c`". Usado pelo veto de agenda e pelo bloco residente de agenda
+ * (`inbound-turn.ts`), que precisam nomear as MESMAS ferramentas do mesmo jeito.
+ */
+export function nomesDasFerramentas(nomes: readonly string[]): string {
+  const marcados = nomes.map((n) => `\`${n}\``);
+  if (marcados.length <= 1) return marcados.join('');
+  return `${marcados.slice(0, -1).join(', ')} ou ${marcados[marcados.length - 1]}`;
+}
+
+/**
+ * Gate de AGENDA SEM CHECAR — a garantia DURA de que "vou verificar/confirmar horário" (ou
+ * "está confirmado/agendado") só sai depois de a ferramenta (`crm_find_free_slots`/
+ * `crm_book_appointment`/`crm_reschedule_appointment`) ter sido de fato CHAMADA neste turno.
+ * Desarmado (`agenda` ausente ou `active` false) = no-op — mesmo default seguro de
+ * `internalVocabularyEnforced` (caller que não conhece o campo não arma nada).
+ *
+ * Por que existe apesar do `agendaSystemBlock` (instrução em texto, `inbound-turn.ts`) já
+ * dizer a mesma regra: medido em produção (2026-08-29, mesmo tenant) que o modelo
+ * (`openai/gpt-5.6-terra`) ignora a instrução e ainda assim promete verificar sem chamar a
+ * ferramenta — a instrução sozinha não é garantia, só ensino. Este gate é a cura
+ * DETERMINÍSTICA: não precisa de classificador (o padrão é regex, sem custo de LLM extra) e
+ * não confia no modelo se corrigir sozinho — se ele tentar de novo sem chamar a ferramenta,
+ * veta de novo (sem fail-safe de N tentativas como o de vocabulário interno: aqui NÃO existe
+ * versão aceitável do texto vetado, só a alternativa de chamar a ferramenta).
+ *
+ * Posição 6.9 de `BEFORE_SEND_GATES`: DEPOIS do `internalVocabularyGate` e ANTES do
+ * `disclosureGate` (que pode emendar o corpo — este gate precisa ver o texto do MODELO).
+ */
+export const agendaStallGate: Gate = {
+  name: 'agenda_stall',
+  evaluate: (ctx) => {
+    if (ctx.agenda === undefined || !ctx.agenda.active) return { pass: true };
+    if (ctx.agenda.toolCalledThisTurn) return { pass: true };
+    const bodySemAcento = semAcento(ctx.body);
+    const stall =
+      AGENDA_STALL_PATTERN.test(bodySemAcento) || AGENDA_STALL_VER_PATTERN.test(bodySemAcento);
+    const confirmedSemChecar = AGENDA_CONFIRMED_PATTERN.test(bodySemAcento);
+    if (!stall && !confirmedSemChecar) return { pass: true };
+    return {
+      pass: false,
+      code: 'agenda_stall_sem_ferramenta',
+      // O veto nomeia as ferramentas de agenda que ESTE agente tem, e só elas.
+      //
+      // ⚠️ Já nomeou uma lista fixa: `crm_find_free_slots, crm_book_appointment ou
+      // crm_reschedule_appointment` para todo agente que marca — e, desde a #831,
+      // há agente que tem SÓ `crm_find_and_book_appointment`, a quem o veto
+      // mandava chamar três ferramentas que ele não tem e nunca a que ele tem.
+      reason: (() => {
+        const ferramentas =
+          ctx.agenda.ferramentas.length > 0
+            ? nomesDasFerramentas(ctx.agenda.ferramentas)
+            : 'a ferramenta de agenda';
+        return confirmedSemChecar
+          ? `Você afirmou que um horário está confirmado/agendado sem ter chamado ${ferramentas} ` +
+            'NESTE turno. Nunca diga que está confirmado sem a ferramenta ter registrado de fato — ' +
+            'chame a ferramenta e responda com base no retorno dela.'
+          : `Você prometeu verificar/confirmar um horário sem ter chamado ${ferramentas} NESTE ` +
+            'turno. Chame a ferramenta agora e responda com base no retorno dela — não repita a ' +
+            'promessa sem checar.';
+      })(),
+    };
+  },
+};
+
+/**
+ * Gate de disclosure (F4-05; blueprint 5.7) — garante que a PRIMEIRA mensagem outbound a um
+ * lead novo se apresenta como assistente virtual (template versionado por org). Decisão de
+ * produto que blinda hoje (CDC) e amanhã (PL 2338), não exigência da Meta. Sem template
+ * configurado OU não sendo o 1º outbound → PASS (segundo em diante não repete). 1º outbound
+ * que JÁ contém o disclosure → PASS. 1º sem disclosure → conforme o knob `mode`: 'veto'
+ * bloqueia com erro de ensino; 'inject' devolve `amendBody` com o disclosure prependado.
+ * Posição 8 (última) de `BEFORE_SEND_GATES` (F4-08): roda sobre o corpo já validado pelos
+ * gates anteriores e pode emendá-lo (inject) antes do envio.
+ */
+export const disclosureGate: Gate = {
+  name: 'disclosure',
+  evaluate: (ctx) => {
+    const template = ctx.disclosure.template;
+    if (template === null || !ctx.disclosure.isFirstOutbound) return { pass: true };
+    if (bodyContainsDisclosure(ctx.body, template)) return { pass: true };
+    if (ctx.disclosure.mode === 'inject') {
+      return { pass: true, amendBody: prependDisclosure(ctx.body, template) };
+    }
+    return {
+      pass: false,
+      code: 'disclosure_required',
+      reason:
+        'a 1ª mensagem a um lead novo precisa se apresentar como assistente virtual antes de ' +
+        `qualquer outra coisa; inclua no início: "${template.trim()}"`,
+    };
+  },
+};
+
+/**
+ * Gate 2 — anti-ban: janela/warm-up/cap vetam; throttle vira `waitMs` (espera, não veto).
+ *
+ * A capability `banRisk` do canal decide se a parte ANTI-BAN arma. Ela entra em
+ * `decidePacing` em vez de curto-circuitar o gate porque a janela horária/domingo/fuso
+ * que vive no mesmo motor é CORTESIA e vale em todo canal (invariante 3 da doutrina):
+ * um `return` antes da decisão desarmaria o horário comercial junto e faria a IA acordar
+ * cliente às 3h. Quando o anti-ban não se aplica, o veredito carrega
+ * `skipped: 'not_applicable'` — o trace registra a inaplicabilidade (invariante 4); se a
+ * cortesia vetar, o veredito é veto normal e o skipped nem existe.
+ */
+export const pacingGate: Gate = {
+  name: 'pacing',
+  evaluate: (ctx) => {
+    const { banRisk } = capabilitiesOf(ctx.provider);
+    const decision = decidePacing({
+      now: ctx.now,
+      knobs: ctx.pacing.knobs,
+      state: ctx.pacing.state,
+      crmDailyLimit: ctx.pacing.crmDailyLimit,
+      banRisk,
+      rng: ctx.pacing.rng,
+    });
+    if (!decision.allow) {
+      return {
+        pass: false,
+        code: decision.code,
+        reason: decision.reason,
+        nextAllowedAt: decision.nextAllowedAt,
+      };
+    }
+    return banRisk
+      ? { pass: true, waitMs: decision.waitMs }
+      : { pass: true, waitMs: decision.waitMs, skipped: 'not_applicable' };
+  },
+};
+
+/** Gate 3 — spinning: template idêntico em massa na janela do número → veto ("varie"). */
+/**
+ * Gate 3.5 — janela de atendimento. **Irmão do anti-ban, com física invertida.**
+ *
+ * O anti-ban é auto-restrição: posso falar quando quiser, mas o canal me bane se eu
+ * abusar. Este é hetero-restrição: não me banem, mas a plataforma me PROÍBE e me
+ * COBRA. Nenhum é subconjunto do outro, e por isso convivem lado a lado em vez de
+ * um generalizar o outro (doutrina `restricao-de-canal.md`).
+ *
+ * Posição: logo após `pacing`, depois dos vetos irrevogáveis (`stop`, `lgpd`) e antes
+ * de `spinning`, que só faz sentido se o envio for acontecer.
+ *
+ * A `reason` diz a SAÍDA, não só o problema. Veto que apenas nega faz o modelo tentar
+ * de novo igual — e a cadeia devolve a razão a ele como erro instrutivo.
+ */
+export const messagingWindowGate: Gate = {
+  name: 'messaging_window',
+  evaluate: (ctx) => {
+    const caps = capabilitiesOf(ctx.provider);
+    // Canal que fala livre a qualquer hora não tem janela. `skipped`, nunca `pass`
+    // silencioso: a diferença entre "não regrediu" e "consigo PROVAR que não
+    // regrediu" é esta linha no trace (invariante 4 da doutrina).
+    if (caps.freeformOutsideWindow) return { pass: true, skipped: 'not_applicable' };
+
+    // Template é a saída legítima fora da janela — é o que a `reason` do veto
+    // manda usar. Vetá-lo aqui fecharia a única porta que este gate abre.
+    if (ctx.messagingWindow?.isTemplate === true) return { pass: true };
+
+    if (isWindowOpen(ctx.now, ctx.messagingWindow?.lastInboundAt ?? null)) return { pass: true };
+
+    return {
+      pass: false,
+      code: 'messaging_window_closed',
+      reason:
+        'a janela de 24 horas com este contato fechou; o canal vai recusar texto livre. ' +
+        'Use um template aprovado (ferramenta send_template) ou encerre o turno sem enviar.',
+    };
+  },
+};
+
+const spinningGate: Gate = {
+  name: 'spinning',
+  evaluate: (ctx) => {
+    // Desarmado explicitamente: `skipped`, nunca `pass` silencioso — a diferença
+    // entre "não vetou" e "nem chegou a olhar" é esta linha no trace (a mesma
+    // disciplina do `messagingWindowGate` com canal sem janela).
+    if (ctx.spinningEnforced === false) return { pass: true, skipped: 'not_applicable' };
+    const decision = decideSpinning({
+      candidate: ctx.body,
+      window: ctx.spinning.window,
+      knobs: ctx.spinning.knobs,
+    });
+    return decision.allow
+      ? { pass: true }
+      : { pass: false, code: decision.code, reason: decision.reason };
+  },
+};
+
+/**
+ * VERSÃO da ordem da cadeia (F4-08, acceptance 2). Toda mudança na ordem/composição de
+ * `BEFORE_SEND_GATES` EXIGE bumpar esta versão, porque a ordem é contrato e não detalhe
+ * de implementação. Quem cobra isso é `tests/unit/before-send-chain-shape.test.ts`.
+ *
+ * ⚠️ Este comentário citava `before-send.test.ts` como o guarda. **Esse arquivo nunca
+ * existiu** (medido 2026-07-28: `find . -name before-send.test.ts` → nada). Era a segunda
+ * frase deste mesmo módulo a prometer um mecanismo ausente. Se você chegou aqui procurando
+ * a trava, ela é a citada acima — e ela é real: sabotada em três eixos (ordem, tamanho +
+ * versão, unicidade), cada um vermelho no caso certo. v1 = [stop, pacing, spinning] (F2-13); v2 = ordem final da
+ * cadeia definitiva com os gates F4 (F4-08); v3 = insere o gate LGPD (F4-09) na posição 2,
+ * junto do stop entre os vetos de conformidade irrevogáveis, antes do anti-ban; v4 = insere
+ * `casePromiseGate` (spec 15 §10.2, Wave 4) logo após `semanticPromiseGate` — a garantia dura
+ * do guardrail anti-alucinação de casos humanos; v5 = insere `messagingWindowGate`
+ * logo após `pacing` — o irmão de hetero-restrição do anti-ban (Fase 4 do seam de
+ * canais). Em canal sem janela ele registra `skipped`, então nenhum envio muda de
+ * destino: a v5 muda o TRACE, não o comportamento. v6 = insere
+ * `internalVocabularyGate` entre `case_promise` e `disclosure` — a rede contra vazamento
+ * de vocabulário interno ao cliente (`docs/doctrine/separacao-fala-e-operacao.md`). Ele
+ * nasce DESARMADO por default (ver `GateContext.internalVocabularyEnforced`): só o
+ * caminho do agente o arma, então, como a v5, a v6 não muda o destino de nenhum envio
+ * que já existia — muda o TRACE, e passa a medir o vazamento onde há modelo para ensinar.
+ * v7 = insere `agendaStallGate` entre `internal_vocabulary` e `disclosure` — a garantia
+ * DETERMINÍSTICA de que "vou verificar/confirmar horário" só sai depois de a ferramenta de
+ * agenda ter sido chamada neste turno (medido em produção, 2026-08-29: o `agendaSystemBlock`
+ * em texto, sozinho, não bastou — o modelo prometeu checar sem chamar a ferramenta mesmo com
+ * a instrução presente e por último no prompt). Nasce DESARMADO por default (ver
+ * `GateContext.agenda`): só o caminho do agente o arma quando o agente publicado tem
+ * `crm_book_appointment` nas tools, então a v7 também não muda o destino de nenhum envio que
+ * já existia fora desse caso — muda o TRACE e passa a medir/impedir a promessa vazia.
+ */
+export const BEFORE_SEND_CHAIN_VERSION = 7;
+
+/**
+ * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
+ * declarativo iterado pelo runner (acceptance 2). Constante de código de propósito: a
+ * precedência é invariante de segurança/compliance, não config de runtime.
+ *   (1) stop/opt-out/force_human — irrevogável, 1ª linha (regra dura nº 2);
+ *   (2) lgpd — anonimização/base legal de prospecção, veto de conformidade HARD (F4-09);
+ *   (3) pacing — janela/throttle/warm-up/caps anti-ban (F2-11);
+ *   (4) spinning — template idêntico em massa (F2-12);
+ *   (5) promise — validação determinística de preço/desconto/parcelamento (F4-01);
+ *   (6) semantic_promise — promessa em texto livre que a regex não pega (F4-02);
+ *   (6.5) case_promise — anti-alucinação de casos humanos (spec 15 §10.2, Wave 4);
+ *   (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente (doutrina
+ *         `separacao-fala-e-operacao.md`); antes do disclosure porque ele pode emendar o corpo;
+ *   (6.9) agenda_stall — "vou verificar/confirmar horário" sem ter chamado a ferramenta de
+ *         agenda neste turno; antes do disclosure pelo mesmo motivo do internal_vocabulary;
+ *   (8) disclosure — 1ª mensagem se apresenta como assistente virtual (F4-05).
+ * (O anti-jailbreak F4-04 é INBOUND advisório, não gate de before_send — não entra aqui.)
+ */
+export const BEFORE_SEND_GATES: readonly Gate[] = [
+  stopGate,
+  lgpdGate,
+  pacingGate,
+  messagingWindowGate,
+  spinningGate,
+  promiseGate,
+  semanticPromiseGate,
+  casePromiseGate,
+  internalVocabularyGate,
+  agendaStallGate,
+  disclosureGate,
+];
+
+/** Uma linha do trace de auditoria — um registro por gate avaliado na tentativa. */
+export interface GateTraceEntry {
+  gate: string;
+  verdict: 'pass' | 'veto' | 'skipped';
+  code?: string;
+  /** só em veto com valores estruturados (promise): detectado vs permitido — sem PII. */
+  detail?: Record<string, string | number>;
+}
+
+export type BeforeSendResult =
+  | { status: 'sent'; outcome: ChannelSendResult; trace: GateTraceEntry[] }
+  | {
+      status: 'vetoed';
+      gate: string;
+      code: string;
+      /** erro instrutivo pt-br que volta ao modelo (o quê foi vetado + o que fazer). */
+      message: string;
+      nextAllowedAt?: Date;
+      trace: GateTraceEntry[];
+    };
+
+export interface RunBeforeSendArgs {
+  agentOperation?: AgentOperationContext;
+  approvedReply?: ApprovedReplyContext;
+  /** Contexto interno do único comando Meet; a origem é relida, nunca um booleano de bypass. */
+  meetingDelivery?: MeetingDeliveryContext;
+  pool: pg.Pool;
+  log: Logger;
+  tenantId: string;
+  leadId: string;
+  /**
+   * Esta tentativa é um template aprovado? Chega até `ctx.messagingWindow.isTemplate`,
+   * e SÓ o gate de janela o consulta — todos os demais continuam valendo.
+   */
+  isTemplate?: boolean;
+  /**
+   * RUN a que a tentativa pertence (job_queue.id) — chave de export da auditoria
+   * (`before_send_traces`, acceptance 3 F4-08). Ausente = trace NÃO persistido em DB (só
+   * emitido ao logger); usado por testes que exercitam a cadeia sem um job real.
+   */
+  jobId?: string;
+  /** número (channel_sessions.id do CRM) — chave da serialização e do estado anti-ban. */
+  channelSessionId: string;
+  body: string;
+  /** `contacts.is_blocked` lido no get_lead_context deste turno; OR com a leitura direta da fonte no gate stop. */
+  optedOutThisTurn: boolean;
+  /**
+   * Agente do turno (`ai_agents.id`), quando o chamador o conhece. Sem ele a
+   * atividade de veto entra como 'system' — com o lastro do trace, mas sem
+   * afirmar QUAL agente decidiu calar. Opcional de propósito: nem todo caminho
+   * de envio nasce de um agente identificado.
+   */
+  agentId?: string | null;
+  /**
+   * channel_sessions.daily_message_limit do CRM (fonte única do cap absoluto). null =
+   * ainda não lido do CRM no runtime → os degraus de warm-up (conservadores) seguram
+   * o cap. Ponto de injeção: quando o drain expuser o limite da sessão, passar aqui.
+   */
+  crmDailyLimit: number | null;
+  now: Date;
+  /** injeções de teste (jitter determinístico + espera sem relógio real). */
+  rng?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  /** override da cadeia (testes); default `BEFORE_SEND_GATES`. */
+  gates?: readonly Gate[];
+  /**
+   * Classificador semântico de promessa (F4-02) — closure ASYNC injetada por quem monta o
+   * run (com tenantId/llm cfg/registry fechados dentro; o seam agnóstico F2-23 vive em edge/).
+   * Roda na carga do ctx SOB o lock, complementando a camada determinística. Ausente = camada
+   * semântica off (gate no-op). A montagem/ordem final da cadeia é da F4-08.
+   */
+  classifyPromiseSemantic?: (body: string) => Promise<PromiseClassification>;
+  /**
+   * Modo do gate de disclosure (F4-05) quando a 1ª mensagem sai sem disclosure: 'inject'
+   * (default conservador — o disclosure é sempre adicionado, garantindo a apresentação) ou
+   * 'veto' (bloqueia + ensina o modelo). Knob do env (DISCLOSURE_MODE).
+   */
+  disclosureMode?: DisclosureMode;
+  /**
+   * Conformidade LGPD (F4-09) montada de fonte confiável (CRM lido no turno via
+   * get_lead_context — regra dura nº 1). Ausente = gate LGPD no-op (testes que não a exercitam).
+   * O runner completa com `isFirstOutbound` (send_ledger accepted) sob o lock.
+   */
+  lgpd?: LgpdInput;
+  /**
+   * Guardrail anti-alucinação de casos humanos (spec 15 §10.2, Wave 4) — ver `GateContext`.
+   * TODOS ausentes (default) = `casesEnabled` false → `casePromiseGate` no-op, retrocompatível
+   * com todo caller de `runBeforeSend` que não conhece casos (o guardrail existente F4-01/02).
+   */
+  casesEnabled?: boolean;
+  hasOpenCase?: boolean;
+  openedCaseThisTurn?: boolean;
+  /** Ver `GateContext.humanPromiseExtraTargets`. Ausente = só cargos genéricos. */
+  humanPromiseExtraTargets?: readonly string[];
+  /**
+   * Arma o `internalVocabularyGate`. Ausente (default) = gate no-op — ver a justificativa
+   * do default em `GateContext.internalVocabularyEnforced`: um veto no caminho
+   * determinístico seria drop silencioso, e cliente mudo não pode ser desfecho.
+   *
+   * O caminho do agente também o passa `false` de propósito no re-run do fail-safe:
+   * depois de N vetos no mesmo turno o envio sai, com registro.
+   */
+  enforceInternalVocabulary?: boolean;
+  /**
+   * Desarma o `spinningGate` para ESTA tentativa. Ausente = armado (ver
+   * `GateContext.spinningEnforced` para a razão da assimetria e para a conta que
+   * obriga o único chamador que o desarma).
+   *
+   * Desarmar também tira a candidata da JANELA: um corpo que a cadeia não julga
+   * pelo histórico não pode entrar no histórico que julga os outros. O cap
+   * diário (`recordSend`) continua valendo — o aviso é uma mensagem de verdade.
+   */
+  enforceSpinning?: boolean;
+  /**
+   * Arma o `agendaStallGate` para ESTA tentativa — ver `GateContext.agenda`. Ausente = gate
+   * no-op (retrocompatível com todo caller que não conhece agenda, ex.: `followup-turn.ts`).
+   */
+  agenda?: GateContext['agenda'];
+  /**
+   * Pausa humana do turno, paga ANTES de o guardrail tomar conexão/transação
+   * (issue #654) — o porquê está no corpo de `runBeforeSend`. Ausente (default)
+   * = nenhuma pausa: todo caller que não é o turno de ENTRADA
+   * (`followup-turn.ts`, drain, testes) segue bit a bit como antes.
+   */
+  esperaForaDoLock?: () => Promise<void>;
+  /**
+   * Enviado SÓ se TODOS os gates passarem — ChannelAdapter (própria tx/idempotência). Recebe o
+   * corpo FINAL (o disclosureGate F4-05 pode emendá-lo via `amendBody`): quem monta o send DEVE
+   * enviar este `body`, não o corpo original capturado antes da cadeia.
+   */
+  send: (body: string) => Promise<ChannelSendResult>;
+}
+
+/** Pure chain shared by real delivery and preview; no locks, writes or transport. */
+export function evaluateBeforeSend(
+  initial: GateContext,
+  gates: readonly Gate[] = BEFORE_SEND_GATES,
+) {
+  const ctx = { ...initial };
+  const trace: GateTraceEntry[] = [];
+  let veto: { gate: string; code: string; message: string; nextAllowedAt?: Date } | null = null;
+  let throttleWaitMs = 0;
+  for (const gate of gates) {
+    if (veto !== null) {
+      trace.push({ gate: gate.name, verdict: 'skipped' });
+      continue;
+    }
+    const verdict = gate.evaluate(ctx);
+    if (verdict.pass) {
+      // Gate que não se aplicava ao canal entra no trace como 'skipped' COM código
+      // (invariante 4): o 'skipped' sem código acima é o outro caso — gate não avaliado
+      // porque um anterior vetou. Passar como 'pass' apagaria a distinção na auditoria.
+      trace.push(
+        verdict.skipped !== undefined
+          ? { gate: gate.name, verdict: 'skipped', code: verdict.skipped }
+          : { gate: gate.name, verdict: 'pass' },
+      );
+      if (verdict.waitMs !== undefined && verdict.waitMs > throttleWaitMs)
+        throttleWaitMs = verdict.waitMs;
+      // Emenda de corpo (F4-05 inject): o corpo a enviar passa a ser o emendado; gates
+      // seguintes na cadeia o veem (ex.: spinning avalia o texto que de fato vai ao lead).
+      if (verdict.amendBody !== undefined) ctx.body = verdict.amendBody;
+    } else {
+      trace.push({
+        gate: gate.name,
+        verdict: 'veto',
+        code: verdict.code,
+        ...(verdict.detail !== undefined ? { detail: verdict.detail } : {}),
+      });
+      veto = {
+        gate: gate.name,
+        code: verdict.code,
+        message: verdict.reason,
+        ...(verdict.nextAllowedAt !== undefined ? { nextAllowedAt: verdict.nextAllowedAt } : {}),
+      };
+    }
+  }
+  return { body: ctx.body, trace, veto, throttleWaitMs };
+}
+
+/**
+ * A linha de trace da reescrita de estilo (#378 / PR #1139).
+ *
+ * Três desfechos, e os três precisam ser distinguíveis numa auditoria:
+ *   * `aplicado`       — o texto do modelo mudou, e diz qual ajuste estava ligado;
+ *   * `sem_mudanca`    — a organização tem ajuste ligado e o texto não tinha o que trocar;
+ *   * `leitura_falhou` — não deu para perguntar à organização, e o default (desligado)
+ *                        valeu. Sem esta linha, "a organização desligou" e "não
+ *                        consegui perguntar" teriam exatamente a mesma cara.
+ * Corpo nunca entra aqui — só rótulos e o número de caracteres de diferença.
+ */
+function rastroDoEstilo(
+  estilo: LeituraDosAjustes | null,
+  antes: string,
+  depois: string,
+): GateTraceEntry[] {
+  if (estilo === null) return [];
+  if (estilo.leituraFalhou)
+    return [{ gate: 'ajustes_de_estilo', verdict: 'skipped', code: 'leitura_falhou' }];
+  const ligados = (Object.keys(estilo.ajustes) as AjusteDeEstilo[]).filter(
+    (ajuste) => estilo.ajustes[ajuste],
+  );
+  if (ligados.length === 0)
+    return [{ gate: 'ajustes_de_estilo', verdict: 'skipped', code: 'desligado' }];
+  if (antes === depois)
+    return [
+      {
+        gate: 'ajustes_de_estilo',
+        verdict: 'skipped',
+        code: 'sem_mudanca',
+        detail: { ligados: ligados.join(',') },
+      },
+    ];
+  return [
+    {
+      gate: 'ajustes_de_estilo',
+      verdict: 'pass',
+      code: 'aplicado',
+      detail: { ligados: ligados.join(','), delta: depois.length - antes.length },
+    },
+  ];
+}
+
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Roda a cadeia before_send para UMA tentativa de envio. Curto-circuita no 1º veto
+ * (o resto da cadeia é registrado como 'skipped'); só chama `send()` se todos passam.
+ * Serializa o read-then-act por número via advisory xact lock (ver cabeçalho).
+ *
+ * A pausa humana do turno é paga AQUI, ANTES de qualquer contato com o banco (#654).
+ * Antes ela era paga dentro do `send` (via `antesDaPrimeira` do `sendInBubbles`), e o
+ * `send` só é chamado com o `pg_advisory_xact_lock` do NÚMERO na mão: cada turno
+ * segurava a fila do número por 1,2s–7,5s além do necessário (+0–2s do throttle
+ * anti-ban, que dorme no mesmo ponto), e o efeito é o de fora — dois atendentes no
+ * MESMO WhatsApp entram em fila, e a fila ficou mais longa.
+ *
+ * O que NÃO muda de ordem: a cadeia continua julgando (e o estado sob o lock sendo
+ * lido) exatamente quando julgava, o `send` continua acontecendo sob o lock, uma vez
+ * por re-run, e o `finalBody` pós-disclosure continua sendo o que vai ao canal. A
+ * espera é a única coisa que sai da janela da transação.
+ */
+export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSendResult> {
+  const gates = args.gates ?? BEFORE_SEND_GATES;
+  // Fora do lock (nem conexão tomada): aqui não existe transação aberta para segurar.
+  if (args.esperaForaDoLock) await args.esperaForaDoLock();
+  const client = await args.pool.connect();
+  try {
+    // ANTES do `begin`, de propósito: preferência de estilo não precisa do lock,
+    // e uma consulta que falha DENTRO da transação a deixa abortada — a próxima
+    // morreria com 25P02, longe daqui e com outro nome. Aqui, uma falha custa o
+    // default (desligado) e uma linha no trace, não o envio.
+    const estilo =
+      args.enforceInternalVocabulary !== undefined
+        ? await lerAjustesDeEstiloDaOrg(client, args.tenantId)
+        : null;
+
+    await client.query('begin');
+    // Serialização por número: dois workers no MESMO channel_session esperam a vez.
+    await client.query('select pg_advisory_xact_lock(hashtext($1))', [args.channelSessionId]);
+
+    // Estado confiável carregado SOB o lock (os contadores de cap/janela de copies
+    // são racy — precisam ver o que o worker anterior já efetivou).
+    const provider = await loadChannelProvider(client, args.tenantId, args.channelSessionId);
+    if (
+      args.meetingDelivery &&
+      (args.meetingDelivery.organizationId !== args.tenantId ||
+        args.meetingDelivery.jobId !== args.jobId)
+    )
+      throw new Error('meet_scope_mismatch');
+    const meetingPolicy = args.meetingDelivery
+      ? await assertMeetingDeliveryPg(client, args.meetingDelivery)
+      : null;
+    if (
+      meetingPolicy &&
+      (meetingPolicy.contactId !== args.leadId ||
+        meetingPolicy.channelSessionId !== args.channelSessionId)
+    )
+      throw new Error('meet_scope_mismatch');
+    if (args.agentOperation) await assertAgentOperationPg(client, args.agentOperation);
+    const replyPolicy = args.approvedReply
+      ? await assertApprovedReplyPg(client, args.approvedReply)
+      : null;
+    if (
+      args.approvedReply &&
+      (args.approvedReply.organizationId !== args.tenantId ||
+        args.approvedReply.jobId !== args.jobId ||
+        replyPolicy?.contact_id !== args.leadId ||
+        replyPolicy?.channel_session_id !== args.channelSessionId ||
+        replyPolicy?.body !== args.body)
+    )
+      throw new Error('reply_scope_mismatch');
+
+    // O campo `enforceInternalVocabulary` tem três estados no seam: AUSENTE nos
+    // envios determinísticos/humanos, `true` no texto normal do modelo e `false`
+    // somente no re-run do fail-safe do próprio modelo. A PRESENÇA, portanto, é
+    // o marcador estável de "este corpo foi escrito pela IA" sem fazer template,
+    // resposta aprovada ou aviso de código passarem por uma preferência de estilo.
+    const bodyDoModelo =
+      estilo !== null ? aplicarAjustesDeEstilo(args.body, estilo.ajustes) : args.body;
+
+    const optedOut =
+      args.optedOutThisTurn ||
+      (await readStopFlags(
+        client,
+        args.tenantId,
+        args.leadId,
+        meetingPolicy?.humanCommand === true || replyPolicy !== null,
+      ));
+    const pacingCfg = await loadChannelKnobs(
+      client,
+      args.tenantId,
+      args.channelSessionId,
+      args.log,
+    );
+    const pacingState = await loadPacingState(client, args.tenantId, args.channelSessionId, {
+      now: args.now,
+      timezone: pacingCfg.knobs.timezone,
+      numberActivatedAt: pacingCfg.numberActivatedAt,
+    });
+    const spinningKnobs = await loadSpinningKnobs(
+      client,
+      args.tenantId,
+      args.channelSessionId,
+      args.log,
+    );
+    const window = await loadRecentCopies(
+      client,
+      args.tenantId,
+      args.channelSessionId,
+      spinningKnobs.windowSize,
+    );
+    // org de fonte confiável (RunBeforeSendArgs.tenantId = organization_id do row do job) — regra dura nº 1.
+    const promise = await loadPromiseTable(client, args.tenantId);
+    // Camada semântica (F4-02): recebe o MESMO corpo final de estilo que os gates
+    // determinísticos receberão. Se classificasse `args.body`, a cadeia julgaria
+    // uma frase diferente da que efetivamente pode chegar ao cliente.
+    const semanticPromise = args.classifyPromiseSemantic
+      ? await args.classifyPromiseSemantic(bodyDoModelo)
+      : null;
+    // Disclosure (F4-05): template por ponteiro da org + detecção de 1º outbound via
+    // send_ledger (só conta se há template — sem template o gate é no-op de qualquer forma).
+    const disclosure = await loadDisclosureTemplate(client, args.tenantId);
+    // "1º outbound" (send_ledger accepted == 0): sinal compartilhado pelo disclosure (F4-05) e
+    // pelo gate LGPD (F4-09). Só consulta o ledger se ALGUM dos dois precisa (senão no-op).
+    const isFirstOutbound =
+      disclosure !== null || args.lgpd !== undefined
+        ? (await countPriorAcceptedSends(client, args.tenantId, args.leadId)) === 0
+        : false;
+
+    const lastInboundAt = await readLastInboundAt(
+      client,
+      args.tenantId,
+      args.leadId,
+      args.channelSessionId,
+    );
+
+    const ctx: GateContext = {
+      now: args.now,
+      body: bodyDoModelo,
+      optedOut,
+      provider,
+      messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
+      pacing: {
+        knobs: pacingCfg.knobs,
+        state: pacingState,
+        crmDailyLimit: args.crmDailyLimit,
+        rng: args.rng,
+      },
+      spinning: { knobs: spinningKnobs, window },
+      ...(args.enforceSpinning === false ? { spinningEnforced: false as const } : {}),
+      promise: {
+        table: promise?.table ?? null,
+        ...(promise?.versionId !== undefined ? { versionId: promise.versionId } : {}),
+      },
+      semanticPromise,
+      disclosure: {
+        template: disclosure?.body ?? null,
+        ...(disclosure?.versionId !== undefined ? { versionId: disclosure.versionId } : {}),
+        isFirstOutbound,
+        mode: args.disclosureMode ?? 'inject',
+      },
+      lgpd: args.lgpd !== undefined ? { ...args.lgpd, isFirstOutbound } : null,
+      casesEnabled: args.casesEnabled ?? false,
+      hasOpenCase: args.hasOpenCase ?? false,
+      openedCaseThisTurn: args.openedCaseThisTurn ?? false,
+      ...(args.humanPromiseExtraTargets !== undefined
+        ? { humanPromiseExtraTargets: args.humanPromiseExtraTargets }
+        : {}),
+      internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
+      ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
+    };
+
+    const { body: evaluatedBody, trace: traceDaCadeia, veto, throttleWaitMs } = evaluateBeforeSend(ctx, gates);
+    // Reescrever o texto do modelo sem deixar rastro é mudar o que o cliente lê
+    // sem ninguém poder auditar depois. A linha entra ANTES da cadeia porque a
+    // reescrita acontece antes dela, e leva só rótulos — nunca o corpo (sem PII).
+    const trace: GateTraceEntry[] = [...rastroDoEstilo(estilo, args.body, bodyDoModelo), ...traceDaCadeia];
+    ctx.body = evaluatedBody;
+    emitTrace(args.log, args.channelSessionId, trace);
+    // Auditoria DURÁVEL por run (F4-08 acceptance 3): escrita autônoma (pool, fora da tx
+    // serializada) — o trace do VETO tem de sobreviver ao rollback abaixo. Nunca bloqueia
+    // o message-plane: falha aqui vira log.error (o trace do logger já é o backup), não
+    // exceção. ponytail: 1 insert por tentativa; se virar gargalo, batelar por run.
+    const traceId = await persistTrace(args, trace, veto);
+
+    // Wave 3 (CORE 2), cenário 11: o agente decidir NÃO falar é evento. Silêncio
+    // com motivo é informação; silêncio sem registro é abandono. Só o VETO entra
+    // — gate que passou é telemetria e fica na tabela de origem.
+    if (veto && traceId) {
+      try {
+        const r = await emitVetoActivity({
+          pool: args.pool,
+          organizationId: args.tenantId,
+          contactId: args.leadId,
+          traceId,
+          gate: veto.gate,
+          code: veto.code,
+          agentId: args.agentId ?? null,
+        });
+        if (!r.routed) {
+          args.log.info('veto sem negócio para pendurar: registrado no event_log', {
+            channel_session_id: args.channelSessionId,
+            reason: r.reason,
+          });
+        }
+      } catch (err) {
+        // A timeline do veto não pode derrubar o veto.
+        args.log.error('falha ao registrar atividade de veto (segue)', {
+          channel_session_id: args.channelSessionId,
+          error: err instanceof Error ? err.name : 'unknown',
+        });
+      }
+    }
+
+    // Veto de LGPD (F4-09): escala à inbox do runtime (regra dura nº 13) para o DPO/comercial
+    // regularizar. Escrita autônoma no pool (fora da tx serializada), como o trace — sobrevive
+    // ao rollback do veto e nunca derruba o message-plane (o gate já barrou o envio).
+    if (veto !== null && veto.code.startsWith('lgpd_')) {
+      await escalateLgpdVeto(
+        args.pool,
+        { tenantId: args.tenantId, leadId: args.leadId, code: veto.code },
+        args.log,
+      );
+    }
+
+    if (veto !== null) {
+      // Nada foi escrito: rollback fecha a tx e solta o lock. O envio NÃO acontece.
+      await client.query('rollback');
+      return { status: 'vetoed', trace, ...veto };
+    }
+
+    // Throttle: espera o gap restante (bounded pelos knobs) antes do envio.
+    if (throttleWaitMs > 0) await (args.sleep ?? realSleep)(throttleWaitMs);
+
+    // ctx.body é o corpo FINAL (emendado pelo disclosureGate F4-05 quando aplicável).
+    if (args.approvedReply && ctx.body !== args.body)
+      throw new Error('reply_body_changed_reapproval_required');
+    const outcome = await args.send(ctx.body);
+
+    // Registra pacing + copy SÓ no envio físico fresco ('sent'). 'already_sent'/'queued'
+    // já foram (ou serão) contabilizados na tentativa original — o ledger F2-06 faz as
+    // repetições curto-circuitarem, então re-registrar aqui inflaria o cap.
+    if (outcome.kind === 'sent') {
+      await recordSend(client, args.tenantId, args.channelSessionId, args.now);
+      // Simetria com o gate desarmado: quem não é julgado pela janela não entra
+      // nela. Ver `GateContext.spinningEnforced`.
+      if (args.enforceSpinning !== false) {
+        await recordCopy(client, args.tenantId, args.channelSessionId, ctx.body, args.now);
+      }
+    }
+    await client.query('commit');
+    return { status: 'sent', outcome, trace };
+  } catch (err) {
+    await rollback(client, err);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * STOP direto da fonte (pós-fusão, mesmo banco): `contacts.is_blocked` OR
+ * `contacts.force_human`, lidos sob o lock — não existe mais cache no harness.
+ */
+/**
+ * O canal desta sessão, do banco (migration 0087) — nunca suposto.
+ *
+ * Sessão ilegível cai no default conservador em vez de estourar: o valor é o
+ * mesmo do `default` da coluna, então o comportamento é idêntico ao do literal
+ * que esta função substitui. Errar para o lado de um canal SEM risco de ban
+ * desarmaria o anti-ban (`banRisk`) num número que pode ser banido — o erro
+ * caro é esse, e é por isso que o default é o canal conservador.
+ */
+/**
+ * Provider da sessão. Exportado porque o TURNO também precisa: é o que decide se a
+ * ferramenta de template entra no run (canal sem janela não tem o que fazer com ela,
+ * e tool inútil no prompt degrada a escolha do modelo).
+ */
+export async function loadChannelProvider(
+  db: Queryable,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<ChannelProvider> {
+  const { rows } = await db.query<{ provider: string }>(
+    'select provider from channel_sessions where organization_id = $1 and id = $2',
+    [organizationId, channelSessionId],
+  );
+  const provider = rows[0]?.provider;
+  return provider === undefined ? DEFAULT_CHANNEL_PROVIDER : (provider as ChannelProvider);
+}
+
+async function readStopFlags(
+  db: Queryable,
+  organizationId: string,
+  contactId: string,
+  humanMeetingCommand = false,
+): Promise<boolean> {
+  const { rows } = await db.query<{ stopped: boolean }>(
+    humanMeetingCommand
+      ? 'select is_blocked as stopped from contacts where organization_id = $1 and id = $2'
+      : 'select (is_blocked or force_human) as stopped from contacts where organization_id = $1 and id = $2',
+    [organizationId, contactId],
+  );
+  return rows[0]?.stopped === true;
+}
+
+/**
+ * `conversations.last_inbound_at` da conversa deste turno — o INSUMO da janela de 24h.
+ *
+ * Lê o carimbo, não o veredito: a janela é derivada (`messaging-window.ts`). Se a
+ * conversa não existe (ou nunca teve inbound), devolve `null`, que o gate lê como
+ * janela FECHADA — a direção segura.
+ *
+ * `channel_session_id` entra na chave porque o mesmo contato pode ter conversas em
+ * números diferentes, e a janela é por conversa, não por pessoa: responder no número
+ * A não abre licença para escrever pelo número B.
+ */
+async function readLastInboundAt(
+  db: Queryable,
+  organizationId: string,
+  contactId: string,
+  channelSessionId: string,
+): Promise<Date | null> {
+  const { rows } = await db.query<{ last_inbound_at: Date | null }>(
+    `select last_inbound_at from conversations
+      where organization_id = $1 and contact_id = $2 and channel_session_id = $3
+      order by last_inbound_at desc nulls last
+      limit 1`,
+    [organizationId, contactId, channelSessionId],
+  );
+  return rows[0]?.last_inbound_at ?? null;
+}
+
+/** Trace estruturado: uma linha por gate avaliado (ids não são PII; corpo nunca é logado). */
+function emitTrace(log: Logger, channelSessionId: string, trace: GateTraceEntry[]): void {
+  for (const entry of trace) {
+    log.info('before_send gate avaliado', {
+      channel_session_id: channelSessionId,
+      gate: entry.gate,
+      verdict: entry.verdict,
+      ...(entry.code !== undefined ? { code: entry.code } : {}),
+      // detected vs allowed (só promise): números/rótulos, nunca o corpo (sem PII).
+      ...(entry.detail ?? {}),
+    });
+  }
+}
+
+/**
+ * Persiste o trace da tentativa em `before_send_traces` para export por run (F4-08 acc 3).
+ * Escrita autônoma no pool (não no client sob lock) para sobreviver ao rollback do veto.
+ * Sem jobId = pula (testes sem job real). Falha de escrita → log.error + segue: a auditoria
+ * durável é importante, mas não pode derrubar um envio legítimo (o trace do logger cobre).
+ */
+async function persistTrace(
+  args: RunBeforeSendArgs,
+  trace: GateTraceEntry[],
+  veto: { gate: string; code: string } | null,
+): Promise<string | null> {
+  if (args.jobId === undefined) return null;
+  try {
+    const { rows } = await args.pool.query<{ id: string }>(
+      `insert into before_send_traces
+         (organization_id, job_id, contact_id, channel_session_id, trace, vetoed_gate, vetoed_code)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       returning id`,
+      [
+        args.tenantId,
+        args.jobId,
+        args.leadId,
+        args.channelSessionId,
+        JSON.stringify(trace),
+        veto?.gate ?? null,
+        veto?.code ?? null,
+      ],
+    );
+    return rows[0]?.id ?? null;
+  } catch (err) {
+    args.log.error('falha ao persistir trace de auditoria before_send (segue: logger é backup)', {
+      channel_session_id: args.channelSessionId,
+      error: err instanceof Error ? err.name : 'unknown',
+    });
+    return null;
+  }
+}
+
+async function rollback(client: pg.PoolClient, cause: unknown): Promise<void> {
+  try {
+    await client.query('rollback');
+  } catch (rollbackErr) {
+    throw new AggregateError(
+      [cause, rollbackErr],
+      'rollback falhou após erro na cadeia before_send',
+    );
+  }
+}

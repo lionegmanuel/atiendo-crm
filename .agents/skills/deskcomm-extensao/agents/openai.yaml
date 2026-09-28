@@ -1,0 +1,6 @@
+interface:
+  display_name: "Criar uma extensão do DeskcommCRM"
+  short_description: "Decide núcleo x extensão, ensina o contrato do pacote declarativo e leva ao envio revisado"
+  default_prompt: "Use a skill deskcomm-extensao e me ajude a transformar minha ideia num pacote de extensão."
+policy:
+  allow_implicit_invocation: true

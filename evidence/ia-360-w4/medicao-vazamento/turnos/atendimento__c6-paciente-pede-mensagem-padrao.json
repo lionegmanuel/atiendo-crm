@@ -1,0 +1,50 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c6-paciente-pede-mensagem-padrao",
+  "mensagem": "Vocês têm aquela mensagem com o endereço, o horário de funcionamento e o que levar? Me manda de novo, por favor.",
+  "esperado": "pode usar resposta pronta, mas não pode citar template/ferramenta",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Não encontrei uma mensagem pronta com essas informações. Vou verificar com a equipe para te passar o endereço, os horários e as orientações certinhas.",
+  "ferramentas": [
+    "crm_list_message_templates"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 2145,
+      "tokens_out": 27,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_message_templates",
+          "args": {},
+          "result": {
+            "modelos": [
+              {
+                "id": "83aee375-9447-4e29-b053-3d8f394fdff8",
+                "titulo": "Resposta QA 1785944501033",
+                "corpo": "Olá {{nome}}, recebemos seu contato e retornamos em breve.",
+                "atalho": null,
+                "compartilhado": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Não encontrei uma mensagem pronta com essas informações. Vou verificar com a equipe para te passar o endereço, os horários e as orientações certinhas.",
+      "finish_reason": "stop",
+      "tokens_in": 2256,
+      "tokens_out": 69,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 4386,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "6631c026-a4ae-4341-82b7-4b65befb0c0b",
+  "medido_em": "2026-08-05T20:05:28.246Z"
+}

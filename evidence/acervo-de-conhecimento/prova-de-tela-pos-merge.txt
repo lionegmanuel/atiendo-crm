@@ -1,0 +1,27 @@
+# Prova de tela do acervo — DEPOIS de mesclar origin/main (bf386c19)
+
+SHA: 3d1246f4   |   working tree: limpa (o "1 sujo" que uma contagem
+ingênua mostraria é este próprio arquivo sendo escrito)
+Data: 2026-08-26T19:35:35-03:00
+
+Ambiente: Supabase local pg17, schema public DERRUBADO e reinstalado do
+supabase/baseline.sql pelo caminho do install.sh (ON_ERROR_STOP=1) — não é
+o banco de uma execução anterior. next build + next start (produção, 3011).
+A chave da OpenAI é REAL e entra só pelo OPENAI_API_KEY_E2E; o .env.e2e NÃO
+tem OPENAI_API_KEY, que é o estado de uma VPS recém-instalada.
+
+```
+Running 6 tests using 1 worker
+  ✓  1 [chromium] › tests/e2e/acervo-de-conhecimento.spec.ts:141:7 › acervo de conhecimento › sem chave de embedding, a tela DIZ — e oferece o conserto ali mesmo (769ms)
+[WebServer] [rag-debounce] Redis não respondeu — seguindo SEM debounce (pode indexar duas vezes): debounce_timeout
+  ✓  2 [chromium] › tests/e2e/acervo-de-conhecimento.spec.ts:157:7 › acervo de conhecimento › cadastrar material sem chave: ele fica ESPERANDO, e a tela não mente (3.9s)
+[WebServer] [rag-debounce] Redis não respondeu — seguindo SEM debounce (pode indexar duas vezes): debounce_timeout
+[WebServer] [rag-indexer] "E2E FAQ 1787783631543" → versão 1 (e0476d4b-1f0d-48dd-bc4a-55779e145f5e), 2 trecho(s)
+  ✓  3 [chromium] › tests/e2e/acervo-de-conhecimento.spec.ts:205:7 › acervo de conhecimento › com a chave cadastrada pela tela, perguntas e respostas viram trecho buscável (11.2s)
+[WebServer] [rag-debounce] Redis não respondeu — seguindo SEM debounce (pode indexar duas vezes): debounce_timeout
+[WebServer] [rag-indexer] "E2E Documento 1787783631543" → versão 1 (6ddb403a-638c-4a96-a045-a634437d9647), 2 trecho(s)
+  ✓  4 [chromium] › tests/e2e/acervo-de-conhecimento.spec.ts:237:7 › acervo de conhecimento › documento enviado como arquivo também vira trecho — não só pergunta e resposta (8.2s)
+  ✓  5 [chromium] › tests/e2e/acervo-de-conhecimento.spec.ts:264:7 › acervo de conhecimento › o assistente ESCOLHE o que lê, e a escolha é dele — não do primeiro da organização (1.7s)
+  ✓  6 [chromium] › tests/e2e/acervo-de-conhecimento.spec.ts:292:7 › acervo de conhecimento › acervo que nenhum assistente lê é DITO — dinheiro gasto sem efeito era invisível (307ms)
+  6 passed (32.0s)
+```

@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# pre-push — protege a MAIN, e protege o trabalho de quem contribui.
+#
+# 1) A MAIN (origin). A versão anterior bloqueava todo push da máquina. Isso vinha
+#    do gov-loop, onde a regra "a sessão do loop NUNCA faz push" fazia sentido: lá o
+#    risco era uma sessão autônoma publicando sem o ritual de virada de fase.
+#
+#    O efeito colateral era barrar também o fluxo normal de contribuição — abrir uma
+#    branch e um PR para revisão humana. Isso empurra o trabalho para fora do
+#    processo (patch por fora, cópia manual) em vez de protegê-lo, e um gate que
+#    atrapalha o caminho certo acaba sendo contornado.
+#
+#    O que precisa de ritual é a MAIN, que é produção. Feature branch existe para
+#    ser revisada antes de chegar lá — o PR e o CI são o gate, e este hook não
+#    precisa duplicá-los. Escape SÓ para esta regra: o ritual de virada de fase
+#    (loop/CHECKPOINT.md) exporta DESKCOMM_GOV_PHASE_MERGE=1.
+#
+# 2) O FORK DE CONTRIBUIDOR (qualquer remoto que não seja o origin). Um agente
+#    preparou uma branch que NÃO continha os 12 commits do contribuidor, e só a
+#    recusa de fast-forward do git impediu que fossem apagados. Com `--force`, nada
+#    teria impedido. Três perguntas, sem variável de escape:
+#      a. `--force` (ou `+refspec`, ou `--force-with-lease`): recusa sempre;
+#      b. linhagem, não nome: a ponta remota é ancestral do que vai subir? Se não,
+#         lista os commits que sumiriam e para;
+#      c. alvo em movimento: a ponta remota mudou desde o último fetch (o ref de
+#         acompanhamento)? O autor pode ter consertado sozinho enquanto você
+#         trabalhava — e empurrar por cima apaga a solução dele por uma
+#         equivalente, que ninguém notaria.
+#    Push para o origin (nossas branches) não passa por nada disto.
+#
+# O hook só IMPEDE. Nunca decide empurrar, nunca busca, nunca conserta.
+
+remoto="${1:-}"
+url="${2:-}"
+ZERO="0000000000000000000000000000000000000000"
+
+# owner/repo de uma URL de git (https, ssh, ou caminho local), para comparar remotos.
+normalizar() {
+  printf '%s' "$1" | sed -E 's#^(https?://[^/]+/|git@[^:]+:|ssh://git@[^/]+/)##; s#\.git/?$##; s#/+$##' \
+    | tr '[:upper:]' '[:lower:]'
+}
+
+url_origin="$(git remote get-url origin 2>/dev/null || true)"
+eh_origin=0
+if [ "$remoto" = "origin" ] || { [ -n "$url_origin" ] && [ "$(normalizar "$url")" = "$(normalizar "$url_origin")" ]; }; then
+  eh_origin=1
+fi
+
+# A linha de comando do `git push` que chamou o hook: é onde o `--force` mora.
+# `+refspec` também chega aqui. Se `ps` não responder, a linhagem (b) ainda protege.
+# Token a token (read -ra, bash): um glob sobre a linha inteira confundia `-u fork`
+# com `-f`.
+cmd_push="$(ps -o args= -p "$PPID" 2>/dev/null || true)"
+forcado=0
+read -ra tokens <<< "$cmd_push"
+for t in "${tokens[@]}"; do
+  case "$t" in
+    --force | --force-with-lease* | --force-if-includes | +*) forcado=1 ;;
+    --*) ;;
+    -*f*) forcado=1 ;;          # -f, e agrupado: -uf, -fu
+  esac
+done
+
+bloqueadas=""
+recusas=0
+recusar() { printf 'pre-push RECUSADO (%s → %s): %s\n' "$remoto" "$3" "$1" >&2; [ -n "$2" ] && printf '%s\n' "$2" >&2; recusas=$((recusas+1)); }
+
+while read -r _local_ref local_sha remote_ref remote_sha; do
+  if [ "$eh_origin" = "1" ]; then
+    case "$remote_ref" in
+      refs/heads/main | refs/heads/master)
+        [ "${DESKCOMM_GOV_PHASE_MERGE:-0}" = "1" ] || bloqueadas="$bloqueadas $remote_ref"
+        ;;
+    esac
+    continue
+  fi
+
+  # ── fork de contribuidor ──
+  if [ "$local_sha" = "$ZERO" ]; then
+    recusar "apagar branch em fork de contribuidor" "" "$remote_ref"; continue
+  fi
+  if [ "$forcado" = "1" ]; then
+    recusar "--force para fork de contribuidor é recusado sempre, sem exceção" \
+            "  comando: $cmd_push" "$remote_ref"
+    continue
+  fi
+  [ "$remote_sha" = "$ZERO" ] && continue       # branch nova no fork: não há o que perder
+
+  if ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+    recusar "a ponta remota (${remote_sha:0:9}) não está neste clone — NÃO MEDIDO se ela está contida no push" \
+            "  busque antes: git fetch $remoto ${remote_ref#refs/heads/}" "$remote_ref"
+    continue
+  fi
+  if ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+    perdidos="$(git log --oneline "$local_sha..$remote_sha" 2>/dev/null)"
+    n="$(printf '%s\n' "$perdidos" | grep -c .)"
+    recusar "a ponta remota NÃO é ancestral do que vai subir — $n commit(s) sumiriam:" \
+            "$(printf '%s\n' "$perdidos" | sed 's/^/    /')" "$remote_ref"
+    continue
+  fi
+  rastreio="refs/remotes/$remoto/${remote_ref#refs/heads/}"
+  visto="$(git rev-parse -q --verify "$rastreio" 2>/dev/null || true)"
+  if [ -n "$visto" ] && [ "$visto" != "$remote_sha" ]; then
+    recusar "a ponta remota mudou desde o seu último fetch (${visto:0:9} → ${remote_sha:0:9})" \
+            "  o autor pode ter empurrado enquanto você trabalhava: git fetch $remoto e confira antes" "$remote_ref"
+    continue
+  fi
+done
+
+if [ -n "$bloqueadas" ]; then
+  echo "pre-push BLOQUEADO:$bloqueadas — a main é produção e não recebe push direto." >&2
+  echo "Abra uma branch e um PR; o merge acontece pelo review + CI." >&2
+  echo "Virada de fase do gov-loop: loop/CHECKPOINT.md exporta DESKCOMM_GOV_PHASE_MERGE=1." >&2
+  exit 1
+fi
+[ "$recusas" -gt 0 ] && exit 1
+exit 0

@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Atualização self-service — o botão que substitui o SSH",
+    "subtitle": "agent.sh puxa, nunca o app empurra: o host decide o que roda",
+    "output": "atualizacao-self-service.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "host",
+      "label": "VPS (fora do app)"
+    },
+    {
+      "id": "app",
+      "label": "App — rota do agente e da UI"
+    },
+    {
+      "id": "banco",
+      "label": "Banco (instância, sem organization_id)"
+    },
+    {
+      "id": "humano",
+      "label": "O que o dono vê"
+    }
+  ],
+  "mainPath": [
+    "agentsh",
+    "agentroute",
+    "systemversion",
+    "footer",
+    "painel",
+    "updateroute",
+    "runs"
+  ],
+  "nodes": [
+    {
+      "id": "agentsh",
+      "lane": "host",
+      "col": 0,
+      "type": "service",
+      "label": "agent.sh",
+      "sublabel": "cron 5min · flock · esc() byte-safe (LC_ALL=C)"
+    },
+    {
+      "id": "updatesh",
+      "lane": "host",
+      "col": 1,
+      "type": "service",
+      "label": "update.sh --to <tag>",
+      "sublabel": "backup → checkout da tag → baseline → imagem → healthcheck"
+    },
+    {
+      "id": "agentroute",
+      "lane": "app",
+      "col": 0,
+      "type": "api",
+      "label": "POST /api/v1/system/agent",
+      "sublabel": "bearer INTERNAL_CRON_SECRET · heartbeat/run_progress/run_result"
+    },
+    {
+      "id": "versionroute",
+      "lane": "app",
+      "col": 2,
+      "type": "api",
+      "label": "GET /api/v1/system/version",
+      "sublabel": "só is_platform_admin vê o operacional · entrega a faixa instalada→alvo"
+    },
+    {
+      "id": "updateroute",
+      "lane": "app",
+      "col": 3,
+      "type": "api",
+      "label": "POST /api/v1/system/update",
+      "sublabel": "cria o run — nunca executa nada"
+    },
+    {
+      "id": "systemversion",
+      "lane": "banco",
+      "col": 1,
+      "type": "database",
+      "label": "system_version",
+      "sublabel": "singleton id=1 · current/latest/changelog_raw"
+    },
+    {
+      "id": "runs",
+      "lane": "banco",
+      "col": 3,
+      "type": "database",
+      "label": "system_update_runs",
+      "sublabel": "índice único: no máx. 1 'dispatched'"
+    },
+    {
+      "id": "footer",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "Rodapé da sidebar",
+      "sublabel": "aviso só se is_owner E update_available"
+    },
+    {
+      "id": "painel",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "/app/settings/atualizacao",
+      "sublabel": "4 estados · avisos de TODAS as versões da faixa, antes do botão"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "agentsh",
+      "to": "agentroute",
+      "label": "heartbeat: versão instalada + changelog cru"
+    },
+    {
+      "id": "e2",
+      "from": "agentroute",
+      "to": "systemversion",
+      "label": "grava current/latest/changelog_raw"
+    },
+    {
+      "id": "e3",
+      "from": "systemversion",
+      "to": "versionroute",
+      "label": "faixa de seções entre a instalada e a alvo"
+    },
+    {
+      "id": "e4",
+      "from": "versionroute",
+      "to": "footer",
+      "label": "update_available + is_owner"
+    },
+    {
+      "id": "e5",
+      "from": "footer",
+      "to": "painel",
+      "label": "clique no aviso 'Nova versão'"
+    },
+    {
+      "id": "e6",
+      "from": "painel",
+      "to": "updateroute",
+      "label": "clique em 'Atualizar agora'"
+    },
+    {
+      "id": "e7",
+      "from": "updateroute",
+      "to": "runs",
+      "label": "insert status='dispatched'"
+    },
+    {
+      "id": "e8",
+      "from": "agentroute",
+      "to": "runs",
+      "label": "heartbeat seguinte: update_requested=true"
+    },
+    {
+      "id": "e9",
+      "from": "agentsh",
+      "to": "updatesh",
+      "label": "dispara o script local — nunca um comando vindo do app",
+      "route": "highlight"
+    },
+    {
+      "id": "e10",
+      "from": "updatesh",
+      "to": "agentroute",
+      "label": "report() em 3 pontos: backup/código/banco",
+      "route": "highlight"
+    },
+    {
+      "id": "e11",
+      "from": "agentroute",
+      "to": "runs",
+      "label": "run_result fecha success/failed/failed_rolled_back"
+    },
+    {
+      "id": "e12",
+      "from": "runs",
+      "to": "painel",
+      "label": "polling 5s — progresso e desfecho"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "A fronteira que a forma não mostra: pull, nunca push",
+      "items": [
+        "o app NUNCA alcança o host — quem inicia toda troca é o agent.sh, por cron (e9)",
+        "o que atravessa em update_requested é um BOOLEANO, nunca um comando: app comprometido não escolhe o que roda",
+        "e9/e10 são fora de qualquer request HTTP do usuário — só existem quando alguém está de fato na VPS rodando o cron"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Invariantes que a forma não mostra",
+      "items": [
+        "system_version/system_update_runs são de INSTÂNCIA — sem organization_id, sem RLS por tenant",
+        "uniq_system_update_runs_dispatched (migration 0090) é quem garante 1 run por vez, não o check-then-insert da rota",
+        "run 'dispatched' vencido (>15min) é auto-expirado pelo POST seguinte — sem isso o botão morreria travado para sempre",
+        "esc() do agent.sh roda sob LC_ALL=C em cada estágio — sem isso, um byte truncado de UTF-8 mata o heartbeat sob locale do host",
+        "update.sh recusa alvo já contido no HEAD (merge-base --is-ancestor) ANTES do backup; --force é a saída explícita de quem quer mesmo voltar. O agent.sh aplica o MESMO teste e deixa de anunciar a tag — as duas pontas concordam, e a tela nunca promete o que o host vai recusar",
+        "o install.sh clona com --depth 1, e num repositório RASO o merge-base responde 'não é ancestral' para tudo — a resposta que libera. is_already_in_head() completa a história antes de perguntar e, se não conseguir, devolve 'não sei', que o chamador trata como recusa. Falhar fechado: o risco não é o botão não funcionar, é o botão quebrar o CRM do cliente",
+        "recusa antes de tocar em qualquer coisa sai com código 3 (REFUSED_RC), distinto de falha no meio (1): o agent.sh não faz rollback nem reescreve o .env de um run que não mexeu em nada",
+        "APP_IMAGE/APP_PULL_POLICY são GRAVADOS no .env (na atualização e no rollback): export morre com o processo e o compose lê do .env — sem isso o próximo `up -d` do dono desfaz a atualização",
+        "o run em 'dispatched' é a ÚNICA fonte de 'há pedido?' — não existe flag paralelo em system_version",
+        "num rollback, a versão exibida vem do run (from_version), não do git describe do host — esse aponta para a versão que quebrou"
+      ]
+    },
+    {
+      "dot": "sky",
+      "title": "Fronteiras deliberadas",
+      "items": [
+        "quem não é is_platform_admin não vê o aviso nem a rota — 404, não uma tela de 'sem permissão'",
+        "o bloco 'Requer atenção' é EXCLUÍDO de 'O que muda' (não duplicado) e sempre acima do botão",
+        "o alvo do update.sh é a última TAG publicada, nunca o topo da main — atualizar não pode levar a um commit não testado"
+      ]
+    }
+  ]
+}

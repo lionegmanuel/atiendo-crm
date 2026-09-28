@@ -1,0 +1,27 @@
+PROVA NA VPS — crm.deskcomm.com.br, v1.6.0, imagem bf386c19 (2026-08-26)
+Caminho de produção: webhook WAHA -> ingestão -> event_log -> worker -> turno do agente
+Número sintético 5500000000042 (nenhum cliente real recebeu nada)
+
+CONVERSA (o caso exato do screenshot 2):
+  21:45:18  cliente  → Bom dia
+  21:45:56  IA       → Bom dia! Sou a assistente virtual da Vitalis 😊 Como posso te ajudar hoje?
+  21:46:15  cliente  → Preciso de falar com atendente
+  21:46:34  IA       → Claro! Já estou chamando alguém da equipe para falar com você.
+                       No momento ninguém está disponível, mas seu pedido ficou registrado.
+                       ^ ANTES: nesta mesma situação, silêncio absoluto.
+                       ^ A 2a frase é o estado REAL da equipe às 21h46 — ninguém elegível.
+
+LOG DO WORKER, na ordem:
+  21:46:33  before_send: stop=pass, spinning=skipped/not_applicable  (o desarme deliberado)
+  21:46:36  lead avisado antes da passagem para humano
+  21:46:38  handoff humano aplicado (force_human + silêncio + crons cancelados + inbox)
+  21:46:38  handoff acionado por pedido explícito | lead_avisado=true
+
+ESTADO FINAL:
+  conversations: status=open, bot_silenced_until=infinity, last_handoff_reason=requested_human
+  contacts.force_human = true
+  Central: 'Motivo: requested_human. O cliente JÁ FOI avisado de que uma pessoa vai assumir.'
+
+O QUE ISTO NÃO PROVA: entrega no aparelho. O número é sintético; a mensagem
+sai com status='sent' mas não chega a um WhatsApp real. Para provar a entrega
+basta mandar 'preciso falar com atendente' de um celular para 55 11 4863-3324.

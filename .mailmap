@@ -1,0 +1,116 @@
+# Identidades git → a pessoa por trás delas.
+#
+# ─── Por que este arquivo existe ────────────────────────────────────────────
+#
+# Sem ele, `git shortlog -sn` e `git log --author=...` contam ASSINATURAS, não
+# pessoas — e quem assinou de duas máquinas diferentes aparece como dois
+# contribuidores, cada um com metade do trabalho.
+#
+# O caso que motivou o arquivo: @JowaniOrantes traduziu o sistema inteiro para
+# espanhol em três PRs (#352, #379, #416). Os commits saíram da máquina dele
+# assinados como "SoftIA Backup Agent", então `git log --author=Jowani`
+# devolvia **1 commit**. Ele fez 60. Num projeto que se distribui por fork e
+# vive de contribuição externa, crédito medido errado não é detalhe de
+# formatação: é o número que aparece no perfil de quem contribuiu.
+#
+# ─── A regra para mexer aqui ────────────────────────────────────────────────
+#
+# **Só entra o que está PROVADO, nunca o inferido por semelhança de nome** —
+# mapear a pessoa errada é pior que não mapear, porque atribui a alguém
+# trabalho que não é dele e ninguém confere depois. Duas provas valem:
+#
+#   1. A API do GitHub associa o commit a uma conta:
+#      `gh api repos/melgarafael/DeskcommCRM/commits/<sha> --jq .author.login`
+#   2. O PR é de um handle e seus commits carregam a assinatura em questão:
+#      `gh api repos/melgarafael/DeskcommCRM/pulls/<n>/commits \
+#         --jq '[.[].commit.author.email] | unique'`
+#
+# Para conferir que este arquivo não é decorativo:
+#
+#   git log --author=Jowani --oneline | wc -l    # 60, não 1
+#   git shortlog -sne | grep -ci "SoftIA"        # 0 — a assinatura sumiu
+#
+# ─── O que NÃO está aqui, de propósito ──────────────────────────────────────
+#
+# Identidade sem duplicação não entra: quando alguém assina de um jeito só, não
+# há o que unificar, e trocar o nome de exibição pelo handle do GitHub seria
+# reescrever como a pessoa escolheu se apresentar — outro assunto, e que não é
+# nosso. Por isso `liuziyi`, `lucas-brito-dev`, `Elias Gervanno` e os demais
+# ficam como estão, mesmo tendo handle diferente do nome git.
+#
+# Também ficam fora, por falta de prova e não por esquecimento:
+#   - `root <root@vps-...>` e `root <root@srv...>` — commits feitos direto na
+#     VPS. A API não associa conta nenhuma, e o usuário `root` não identifica
+#     pessoa. Mapear pelo palpite de quem tinha acesso é exatamente o que a
+#     regra acima proíbe.
+#   - `Triagem <t@l>` e `Triagem <triagem@local>` — assinaturas de sessão
+#     automatizada, não pessoas.
+#   - `Rafael Savoia <rafaelsavoia@MacBook-Pro-de-Rafael-2.local>` — nome
+#     DIFERENTE do dono do produto. Compartilhar o primeiro nome não é prova
+#     de nada, e é o caso que mais convida ao erro.
+
+# @JowaniOrantes — tradução para espanhol (PRs #352, #379, #416).
+# Prova: os três PRs são dele, e o #352 traz as DUAS assinaturas nos commits
+# do mesmo PR — a mesma pessoa, de duas máquinas.
+Jowani Orantes <99059532+JowaniOrantes@users.noreply.github.com> SoftIA Backup Agent <consultores@anbro.com.mx>
+
+# @felipebnt — PR #409. Prova: a API associa os DOIS e-mails à mesma conta.
+Felipe Oliveira <56138438+felipebnt@users.noreply.github.com> <felipe_bnt@hotmail.com>
+
+# @jmpo — PRs #138, #140. Prova: mesmo e-mail nas duas assinaturas, só o nome
+# git muda; a API associa ambas a `jmpo`.
+jmpo <pompa.07@gmail.com> Juan <pompa.07@gmail.com>
+
+# @melgarafael — o dono do produto, que commita de três máquinas. O e-mail
+# canônico é o de 2.545 dos commits.
+#
+# Prova de duas naturezas, e a diferença importa:
+#   - `rafael@maudibrasil.com.br` e `119944436+melgarafael@users.noreply...`
+#     a API associa os dois a @melgarafael;
+#   - `rafael@automatiklabs.com.br` resolve para **@rafaelmelgaco**, uma conta
+#     DIFERENTE. Aqui a API não decide nada: ela só diz que são duas contas,
+#     não se são duas pessoas. A fusão entrou por **confirmação explícita do
+#     dono da identidade em 2026-08-30** ("as duas contas são minhas"), e não
+#     por inferência de nome — que foi exatamente a razão de esta linha ficar
+#     de fora até agora, enquanto as outras três já valiam.
+#
+# Fica escrito porque a natureza da prova não é detalhe: quem reler isto daqui
+# a um ano precisa saber que este mapeamento repousa numa resposta humana, e
+# não em algo que se possa reverificar rodando um comando.
+Rafael Melgaço <rafael@maudibrasil.com.br> <119944436+melgarafael@users.noreply.github.com>
+Rafael Melgaço <rafael@maudibrasil.com.br> <rafael@automatiklabs.com.br>
+
+# @automatikpg-ux — PRs #569, #570, #571 (e os anteriores dele).
+# Prova: os três PRs são da conta @automatikpg-ux e TODOS os commits deles
+# carregam esta assinatura única (`gh api .../pulls/<n>/commits --jq
+# '[.[].commit.author.email]|unique'` devolve só ela, nos três). A API do
+# GitHub não associa conta ao commit (`author.login` = null), porque `root@<host>`
+# não é e-mail de conta — é por isso que este caso ficava de fora.
+#
+# ⚠️ ENTRA POR DECISÃO EXPLÍCITA DO DONO DO PRODUTO, 2026-09-04, ciente do
+# risco: a prova aqui é o hostname da VPS dele, não a API. Se outra pessoa
+# tivesse commitado como root DAQUELA máquina, o trabalho dela viria para cá.
+# O dono pesou isso contra a alternativa — um contribuidor ativo com três PRs
+# mergeados no mesmo dia sem nada no perfil — e escolheu creditar.
+# A regra geral do arquivo (só o provado pela API) NÃO muda por causa desta linha.
+automatikpg-ux <automatikpg@gmail.com> root <root@vpsbr-15867794.vpshostgator.com.br>
+
+# `Pessoa <alguem@fork.dev>` NÃO é uma pessoa: é a identidade de MENTIRA que os
+# testes de shell do kit usavam para montar repositórios descartáveis. Em
+# 10/09/2026, entre 07:48 e 07:51, uma dessas escritas caiu no `.git/config` do
+# checkout de desenvolvimento do dono e passou a assinar tudo que saía dele.
+#
+# PROVA (medida em 18/09/2026, na triagem que achou o vazamento, e registrada no
+# PR #1232, que tirou a causa dos testes):
+#   git log origin/main --author='alguem@fork.dev' --format=%h | wc -l        # 829
+#   git log origin/main --since=2026-09-10 --no-merges --format=%h | wc -l    # 987
+# O primeiro commit assim é de 10/09 07:51, 16 minutos depois de nascer o
+# `tests/shell/deskcomm-contribuir.test.sh` (582964015, 07:35), que gravava
+# exatamente esse par nome/e-mail. O e-mail não existe e a API do GitHub não
+# associa conta nenhuma a ele — a prova aqui é a origem do valor no repositório,
+# não o perfil.
+#
+# Reescrever o histórico para corrigir a autoria está fora de questão (seriam
+# 829 commits já publicados). O `.mailmap` mostra o autor verdadeiro na leitura,
+# que é o que `git shortlog` e `git log` usam.
+melgarafael <rafael@maudibrasil.com.br> Pessoa <alguem@fork.dev>

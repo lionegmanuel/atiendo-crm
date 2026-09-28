@@ -1,0 +1,406 @@
+
+> deskcomm-crm@0.1.0 test:db /Users/rafaelmelgaco/DeskcommCRM-canais
+> bash scripts/test-db.sh
+
+==> subindo pgvector/pgvector:pg17 como deskcomm-test-db-55295 (porta local 54329)
+==> prelude: stubs mínimos do Supabase (roles, auth.uid(), extensions)
+==> modo INSTALL: aplicando baseline.sql com ON_ERROR_STOP=1
+ set_config 
+------------
+ 
+(1 row)
+
+psql:<stdin>:4060: WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+     set_config     
+--------------------
+ public, extensions
+(1 row)
+
+    ✓ install ok
+==> modo UPDATE: re-aplicando baseline.sql sem ON_ERROR_STOP (idempotência)
+psql:<stdin>:1916: ERROR:  multiple primary keys for table "ai_agent_runs" are not allowed
+psql:<stdin>:1921: ERROR:  multiple primary keys for table "ai_agent_versions" are not allowed
+psql:<stdin>:1926: ERROR:  relation "ai_agent_versions_unique_number" already exists
+psql:<stdin>:1931: ERROR:  relation "ai_agents_name_unique" already exists
+psql:<stdin>:1936: ERROR:  multiple primary keys for table "ai_agents" are not allowed
+psql:<stdin>:1941: ERROR:  multiple primary keys for table "ai_budgets" are not allowed
+psql:<stdin>:1946: ERROR:  multiple primary keys for table "ai_chunks" are not allowed
+psql:<stdin>:1951: ERROR:  relation "ai_chunks_position_unique" already exists
+psql:<stdin>:1956: ERROR:  multiple primary keys for table "ai_faq_items" are not allowed
+psql:<stdin>:1961: ERROR:  multiple primary keys for table "ai_invocations" are not allowed
+psql:<stdin>:1966: ERROR:  relation "ai_kbv_version_unique" already exists
+psql:<stdin>:1971: ERROR:  multiple primary keys for table "ai_knowledge_sources" are not allowed
+psql:<stdin>:1976: ERROR:  multiple primary keys for table "ai_knowledge_versions" are not allowed
+psql:<stdin>:1981: ERROR:  multiple primary keys for table "ai_models" are not allowed
+psql:<stdin>:1986: ERROR:  relation "ai_models_unique" already exists
+psql:<stdin>:1991: ERROR:  multiple primary keys for table "ai_pricing" are not allowed
+psql:<stdin>:1996: ERROR:  multiple primary keys for table "ai_provider_credentials" are not allowed
+psql:<stdin>:2001: ERROR:  relation "ai_provider_credentials_unique" already exists
+psql:<stdin>:2006: ERROR:  multiple primary keys for table "api_audit_log" are not allowed
+psql:<stdin>:2011: ERROR:  relation "api_tokens_organization_id_prefix_key" already exists
+psql:<stdin>:2016: ERROR:  multiple primary keys for table "api_tokens" are not allowed
+psql:<stdin>:2021: ERROR:  multiple primary keys for table "channel_session_warmup" are not allowed
+psql:<stdin>:2026: ERROR:  relation "channel_sessions_phone_per_org_unique" already exists
+psql:<stdin>:2031: ERROR:  multiple primary keys for table "channel_sessions" are not allowed
+psql:<stdin>:2036: ERROR:  relation "channel_sessions_waha_session_name_unique" already exists
+psql:<stdin>:2041: ERROR:  relation "channel_sessions_webhook_path_token_unique" already exists
+psql:<stdin>:2046: ERROR:  multiple primary keys for table "contacts" are not allowed
+psql:<stdin>:2051: ERROR:  multiple primary keys for table "conversations" are not allowed
+psql:<stdin>:2056: ERROR:  relation "conversations_unique_per_contact_session" already exists
+psql:<stdin>:2061: ERROR:  multiple primary keys for table "crm_lead_activities" are not allowed
+psql:<stdin>:2066: ERROR:  multiple primary keys for table "crm_lead_links" are not allowed
+psql:<stdin>:2071: ERROR:  multiple primary keys for table "crm_leads" are not allowed
+psql:<stdin>:2076: ERROR:  multiple primary keys for table "crm_pipelines" are not allowed
+psql:<stdin>:2081: ERROR:  multiple primary keys for table "crm_stages" are not allowed
+psql:<stdin>:2086: ERROR:  multiple primary keys for table "event_log" are not allowed
+psql:<stdin>:2091: ERROR:  relation "idempotency_keys_organization_id_key_endpoint_key" already exists
+psql:<stdin>:2096: ERROR:  multiple primary keys for table "idempotency_keys" are not allowed
+psql:<stdin>:2101: ERROR:  multiple primary keys for table "incidents" are not allowed
+psql:<stdin>:2106: ERROR:  multiple primary keys for table "lgpd_requests" are not allowed
+psql:<stdin>:2111: ERROR:  multiple primary keys for table "merge_queue" are not allowed
+psql:<stdin>:2116: ERROR:  relation "messages_org_external_id_unique" already exists
+psql:<stdin>:2121: ERROR:  multiple primary keys for table "messages" are not allowed
+psql:<stdin>:2126: ERROR:  relation "nuvemshop_products_organization_id_external_id_key" already exists
+psql:<stdin>:2131: ERROR:  multiple primary keys for table "nuvemshop_products" are not allowed
+psql:<stdin>:2136: ERROR:  relation "orders_organization_id_external_provider_external_id_key" already exists
+psql:<stdin>:2141: ERROR:  multiple primary keys for table "orders" are not allowed
+psql:<stdin>:2146: ERROR:  relation "organizations_cnpj_key" already exists
+psql:<stdin>:2151: ERROR:  multiple primary keys for table "organizations" are not allowed
+psql:<stdin>:2156: ERROR:  relation "organizations_slug_key" already exists
+psql:<stdin>:2161: ERROR:  multiple primary keys for table "platform_admins" are not allowed
+psql:<stdin>:2166: ERROR:  relation "storage_redaction_queue_bucket_object_path_key" already exists
+psql:<stdin>:2171: ERROR:  multiple primary keys for table "storage_redaction_queue" are not allowed
+psql:<stdin>:2176: ERROR:  relation "tenant_integrations_organization_id_provider_key" already exists
+psql:<stdin>:2181: ERROR:  multiple primary keys for table "tenant_integrations" are not allowed
+psql:<stdin>:2186: ERROR:  multiple primary keys for table "user_organizations" are not allowed
+psql:<stdin>:2191: ERROR:  relation "user_organizations_user_id_organization_id_key" already exists
+psql:<stdin>:2196: ERROR:  multiple primary keys for table "user_recovery_codes" are not allowed
+psql:<stdin>:2201: ERROR:  relation "warmup_session_day_unique" already exists
+psql:<stdin>:2206: ERROR:  multiple primary keys for table "webhook_events_log" are not allowed
+psql:<stdin>:2210: ERROR:  relation "ai_agent_runs_agent_idx" already exists
+psql:<stdin>:2214: ERROR:  relation "ai_agent_runs_one_running_per_conv" already exists
+psql:<stdin>:2218: ERROR:  relation "ai_agent_runs_org_started_idx" already exists
+psql:<stdin>:2222: ERROR:  relation "ai_agent_runs_status_idx" already exists
+psql:<stdin>:2226: ERROR:  relation "ai_agent_versions_agent_idx" already exists
+psql:<stdin>:2230: ERROR:  relation "ai_agents_one_default_per_org" already exists
+psql:<stdin>:2234: ERROR:  relation "ai_agents_org_active_idx" already exists
+psql:<stdin>:2238: ERROR:  relation "ai_agents_published_idx" already exists
+psql:<stdin>:2242: ERROR:  relation "ai_chunks_embedding_ivfflat_idx" already exists
+psql:<stdin>:2246: ERROR:  relation "ai_chunks_metadata_gin_idx" already exists
+psql:<stdin>:2250: ERROR:  relation "ai_chunks_org_kbv_idx" already exists
+psql:<stdin>:2254: ERROR:  relation "ai_chunks_source_idx" already exists
+psql:<stdin>:2258: ERROR:  relation "ai_faq_items_org_idx" already exists
+psql:<stdin>:2262: ERROR:  relation "ai_faq_items_source_idx" already exists
+psql:<stdin>:2266: ERROR:  relation "ai_invocations_agent_kind_idx" already exists
+psql:<stdin>:2270: ERROR:  relation "ai_invocations_conversation_idx" already exists
+psql:<stdin>:2274: ERROR:  relation "ai_invocations_org_created_idx" already exists
+psql:<stdin>:2278: ERROR:  relation "ai_kbv_one_active_per_agent" already exists
+psql:<stdin>:2282: ERROR:  relation "ai_knowledge_sources_agent_idx" already exists
+psql:<stdin>:2286: ERROR:  relation "ai_knowledge_sources_unique_per_agent" already exists
+psql:<stdin>:2290: ERROR:  relation "ai_models_one_default_per_provider" already exists
+psql:<stdin>:2294: ERROR:  relation "ai_provider_credentials_org_provider_idx" already exists
+psql:<stdin>:2298: ERROR:  relation "conversations_bot_silenced_idx" already exists
+psql:<stdin>:2302: ERROR:  relation "conversations_usable_rag_idx" already exists
+psql:<stdin>:2306: ERROR:  relation "event_log_consumed_by_gin" already exists
+psql:<stdin>:2310: ERROR:  relation "event_log_dead_idx" already exists
+psql:<stdin>:2314: ERROR:  relation "event_log_entity_idx" already exists
+psql:<stdin>:2318: ERROR:  relation "event_log_org_type_idx" already exists
+psql:<stdin>:2322: ERROR:  relation "event_log_pending_idx" already exists
+psql:<stdin>:2326: ERROR:  relation "idx_api_tokens_hash" already exists
+psql:<stdin>:2330: ERROR:  relation "idx_api_tokens_org" already exists
+psql:<stdin>:2334: ERROR:  relation "idx_audit_action_time" already exists
+psql:<stdin>:2338: ERROR:  relation "idx_audit_actor_time" already exists
+psql:<stdin>:2342: ERROR:  relation "idx_audit_org_time" already exists
+psql:<stdin>:2346: ERROR:  relation "idx_audit_request" already exists
+psql:<stdin>:2350: ERROR:  relation "idx_audit_resource" already exists
+psql:<stdin>:2354: ERROR:  relation "idx_channel_sessions_health" already exists
+psql:<stdin>:2358: ERROR:  relation "idx_channel_sessions_org_status" already exists
+psql:<stdin>:2362: ERROR:  relation "idx_contacts_consent_gin" already exists
+psql:<stdin>:2366: ERROR:  relation "idx_contacts_org_blocked" already exists
+psql:<stdin>:2370: ERROR:  relation "idx_contacts_org_last_activity" already exists
+psql:<stdin>:2374: ERROR:  relation "idx_contacts_org_name_trgm" already exists
+psql:<stdin>:2378: ERROR:  relation "idx_contacts_tags_gin" already exists
+psql:<stdin>:2382: ERROR:  relation "idx_conversations_assigned" already exists
+psql:<stdin>:2386: ERROR:  relation "idx_conversations_open_unassigned" already exists
+psql:<stdin>:2390: ERROR:  relation "idx_conversations_org_last_msg" already exists
+psql:<stdin>:2394: ERROR:  relation "idx_crm_lead_links_lead" already exists
+psql:<stdin>:2398: ERROR:  relation "idx_crm_lead_links_org_target" already exists
+psql:<stdin>:2402: ERROR:  relation "idx_crm_leads_custom_fields_gin" already exists
+psql:<stdin>:2406: ERROR:  relation "idx_crm_leads_org_contact" already exists
+psql:<stdin>:2410: ERROR:  relation "idx_crm_leads_org_expected_close_overdue" already exists
+psql:<stdin>:2414: ERROR:  relation "idx_crm_leads_org_last_activity" already exists
+psql:<stdin>:2418: ERROR:  relation "idx_crm_leads_org_owner_status" already exists
+psql:<stdin>:2422: ERROR:  relation "idx_crm_leads_org_pipeline_status" already exists
+psql:<stdin>:2426: ERROR:  relation "idx_crm_leads_org_stage_position" already exists
+psql:<stdin>:2430: ERROR:  relation "idx_crm_leads_tags_gin" already exists
+psql:<stdin>:2434: ERROR:  relation "idx_crm_pipelines_org_position" already exists
+psql:<stdin>:2438: ERROR:  relation "idx_crm_stages_pipeline_position" already exists
+psql:<stdin>:2442: ERROR:  relation "idx_idem_expiry" already exists
+psql:<stdin>:2446: ERROR:  relation "idx_idem_lookup" already exists
+psql:<stdin>:2450: ERROR:  relation "idx_lead_activities_org_contact" already exists
+psql:<stdin>:2454: ERROR:  relation "idx_lead_activities_org_lead_perf" already exists
+psql:<stdin>:2458: ERROR:  relation "idx_lead_activities_org_type_perf" already exists
+psql:<stdin>:2462: ERROR:  relation "idx_lead_activities_payload_gin" already exists
+psql:<stdin>:2466: ERROR:  relation "idx_merge_queue_org_status" already exists
+psql:<stdin>:2470: ERROR:  relation "idx_messages_conversation_sent" already exists
+psql:<stdin>:2474: ERROR:  relation "idx_messages_external_lookup" already exists
+psql:<stdin>:2478: ERROR:  relation "idx_messages_org_status_created" already exists
+psql:<stdin>:2482: ERROR:  relation "idx_organizations_pending_onboarding" already exists
+psql:<stdin>:2486: ERROR:  relation "idx_orgs_slug" already exists
+psql:<stdin>:2490: ERROR:  relation "idx_orgs_status" already exists
+psql:<stdin>:2494: ERROR:  relation "idx_recovery_unique" already exists
+psql:<stdin>:2498: ERROR:  relation "idx_recovery_user" already exists
+psql:<stdin>:2502: ERROR:  relation "idx_user_orgs_org_role" already exists
+psql:<stdin>:2506: ERROR:  relation "idx_user_orgs_user" already exists
+psql:<stdin>:2510: ERROR:  relation "idx_warmup_org_day" already exists
+psql:<stdin>:2514: ERROR:  relation "idx_webhook_events_external_id" already exists
+psql:<stdin>:2518: ERROR:  relation "idx_webhook_events_org_received" already exists
+psql:<stdin>:2522: ERROR:  relation "idx_webhook_events_status_received" already exists
+psql:<stdin>:2526: ERROR:  relation "incidents_org_idx" already exists
+psql:<stdin>:2530: ERROR:  relation "incidents_severity_idx" already exists
+psql:<stdin>:2534: ERROR:  relation "incidents_status_idx" already exists
+psql:<stdin>:2538: ERROR:  relation "lgpd_requests_contact_idx" already exists
+psql:<stdin>:2542: ERROR:  relation "lgpd_requests_emergency_idx" already exists
+psql:<stdin>:2546: ERROR:  relation "lgpd_requests_org_due_idx" already exists
+psql:<stdin>:2550: ERROR:  relation "lgpd_requests_org_status_idx" already exists
+psql:<stdin>:2554: ERROR:  relation "nuvemshop_products_org_idx" already exists
+psql:<stdin>:2558: ERROR:  relation "nuvemshop_products_rag_pending_idx" already exists
+psql:<stdin>:2562: ERROR:  relation "nuvemshop_products_title_trgm" already exists
+psql:<stdin>:2566: ERROR:  relation "orders_contact_idx" already exists
+psql:<stdin>:2570: ERROR:  relation "orders_customer_external_idx" already exists
+psql:<stdin>:2574: ERROR:  relation "orders_org_ordered_idx" already exists
+psql:<stdin>:2578: ERROR:  relation "orders_payload_gin" already exists
+psql:<stdin>:2582: ERROR:  relation "orders_status_idx" already exists
+psql:<stdin>:2586: ERROR:  relation "storage_redaction_queue_org_idx" already exists
+psql:<stdin>:2590: ERROR:  relation "storage_redaction_queue_status_idx" already exists
+psql:<stdin>:2594: ERROR:  relation "tenant_integrations_expires_idx" already exists
+psql:<stdin>:2598: ERROR:  relation "tenant_integrations_org_idx" already exists
+psql:<stdin>:2602: ERROR:  relation "tenant_integrations_path_token_idx" already exists
+psql:<stdin>:2606: ERROR:  relation "tenant_integrations_status_idx" already exists
+psql:<stdin>:2610: ERROR:  relation "uniq_contacts_org_cpf" already exists
+psql:<stdin>:2614: ERROR:  relation "uniq_contacts_org_email" already exists
+psql:<stdin>:2618: ERROR:  relation "uniq_contacts_org_phone" already exists
+psql:<stdin>:2622: ERROR:  relation "uniq_crm_lead_links_lead_target_link" already exists
+psql:<stdin>:2626: ERROR:  relation "uniq_crm_leads_org_source_external" already exists
+psql:<stdin>:2630: ERROR:  relation "uniq_crm_pipelines_org_default" already exists
+psql:<stdin>:2634: ERROR:  relation "uniq_crm_pipelines_org_slug" already exists
+psql:<stdin>:2638: ERROR:  relation "uniq_crm_stages_pipeline_lost" already exists
+psql:<stdin>:2642: ERROR:  relation "uniq_crm_stages_pipeline_slug" already exists
+psql:<stdin>:2646: ERROR:  relation "uniq_crm_stages_pipeline_won" already exists
+psql:<stdin>:2650: ERROR:  relation "webhook_events_log_dlq_idx" already exists
+psql:<stdin>:2654: ERROR:  relation "webhook_events_log_lgpd_idx" already exists
+psql:<stdin>:2791: ERROR:  constraint "ai_agent_runs_agent_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2796: ERROR:  constraint "ai_agent_runs_agent_version_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2801: ERROR:  constraint "ai_agent_runs_channel_session_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2806: ERROR:  constraint "ai_agent_runs_contact_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2811: ERROR:  constraint "ai_agent_runs_conversation_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2816: ERROR:  constraint "ai_agent_runs_inbound_message_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2821: ERROR:  constraint "ai_agent_runs_organization_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2826: ERROR:  constraint "ai_agent_runs_outbound_message_id_fkey" for relation "ai_agent_runs" already exists
+psql:<stdin>:2831: ERROR:  constraint "ai_agent_versions_agent_id_fkey" for relation "ai_agent_versions" already exists
+psql:<stdin>:2836: ERROR:  constraint "ai_agent_versions_channel_session_id_fkey" for relation "ai_agent_versions" already exists
+psql:<stdin>:2841: ERROR:  constraint "ai_agent_versions_created_by_fkey" for relation "ai_agent_versions" already exists
+psql:<stdin>:2846: ERROR:  constraint "ai_agent_versions_credential_id_fkey" for relation "ai_agent_versions" already exists
+psql:<stdin>:2851: ERROR:  constraint "ai_agent_versions_organization_id_fkey" for relation "ai_agent_versions" already exists
+psql:<stdin>:2856: ERROR:  constraint "ai_agents_created_by_fkey" for relation "ai_agents" already exists
+psql:<stdin>:2861: ERROR:  constraint "ai_agents_organization_id_fkey" for relation "ai_agents" already exists
+psql:<stdin>:2866: ERROR:  constraint "ai_agents_published_version_id_fkey" for relation "ai_agents" already exists
+psql:<stdin>:2871: ERROR:  constraint "ai_budgets_organization_id_fkey" for relation "ai_budgets" already exists
+psql:<stdin>:2876: ERROR:  constraint "ai_chunks_knowledge_source_id_fkey" for relation "ai_chunks" already exists
+psql:<stdin>:2881: ERROR:  constraint "ai_chunks_organization_id_fkey" for relation "ai_chunks" already exists
+psql:<stdin>:2886: ERROR:  constraint "ai_faq_items_knowledge_source_id_fkey" for relation "ai_faq_items" already exists
+psql:<stdin>:2891: ERROR:  constraint "ai_faq_items_organization_id_fkey" for relation "ai_faq_items" already exists
+psql:<stdin>:2896: ERROR:  constraint "ai_invocations_agent_id_fkey" for relation "ai_invocations" already exists
+psql:<stdin>:2901: ERROR:  constraint "ai_invocations_conversation_id_fkey" for relation "ai_invocations" already exists
+psql:<stdin>:2906: ERROR:  constraint "ai_invocations_message_id_fkey" for relation "ai_invocations" already exists
+psql:<stdin>:2911: ERROR:  constraint "ai_invocations_organization_id_fkey" for relation "ai_invocations" already exists
+psql:<stdin>:2916: ERROR:  constraint "ai_knowledge_sources_agent_id_fkey" for relation "ai_knowledge_sources" already exists
+psql:<stdin>:2921: ERROR:  constraint "ai_knowledge_sources_organization_id_fkey" for relation "ai_knowledge_sources" already exists
+psql:<stdin>:2926: ERROR:  constraint "ai_knowledge_versions_activated_by_fkey" for relation "ai_knowledge_versions" already exists
+psql:<stdin>:2931: ERROR:  constraint "ai_knowledge_versions_agent_id_fkey" for relation "ai_knowledge_versions" already exists
+psql:<stdin>:2936: ERROR:  constraint "ai_knowledge_versions_organization_id_fkey" for relation "ai_knowledge_versions" already exists
+psql:<stdin>:2941: ERROR:  constraint "ai_provider_credentials_created_by_fkey" for relation "ai_provider_credentials" already exists
+psql:<stdin>:2946: ERROR:  constraint "ai_provider_credentials_organization_id_fkey" for relation "ai_provider_credentials" already exists
+psql:<stdin>:2951: ERROR:  constraint "api_audit_log_actor_api_token_id_fkey" for relation "api_audit_log" already exists
+psql:<stdin>:2956: ERROR:  constraint "api_audit_log_actor_user_id_fkey" for relation "api_audit_log" already exists
+psql:<stdin>:2961: ERROR:  constraint "api_audit_log_organization_id_fkey" for relation "api_audit_log" already exists
+psql:<stdin>:2966: ERROR:  constraint "api_tokens_created_by_fkey" for relation "api_tokens" already exists
+psql:<stdin>:2971: ERROR:  constraint "api_tokens_organization_id_fkey" for relation "api_tokens" already exists
+psql:<stdin>:2976: ERROR:  constraint "api_tokens_revoked_by_fkey" for relation "api_tokens" already exists
+psql:<stdin>:2981: ERROR:  constraint "channel_session_warmup_channel_session_id_fkey" for relation "channel_session_warmup" already exists
+psql:<stdin>:2986: ERROR:  constraint "channel_session_warmup_organization_id_fkey" for relation "channel_session_warmup" already exists
+psql:<stdin>:2991: ERROR:  constraint "channel_sessions_created_by_fkey" for relation "channel_sessions" already exists
+psql:<stdin>:2996: ERROR:  constraint "channel_sessions_organization_id_fkey" for relation "channel_sessions" already exists
+psql:<stdin>:3001: ERROR:  constraint "contacts_is_merged_into_fkey" for relation "contacts" already exists
+psql:<stdin>:3006: ERROR:  constraint "contacts_organization_id_fkey" for relation "contacts" already exists
+psql:<stdin>:3011: ERROR:  constraint "conversations_assigned_to_user_id_fkey" for relation "conversations" already exists
+psql:<stdin>:3016: ERROR:  constraint "conversations_channel_session_id_fkey" for relation "conversations" already exists
+psql:<stdin>:3021: ERROR:  constraint "conversations_contact_id_fkey" for relation "conversations" already exists
+psql:<stdin>:3026: ERROR:  constraint "conversations_organization_id_fkey" for relation "conversations" already exists
+psql:<stdin>:3031: ERROR:  constraint "conversations_usable_for_rag_marked_by_fkey" for relation "conversations" already exists
+psql:<stdin>:3036: ERROR:  constraint "crm_lead_activities_contact_id_fkey" for relation "crm_lead_activities" already exists
+psql:<stdin>:3041: ERROR:  constraint "crm_lead_activities_lead_id_fkey" for relation "crm_lead_activities" already exists
+psql:<stdin>:3046: ERROR:  constraint "crm_lead_activities_organization_id_fkey" for relation "crm_lead_activities" already exists
+psql:<stdin>:3051: ERROR:  constraint "crm_lead_links_lead_id_fkey" for relation "crm_lead_links" already exists
+psql:<stdin>:3056: ERROR:  constraint "crm_lead_links_organization_id_fkey" for relation "crm_lead_links" already exists
+psql:<stdin>:3061: ERROR:  constraint "crm_leads_contact_id_fkey" for relation "crm_leads" already exists
+psql:<stdin>:3066: ERROR:  constraint "crm_leads_organization_id_fkey" for relation "crm_leads" already exists
+psql:<stdin>:3071: ERROR:  constraint "crm_leads_pipeline_id_fkey" for relation "crm_leads" already exists
+psql:<stdin>:3076: ERROR:  constraint "crm_leads_stage_id_fkey" for relation "crm_leads" already exists
+psql:<stdin>:3081: ERROR:  constraint "crm_pipelines_organization_id_fkey" for relation "crm_pipelines" already exists
+psql:<stdin>:3086: ERROR:  constraint "crm_stages_organization_id_fkey" for relation "crm_stages" already exists
+psql:<stdin>:3091: ERROR:  constraint "crm_stages_pipeline_id_fkey" for relation "crm_stages" already exists
+psql:<stdin>:3096: ERROR:  constraint "event_log_organization_id_fkey" for relation "event_log" already exists
+psql:<stdin>:3101: ERROR:  constraint "idempotency_keys_organization_id_fkey" for relation "idempotency_keys" already exists
+psql:<stdin>:3106: ERROR:  constraint "incidents_acknowledged_by_fkey" for relation "incidents" already exists
+psql:<stdin>:3111: ERROR:  constraint "incidents_organization_id_fkey" for relation "incidents" already exists
+psql:<stdin>:3116: ERROR:  constraint "incidents_resolved_by_fkey" for relation "incidents" already exists
+psql:<stdin>:3121: ERROR:  constraint "lgpd_requests_contact_id_fkey" for relation "lgpd_requests" already exists
+psql:<stdin>:3126: ERROR:  constraint "lgpd_requests_organization_id_fkey" for relation "lgpd_requests" already exists
+psql:<stdin>:3131: ERROR:  constraint "merge_queue_organization_id_fkey" for relation "merge_queue" already exists
+psql:<stdin>:3136: ERROR:  constraint "messages_activity_id_fkey" for relation "messages" already exists
+psql:<stdin>:3141: ERROR:  constraint "messages_channel_session_id_fkey" for relation "messages" already exists
+psql:<stdin>:3146: ERROR:  constraint "messages_contact_id_fkey" for relation "messages" already exists
+psql:<stdin>:3151: ERROR:  constraint "messages_conversation_id_fkey" for relation "messages" already exists
+psql:<stdin>:3156: ERROR:  constraint "messages_organization_id_fkey" for relation "messages" already exists
+psql:<stdin>:3161: ERROR:  constraint "messages_sent_by_user_id_fkey" for relation "messages" already exists
+psql:<stdin>:3166: ERROR:  constraint "nuvemshop_products_organization_id_fkey" for relation "nuvemshop_products" already exists
+psql:<stdin>:3171: ERROR:  constraint "orders_contact_id_fkey" for relation "orders" already exists
+psql:<stdin>:3176: ERROR:  constraint "orders_organization_id_fkey" for relation "orders" already exists
+psql:<stdin>:3181: ERROR:  constraint "organizations_created_by_fkey" for relation "organizations" already exists
+psql:<stdin>:3186: ERROR:  constraint "organizations_suspended_by_fkey" for relation "organizations" already exists
+psql:<stdin>:3191: ERROR:  constraint "platform_admins_granted_by_fkey" for relation "platform_admins" already exists
+psql:<stdin>:3196: ERROR:  constraint "platform_admins_revoked_by_fkey" for relation "platform_admins" already exists
+psql:<stdin>:3201: ERROR:  constraint "platform_admins_user_id_fkey" for relation "platform_admins" already exists
+psql:<stdin>:3206: ERROR:  constraint "storage_redaction_queue_organization_id_fkey" for relation "storage_redaction_queue" already exists
+psql:<stdin>:3211: ERROR:  constraint "storage_redaction_queue_request_id_fkey" for relation "storage_redaction_queue" already exists
+psql:<stdin>:3216: ERROR:  constraint "tenant_integrations_organization_id_fkey" for relation "tenant_integrations" already exists
+psql:<stdin>:3221: ERROR:  constraint "user_organizations_invited_by_fkey" for relation "user_organizations" already exists
+psql:<stdin>:3226: ERROR:  constraint "user_organizations_organization_id_fkey" for relation "user_organizations" already exists
+psql:<stdin>:3231: ERROR:  constraint "user_organizations_user_id_fkey" for relation "user_organizations" already exists
+psql:<stdin>:3236: ERROR:  constraint "user_recovery_codes_user_id_fkey" for relation "user_recovery_codes" already exists
+psql:<stdin>:3241: ERROR:  constraint "webhook_events_log_channel_session_id_fkey" for relation "webhook_events_log" already exists
+psql:<stdin>:3275: ERROR:  policy "ai_models_read_all" for table "ai_models" already exists
+psql:<stdin>:3282: ERROR:  policy "ai_pricing_public_read" for table "ai_pricing" already exists
+psql:<stdin>:3295: ERROR:  policy "api_tokens_admin_only" for table "api_tokens" already exists
+psql:<stdin>:3299: ERROR:  policy "audit_log_insert_tenant_member" for table "api_audit_log" already exists
+psql:<stdin>:3303: ERROR:  policy "audit_log_select" for table "api_audit_log" already exists
+psql:<stdin>:3313: ERROR:  policy "channel_sessions_tenant_isolation_all" for table "channel_sessions" already exists
+psql:<stdin>:3345: ERROR:  policy "event_log_select" for table "event_log" already exists
+psql:<stdin>:3352: ERROR:  policy "idempotency_tenant" for table "idempotency_keys" already exists
+psql:<stdin>:3362: ERROR:  policy "lgpd_requests_admin_select" for table "lgpd_requests" already exists
+psql:<stdin>:3366: ERROR:  policy "lgpd_requests_admin_write" for table "lgpd_requests" already exists
+psql:<stdin>:3373: ERROR:  policy "merge_queue_manager_select" for table "merge_queue" already exists
+psql:<stdin>:3377: ERROR:  policy "merge_queue_manager_write" for table "merge_queue" already exists
+psql:<stdin>:3391: ERROR:  policy "nuvemshop_products_tenant" for table "nuvemshop_products" already exists
+psql:<stdin>:3398: ERROR:  policy "orders_tenant_select" for table "orders" already exists
+psql:<stdin>:3402: ERROR:  policy "orders_tenant_write" for table "orders" already exists
+psql:<stdin>:3409: ERROR:  policy "orgs_select" for table "organizations" already exists
+psql:<stdin>:3413: ERROR:  policy "orgs_write_platform_admin" for table "organizations" already exists
+psql:<stdin>:3417: ERROR:  policy "platform_admin_only_incidents" for table "incidents" already exists
+psql:<stdin>:3424: ERROR:  policy "platform_admins_self" for table "platform_admins" already exists
+psql:<stdin>:3428: ERROR:  policy "recovery_codes_self" for table "user_recovery_codes" already exists
+psql:<stdin>:3438: ERROR:  policy "tenant_integrations_admin_write" for table "tenant_integrations" already exists
+psql:<stdin>:3442: ERROR:  policy "tenant_integrations_select" for table "tenant_integrations" already exists
+psql:<stdin>:3448: ERROR:  policy "tenant_isolation_ai_agent_runs_all" for table "ai_agent_runs" already exists
+psql:<stdin>:3454: ERROR:  policy "tenant_isolation_ai_agent_versions_all" for table "ai_agent_versions" already exists
+psql:<stdin>:3458: ERROR:  policy "tenant_isolation_ai_agents_all" for table "ai_agents" already exists
+psql:<stdin>:3462: ERROR:  policy "tenant_isolation_ai_budgets_all" for table "ai_budgets" already exists
+psql:<stdin>:3466: ERROR:  policy "tenant_isolation_ai_chunks_all" for table "ai_chunks" already exists
+psql:<stdin>:3470: ERROR:  policy "tenant_isolation_ai_faq_items_all" for table "ai_faq_items" already exists
+psql:<stdin>:3474: ERROR:  policy "tenant_isolation_ai_invocations_all" for table "ai_invocations" already exists
+psql:<stdin>:3478: ERROR:  policy "tenant_isolation_ai_kbv_all" for table "ai_knowledge_versions" already exists
+psql:<stdin>:3482: ERROR:  policy "tenant_isolation_ai_knowledge_sources_all" for table "ai_knowledge_sources" already exists
+psql:<stdin>:3488: ERROR:  policy "tenant_isolation_ai_provider_credentials_modify" for table "ai_provider_credentials" already exists
+psql:<stdin>:3493: ERROR:  policy "tenant_isolation_ai_provider_credentials_select" for table "ai_provider_credentials" already exists
+psql:<stdin>:3497: ERROR:  policy "tenant_isolation_contacts_all" for table "contacts" already exists
+psql:<stdin>:3527: ERROR:  policy "tenant_isolation_storage_redaction_queue_all" for table "storage_redaction_queue" already exists
+psql:<stdin>:3534: ERROR:  policy "user_orgs_delete" for table "user_organizations" already exists
+psql:<stdin>:3538: ERROR:  policy "user_orgs_insert" for table "user_organizations" already exists
+psql:<stdin>:3542: ERROR:  policy "user_orgs_select" for table "user_organizations" already exists
+psql:<stdin>:3546: ERROR:  policy "user_orgs_update" for table "user_organizations" already exists
+psql:<stdin>:3553: ERROR:  policy "warmup_tenant_isolation_all" for table "channel_session_warmup" already exists
+psql:<stdin>:3560: ERROR:  policy "webhook_events_log_tenant_read" for table "webhook_events_log" already exists
+psql:<stdin>:4008: ERROR:  policy "tenant_read_ai_policy" for table "objects" already exists
+psql:<stdin>:4019: ERROR:  policy "tenant_write_ai_policy" for table "objects" already exists
+psql:<stdin>:4030: ERROR:  policy "tenant_delete_ai_policy" for table "objects" already exists
+psql:<stdin>:4053: ERROR:  policy "tenant_read_lgpd_exports" for table "objects" already exists
+    ✓ update ok (re-apply terminou; erros tolerados por contrato)
+==> invariantes: vitest (tests/invariants)
+
+ RUN  v4.1.10 /Users/rafaelmelgaco/DeskcommCRM-canais
+
+psql:<stdin>:3: ERROR:  new row for relation "channel_sessions" violates check constraint "channel_sessions_provider_ref_check"
+DETAIL:  Failing row contains (f202667d-ed1f-42c7-b0c3-e1665066be95, bb0bdcfa-5d0a-4ab0-89f1-ff7a84f5625d, null, NOWEB, 4bc0eaf4b21248bc9338cf045870bb17, \x00, STARTING, null, null, null, null, 2026-07-28 11:43:01.801178+00, 0, 300, null, null, f, {}, 2026-07-28 11:43:01.801178+00, 2026-07-28 11:43:01.801178+00, null, meta_cloud, null, null, null).
+psql:<stdin>:3: ERROR:  new row for relation "channel_sessions" violates check constraint "channel_sessions_provider_ref_check"
+DETAIL:  Failing row contains (8c637de3-736c-4530-a533-eefd8a0ba932, 17dc7c59-f5b0-402c-9740-7a0891314558, null, NOWEB, 2aa2ff899176490982ef9b061acf139a, \x00, STARTING, null, null, null, null, 2026-07-28 11:43:02.270406+00, 0, 300, null, null, f, {}, 2026-07-28 11:43:02.270406+00, 2026-07-28 11:43:02.270406+00, null, waha, null, null, null).
+psql:<stdin>:3: ERROR:  new row for relation "channel_sessions" violates check constraint "channel_sessions_provider_check"
+DETAIL:  Failing row contains (e8dc142f-9ff0-467a-b761-c8fde6d50305, 1b2d734d-affd-4798-8569-2fc4d5f8b9ee, s-c, NOWEB, 21f3c0aaaab74bfc848348582e5cdb4b, \x00, STARTING, null, null, null, null, 2026-07-28 11:43:02.723177+00, 0, 300, null, null, f, {}, 2026-07-28 11:43:02.723177+00, 2026-07-28 11:43:02.723177+00, null, telegram, null, null, null).
+psql:<stdin>:3: ERROR:  duplicate key value violates unique constraint "channel_sessions_phone_per_org_unique"
+DETAIL:  Key (organization_id, phone_number)=(c521b4cd-13d9-4a45-81b1-8a5d8befe646, +5531999998888) already exists.
+psql:<stdin>:29: NOTICE:  column "actor_kind" of relation "crm_lead_activities" already exists, skipping
+psql:<stdin>:33: NOTICE:  column "actor_agent_id" of relation "crm_lead_activities" already exists, skipping
+psql:<stdin>:38: NOTICE:  column "reason" of relation "crm_lead_activities" already exists, skipping
+psql:<stdin>:43: NOTICE:  column "evidence" of relation "crm_lead_activities" already exists, skipping
+psql:<stdin>:142: NOTICE:  relation "idx_lead_activities_org_actor_agent" already exists, skipping
+psql:<stdin>:152: NOTICE:  column "stage_changed_at" of relation "crm_leads" already exists, skipping
+psql:<stdin>:1: ERROR:  column "actions_result" is of type jsonb but expression is of type text[]
+LINE 1: ...'43411f44-0376-4933-9e57-2a46b01f25b4', 'failed', ARRAY['[ob...
+                                                             ^
+HINT:  You will need to rewrite or cast the expression.
+psql:<stdin>:2: ERROR:  new row for relation "conversations" violates check constraint "conversations_assignee_kind_coherence"
+DETAIL:  Failing row contains (eeeeeeee-4444-4000-8000-000000000001, cccccccc-0000-4000-8000-000000000001, eeeeeeee-3333-4000-8000-000000000001, cccccccc-2222-4000-8000-000000000001, whatsapp, ai_handling, 2026-07-28 11:43:54.39152+00, null, null, null, null, null, null, 0, f, null, {}, 2026-07-28 11:43:54.39152+00, 2026-07-28 11:43:54.499094+00, null, null, null, f, null, null, null, user, {}, null, null, null).
+psql:<stdin>:3: ERROR:  new row for relation "conversations" violates check constraint "conversations_assignee_kind_coherence"
+DETAIL:  Failing row contains (eeeeeeee-4444-4000-8000-000000000001, cccccccc-0000-4000-8000-000000000001, eeeeeeee-3333-4000-8000-000000000001, cccccccc-2222-4000-8000-000000000001, whatsapp, ai_handling, 2026-07-28 11:43:54.39152+00, cccccccc-1111-4000-8000-000000000002, null, null, null, null, null, 0, f, null, {}, 2026-07-28 11:43:54.39152+00, 2026-07-28 11:43:54.60855+00, null, null, null, f, null, null, null, ai, {}, null, null, null).
+psql:<stdin>:6: ERROR:  assignee_not_eligible_member
+HINT:  target must be an active agent+ member of the organization
+CONTEXT:  PL/pgSQL function fn_conversation_assign(uuid,uuid,uuid,text,uuid,boolean) line 15 at RAISE
+psql:<stdin>:6: ERROR:  assignee_not_eligible_member
+HINT:  target must be an active agent+ member of the organization
+CONTEXT:  PL/pgSQL function fn_conversation_assign(uuid,uuid,uuid,text,uuid,boolean) line 15 at RAISE
+psql:<stdin>:4: ERROR:  permission denied for function fn_member_role_in_org
+psql:<stdin>:4: ERROR:  permission denied for function fn_upsert_wa_contact
+psql:<stdin>:4: ERROR:  permission denied for function fn_upsert_wa_conversation
+psql:<stdin>:4: ERROR:  permission denied for function fn_mark_conversation_message
+psql:<stdin>:4: ERROR:  permission denied for function emit_event
+psql:<stdin>:4: ERROR:  permission denied for function fn_log_event
+psql:<stdin>:4: ERROR:  permission denied for function fn_audit_log_row
+psql:<stdin>:1: ERROR:  new row for relation "event_log" violates check constraint "event_log_status_check"
+DETAIL:  Failing row contains (f273724d-91a3-4eb1-a34f-12f2b9cec358, cccccccc-0000-4000-8000-000000000001, ai_agent.dispatch_requested, test, null, {}, {"emitted_at": 1785239040.678726}, {}, 0, null, null, processed, 2026-07-28 11:44:00.678726+00, 2026-07-28 11:44:00.790722+00).
+psql:<stdin>:1: ERROR:  new row for relation "event_log" violates check constraint "event_log_status_check"
+DETAIL:  Failing row contains (0121a42c-2224-45d7-bacb-273785ae1de3, cccccccc-0000-4000-8000-000000000001, ai_agent.dispatch_requested, test, null, {}, {"emitted_at": 1785239041.009785}, {}, 0, null, null, failed, 2026-07-28 11:44:01.009785+00, 2026-07-28 11:44:01.124826+00).
+psql:<stdin>:5: ERROR:  new row violates row-level security policy for table "crm_leads"
+psql:<stdin>:6: ERROR:  new row violates row-level security policy for table "conversations"
+psql:<stdin>:7: ERROR:  new row violates row-level security policy for table "webhook_sources"
+psql:<stdin>:5: ERROR:  new row violates row-level security policy for table "automation_rule_runs"
+psql:<stdin>:5: ERROR:  new row violates row-level security policy for table "attendant_availability"
+psql:<stdin>:3: ERROR:  duplicate key value violates unique constraint "uniq_crm_leads_org_source_external"
+DETAIL:  Key (organization_id, source, external_id)=(ffffffff-d000-4000-8000-000000000001, webhook, zap-run-001) already exists.
+psql:<stdin>:17: NOTICE:  schema "extensions" already exists, skipping
+psql:<stdin>:18: NOTICE:  extension "pgcrypto" already exists, skipping
+psql:<stdin>:24: NOTICE:  schema "private" already exists, skipping
+psql:<stdin>:29: NOTICE:  relation "app_secrets" already exists, skipping
+psql:<stdin>:73: NOTICE:  column "secret_encrypted" of relation "webhook_sources" already exists, skipping
+psql:<stdin>:17: NOTICE:  schema "extensions" already exists, skipping
+psql:<stdin>:18: NOTICE:  extension "pgcrypto" already exists, skipping
+psql:<stdin>:24: NOTICE:  schema "private" already exists, skipping
+psql:<stdin>:29: NOTICE:  relation "app_secrets" already exists, skipping
+psql:<stdin>:73: NOTICE:  column "secret_encrypted" of relation "webhook_sources" already exists, skipping
+psql:<stdin>:138: WARNING:  automation_rules: 1 secret(s) de call_webhook descartado(s) — GUC app.nuvemshop_oauth_key ausente; re-configure pela UI
+{"ts":"2026-07-28T11:44:29.265Z","level":"info","msg":"memória do lead injetada no turno","job_id":"f4451140-0beb-46d3-b76d-6cc274f8ac37","tenant_id":"dddddddd-0000-4000-8000-000000000001","lead_id":"dddddddd-0000-4000-8000-000000000002","checkpoint_seq":null,"notes_count":0,"note_ids":[]}
+{"ts":"2026-07-28T11:44:35.659Z","level":"warn","msg":"watchdog: espelho de sessão reconciliado com o WAHA real","channel_session_id":"bbbbbbbb-0000-4000-8000-000000000003","waha_session":"watchdog-proof-session","status":"WORKING"}
+{"ts":"2026-07-28T11:44:35.674Z","level":"info","msg":"watchdog: mensagem presa reenviada","message_id":"bbbbbbbb-0000-4000-8000-000000000005","has_external_id":true}
+{"ts":"2026-07-28T11:44:36.445Z","level":"warn","msg":"drain: payload de dispatch fora do contrato — evento descartado","event_id":"f273724d-91a3-4eb1-a34f-12f2b9cec358"}
+{"ts":"2026-07-28T11:44:36.449Z","level":"warn","msg":"drain: payload de dispatch fora do contrato — evento descartado","event_id":"0121a42c-2224-45d7-bacb-273785ae1de3"}
+{"ts":"2026-07-28T11:44:36.454Z","level":"info","msg":"drain: job de turno enfileirado","event_id":"9cfe6f25-1cd4-43d8-9f70-d74222a89b67","job_id":"38b99940-688c-4e52-9b23-2484c417e400","deduped":false}
+{"ts":"2026-07-28T11:44:36.467Z","level":"info","msg":"drain: job de turno enfileirado","event_id":"8a2b75b1-2f6c-4829-a31f-d4f739f104e4","job_id":"30425813-003a-4284-9974-80e06823873e","deduped":false}
+{"ts":"2026-07-28T11:44:36.474Z","level":"info","msg":"drain: job de turno enfileirado","event_id":"ef6e9efd-0e76-4405-ac66-c0027eb916dc","job_id":"f8e52fd7-49c0-4069-aee6-327b842c4874","deduped":false}
+
+ Test Files  57 passed (57)
+      Tests  373 passed | 1 skipped (374)
+   Start at  08:42:59
+   Duration  98.73s (transform 1.43s, setup 0ms, import 4.52s, tests 86.48s, environment 4ms)
+
+==> test:db verde
+==> teardown: removendo container deskcomm-test-db-55295

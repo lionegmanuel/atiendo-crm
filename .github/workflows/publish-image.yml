@@ -1,0 +1,860 @@
+name: Publicar imagem Docker (GHCR)
+
+# Builda as imagens GENÉRICAS que o self-hoster instala e publica no GitHub
+# Container Registry. O leigo puxa no VPS (não builda lá). Roda nos runners do
+# GitHub, então o build pesado nunca cai no VPS do usuário.
+#
+# São QUATRO imagens. As primeiras três (worker e scheduler inclusos) entraram
+# por um defeito real: esses serviços não tinham `image:` no compose de
+# produção, só `build:`. Serviço build-only é pulado por `docker compose pull`
+# e imune a `up -d` sem `--build` — ele era construído na VPS de cada cliente,
+# no install, e NENHUM update.sh jamais o reconstruiu. O runtime do agente de
+# IA congelava no código do dia da instalação. Doutrina: docs/doctrine/packaging.md,
+# invariante 1.
+#
+# `deskcomm-voice-agent` (módulo de voz SIP, #677) entrou pelo MESMO motivo,
+# antes mesmo de existir produção: o compose de voz nasceu com o mesmo
+# `build:` sozinho que o worker teve (hoje ele é o serviço `voice-agent`, profile
+# `telefonia`, em docker-compose.prod.yml) — publicar a imagem aqui evita repetir o
+# defeito no dia em que o módulo for instalado por um self-hoster de verdade.
+
+on:
+  push:
+    tags: ["v*"]
+    branches: ["main"]
+  # NÃO acrescente `release: types: [published]` aqui. Ele já esteve, e o efeito
+  # foi medido na v1.3.0: `gh release create` empurra a tag E publica a release,
+  # então o MESMO commit foi construído DUAS vezes, com 5 minutos de diferença.
+  #
+  #   19:53:04  evento=push     v1.3.0 -> publicou 1.3.0, 1.3 e stable
+  #   19:58:05  evento=release  v1.3.0 -> reconstruiu e MOVEU 1.3.0 e 1.3,
+  #                                       sem mover stable (a condição exige push)
+  #
+  # Duas consequências, e a segunda é a grave:
+  #
+  # 1. `stable` e `1.3.0` ficaram em digests DIFERENTES (mesmo `revision`
+  #    9bd59e9 e mesmo `version`, builds distintos) — quem comparasse os dois
+  #    concluiria, com razão, que são artefatos diferentes.
+  # 2. A tag de VERSÃO foi movida depois de publicada. A doutrina inteira se
+  #    apoia em "instalação de cliente aponta para número de versão, nunca para
+  #    tag móvel" (docs/doctrine/packaging.md, invariante 3) — e era o nosso
+  #    próprio workflow movendo o número. Republicar uma release antiga (editar
+  #    e salvar) reconstruiria e moveria aquela versão de novo.
+  #
+  # O gatilho de push da tag já cobre o fluxo real: a tag é sempre empurrada,
+  # com ou sem release. Vigiado por tests/unit/packaging-artefato-do-cliente.test.ts.
+  # Em PR a imagem é CONSTRUÍDA e não publicada. Sem isto, nada no PR consegue
+  # revelar que a mudança quebra a imagem — foi assim que um bump de `next`
+  # passou por `verify`, `build-and-size`, `invariants` e `e2e` (os quatro
+  # obrigatórios) e derrubou o build do Dockerfile na `main`: o `next build`
+  # dentro da imagem não enxerga `tests/` (`.dockerignore`), e a partir do
+  # next 16.3 ele typecheca os `*.test.ts` colocados. O artefato que o
+  # self-hoster instala era o único sem gate.
+  pull_request:
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+
+# Cancelamento da rodada superada: por JOB (os pesados), nunca no workflow nem
+# no agregador — razão medida e a tabela por evento no cabeçalho do ci.yml.
+#
+# NESTE workflow o push na `main` também cancela, e é a exceção deliberada à
+# tabela do ci.yml: o que o push na main produz aqui é `latest` (e `main`, e o
+# SHA-tag), e `latest` = topo da main. Medido em 18/09/2026: 38 das 86 runs na
+# fila eram deste workflow, 21 delas da main, ~14,6 min cada — e cada commit
+# novo da main contém o anterior. Build de 3 imagens para um ponteiro que a
+# rodada seguinte sobrescreve é vaga jogada fora.
+#
+# Tag fica FORA do alcance por duas travas independentes: (1) o grupo de uma tag
+# é `…-refs/tags/vX.Y.Z`, único por versão, nunca o da main; (2) a condição exige
+# `push` em `refs/heads/main` — push de tag tem `github.ref` `refs/tags/…` e dá
+# `false`. `workflow_dispatch` também dá `false`. `promover-stable` (só tag) e
+# `imagens-ok` (agregador) não têm grupo. Vigiado por
+# tests/unit/publicacao-cancela-so-o-que-se-supera.test.ts.
+
+jobs:
+  # Nenhuma tag publica sem estar CONTIDA na `main`.
+  #
+  # `on: push: tags: ["v*"]` reage a tag de QUALQUER ramo, e nenhuma das três
+  # condições do canal `stable` (mais abaixo) olha procedência — nem o
+  # `type=semver`, que publica `X.Y.Z` do mesmo jeito. A branch protection não
+  # cobre isto: ela vale para a branch `main`, não para refs de tag.
+  #
+  # E o alcance disso é o parque inteiro: `hostgator-setup-kit/agent.sh` oferece
+  # a MAIOR tag `v*` a toda VPS instalada, sem olhar de onde ela veio. Este repo
+  # já teve na árvore local uma tag `v1.4.0` de um FORK — ela existe hoje
+  # renomeada para `jmpo/v1.4.0` justamente para não colidir com a numeração
+  # daqui.
+  #
+  # Este job também responde, em pull_request, se o PR ALCANÇA alguma imagem
+  # (output `imagem`). Mora aqui, e não num job próprio, porque job novo disputa
+  # vaga numa fila que já é o gargalo — e este job já roda em todo evento.
+  a-tag-veio-da-main:
+    runs-on: ubuntu-latest
+    # Sem o bloco, o token herda o default do REPOSITÓRIO — configuração que vive
+    # fora do repo. Mesma razão do `permissions: {}` de `imagens-ok`.
+    # `pull-requests: read` é para listar os arquivos do PR.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      imagem: ${{ steps.alcance.outputs.imagem }}
+    steps:
+      # Só o script, não o repositório: o job é de segundos e segue assim.
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          sparse-checkout: scripts/pr-mexe-na-imagem.sh
+          sparse-checkout-cone-mode: false
+
+      # `sim` constrói; `nao` pula os builds e o `imagens-ok` aceita o pulo.
+      # Fora de pull_request é SEMPRE `sim` — push na main e tag publicam, e
+      # publicar exige construir. Qualquer falha ao listar vira `sim` (constrói):
+      # não saber o que mudou nunca pode virar "não precisa". A regra, e o
+      # porquê de cada caminho, estão no cabeçalho do script.
+      - name: O PR alcança alguma imagem?
+        id: alcance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo "imagem=sim" >> "$GITHUB_OUTPUT"; echo "evento ${GITHUB_EVENT_NAME}: constrói"; exit 0
+          fi
+          # A API devolve no máximo 3000 arquivos; com 3000 ou mais a lista pode
+          # estar cortada, e lista cortada não prova ausência — constrói.
+          if ! arquivos=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[].filename'); then
+            echo "imagem=sim" >> "$GITHUB_OUTPUT"; echo "::warning::não consegui listar os arquivos do PR — constrói"; exit 0
+          fi
+          n=$(printf '%s\n' "$arquivos" | grep -c . || true)
+          if [ "$n" -ge 3000 ]; then
+            resposta=sim
+          else
+            resposta=$(printf '%s\n' "$arquivos" | bash scripts/pr-mexe-na-imagem.sh) || resposta=sim
+          fi
+          [ "$resposta" = "nao" ] || resposta=sim
+          echo "imagem=${resposta}" >> "$GITHUB_OUTPUT"
+          echo "${n} arquivo(s) no PR → imagem=${resposta}"
+
+      - name: A tag está contida na main?
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Sem `if:` no job, de propósito: job pulado deixa `build-and-push`
+          # pulado também, e `imagens-ok` (que roda com `always()`) lê `skipped`
+          # como reprovação. Em PR e em push de branch este job RODA e sai zero.
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "não é push de tag (${GITHUB_REF_TYPE}) — nada a conferir"
+            exit 0
+          fi
+          estado=$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${GITHUB_SHA}" --jq .status)
+          echo "compare main...${GITHUB_SHA} → ${estado}"
+          # `identical` = a tag é o topo da main; `behind` = está atrás dela, ou
+          # seja, contida. `ahead` e `diverged` são commit que a main não tem.
+          case "$estado" in
+            identical|behind) echo "ok: o commit da tag está contido na main" ;;
+            *)
+              echo "::error::A tag ${GITHUB_REF_NAME} aponta para um commit que a main NÃO contém (${estado})."
+              echo "::error::Publicar isso entregaria ao parque instalado código que nunca passou pelo CI da main."
+              exit 1
+              ;;
+          esac
+
+  # Em pull_request este job NÃO roda: lá ele só construía e descartava, e as
+  # MESMAS três imagens já são construídas — com o mesmo Dockerfile e o mesmo
+  # contexto — por `imagem-do-app-sobe` e `imagens-de-fundo-sobem`, que ainda
+  # as sobem. Eram 3 builds Docker por push de PR sem medir nada a mais. O
+  # `imagens-ok` aceita o `skipped` dele SÓ em pull_request.
+  build-and-push:
+    needs: [a-tag-veio-da-main]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-build-and-push-${{ matrix.name }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # fail-fast desligado: se o worker quebrar, ainda quero saber se o app
+      # também quebrou. Com ele ligado, o primeiro erro esconde os outros dois e
+      # o conserto vira uma rodada por imagem.
+      fail-fast: false
+      matrix:
+        include:
+          - name: deskcommcrm
+            dockerfile: Dockerfile
+            title: DeskcommCRM
+          - name: deskcomm-worker
+            dockerfile: Dockerfile.worker
+            title: DeskcommCRM worker
+          - name: deskcomm-scheduler
+            dockerfile: Dockerfile.scheduler
+            title: DeskcommCRM scheduler
+          - name: deskcomm-voice-agent
+            dockerfile: Dockerfile.voice-agent
+            title: DeskcommCRM voice agent
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A versão que a imagem vai reportar em /api/v1/health. Numa tag v1.2.3 é
+      # "1.2.3"; fora de tag, o SHA curto — que ainda responde "o que está
+      # rodando aqui?", que é a pergunta que o campo existe para responder.
+      - name: Resolver APP_VERSION
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Docker metadata (tags/labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # `enable={{is_default_branch}}` NÃO basta: o metadata-action o
+            # considera verdadeiro também num push de TAG, então toda release
+            # movia `latest` junto. Isso apagava a distinção que a doutrina
+            # inteira depende — `latest` = topo da main, `stable` = última
+            # release — e fazia `latest` oscilar entre os dois.
+            type=raw,value=latest,enable=${{ github.ref_type == 'branch' && github.ref_name == 'main' }}
+            # `stable` NÃO sai daqui, e a razão é a issue #488. Ele já saiu: era
+            # mais um `type=raw` nesta lista, e por isso CADA imagem movia o
+            # canal sozinha, ao terminar, sem saber se as irmãs conseguiram.
+            # Medido no corte da v1.12.0 — o job do app morreu em `Set up
+            # Buildx`, antes de compilar coisa alguma, enquanto worker e
+            # scheduler seguiram e moveram o ponteiro:
+            #
+            #   deskcommcrm          1.12.0   404
+            #   deskcommcrm          stable   sha256:0235d02b…  ← 1.11.0
+            #   deskcomm-worker      stable   sha256:66c7bde4…  ← 1.12.0
+            #   deskcomm-scheduler   stable   sha256:ac6b87cc…  ← 1.12.0
+            #
+            # Quem instalasse por `stable` naquela janela recebia app 1.11.0 com
+            # worker e scheduler 1.12.0. `fail-fast: true` não resolveria: quando
+            # o app falhou, as irmãs JÁ tinham publicado e JÁ tinham movido o
+            # canal — abortá-las não desfaz o que foi publicado.
+            #
+            # Publicar por NÚMERO é o que continua aqui, e é seguro: `1.12.0`
+            # pode existir para uma imagem e não para outra sem prejuízo, porque
+            # ninguém instala por um número que o instalador não escreveu. Mover
+            # o CANAL é ato do job `promover-stable`, lá embaixo, quando o
+            # conjunto está completo.
+          labels: |
+            org.opencontainers.image.title=${{ matrix.title }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build e push (imagem genérica — sem segredos)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          # linux/amd64: o VPS HostGator e a imagem do WAHA são amd64.
+          platforms: linux/amd64
+          # PR de fork não tem permissão de escrita no GHCR, e publicar imagem
+          # de código não revisado seria pior que não gatear. Em PR: constrói
+          # (que é o gate) e descarta.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.ver.outputs.value }}
+          # Cache por imagem: cada uma tem camadas diferentes, e um escopo único
+          # faria uma sobrescrever o cache da outra a cada run.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # Sem build-args de segredo: a imagem é genérica (NEXT_PUBLIC_* viram
+          # placeholder; valores reais entram em runtime no VPS do usuário).
+
+  # A imagem do app CONSTRÓI e MORRE ao subir? Este job existe porque isso
+  # aconteceu: `next@16.3.1` passou a resolver `@swc/helpers` por ESM, o file
+  # tracing do `output: standalone` levou 2 dos 108 arquivos do pacote, e o
+  # container entrou em crashloop com MODULE_NOT_FOUND. A imagem construiu,
+  # `imagens-ok` ficou verde, ela foi publicada — e o defeito só apareceu no
+  # `docker compose up` da VPS, com a produção fora do ar.
+  #
+  # "Constrói" nunca foi prova de "sobe". O gate mede o boot: erguer o
+  # container com env de mentira e exigir que o Next chegue a "Ready". Um 500
+  # depois disso é esperado (não há Supabase aqui) e não reprova — o que
+  # reprova é o processo não chegar a servir.
+  #
+  # Pula quando o PR não alcança imagem nenhuma (`a-tag-veio-da-main` →
+  # `imagem=nao`, que fora de pull_request é impossível). O `imagens-ok` aceita
+  # esse pulo só nessa condição.
+  imagem-do-app-sobe:
+    needs: [a-tag-veio-da-main]
+    if: needs.a-tag-veio-da-main.outputs.imagem == 'sim'
+    # Executor próprio SÓ em PR de branch deste repo (EXECUTOR_PROPRIO=ligado).
+    # Na `main` e em tag esta imagem vira a que o parque instala: ela se constrói
+    # nas máquinas do GitHub, nunca numa máquina nossa. Guarda contra fork:
+    # comentário do e2e-parte no e2e.yml.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'deskcomm-proprio' || 'ubuntu-latest' }}
+    concurrency:
+      group: ${{ github.workflow }}-imagem-do-app-sobe-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build local da imagem do app (sem push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: deskcomm-smoke:pr
+          build-args: |
+            APP_VERSION=smoke
+          # Mesmo escopo de cache do build-and-push: as camadas são idênticas,
+          # então na prática este job reaproveita aquele build em vez de repeti-lo.
+          cache-from: type=gha,scope=deskcommcrm
+          # Em PR o build-and-push não roda, então quem grava o cache do PR é
+          # este job — sem isto o segundo push do mesmo PR reconstruiria do
+          # zero. Fora de PR continua só lendo: quem grava é o build-and-push.
+          cache-to: ${{ github.event_name == 'pull_request' && 'type=gha,mode=max,scope=deskcommcrm' || '' }}
+
+      - name: O container chega a servir?
+        run: |
+          set -euo pipefail
+          docker run -d --name smoke -p 3000:3000 \
+            -e NEXT_PUBLIC_SUPABASE_URL=https://exemplo.supabase.co \
+            -e NEXT_PUBLIC_SUPABASE_ANON_KEY=chave-de-mentira \
+            -e SUPABASE_SERVICE_ROLE_KEY=chave-de-mentira \
+            -e SUPABASE_DB_URL=postgres://u:p@127.0.0.1:5432/postgres \
+            -e SENTRY_DSN=off \
+            deskcomm-smoke:pr
+
+          # Espera o boot; falha rápido se o processo morreu (crashloop).
+          pronto=nao
+          for _ in $(seq 1 40); do
+            if ! docker ps --filter name=smoke --filter status=running -q | grep -q .; then
+              echo "::error::o container do app MORREU durante o boot"
+              docker logs smoke 2>&1 | tail -40
+              exit 1
+            fi
+            if docker logs smoke 2>&1 | grep -qE "Ready in|started server on"; then
+              pronto=sim
+              break
+            fi
+            sleep 3
+          done
+
+          if [ "$pronto" != "sim" ]; then
+            echo "::error::o app não chegou a servir em 120s"
+            docker logs smoke 2>&1 | tail -40
+            exit 1
+          fi
+
+          # A assinatura exata do defeito que originou este gate — explícita,
+          # para o log dizer o que houve em vez de só "não subiu".
+          if docker logs smoke 2>&1 | grep -q "MODULE_NOT_FOUND"; then
+            echo "::error::falta módulo no standalone (o defeito do @swc/helpers)"
+            docker logs smoke 2>&1 | grep -A5 MODULE_NOT_FOUND | head -20
+            exit 1
+          fi
+
+          echo "o app chegou a servir:"
+          docker logs smoke 2>&1 | grep -E "Ready in|Next.js" | head -3
+
+      # Issue #1075. O passo acima prova que o contêiner SOBE; nenhum passo provava
+      # que uma rota que depende de um arquivo FORA do bundle FUNCIONA. Em Node o
+      # pdfjs empacotado aponta o worker dele para o specifier relativo
+      # `"./pdf.worker.mjs"`, resolvido a partir do próprio chunk gerado no build — e
+      # o `output: standalone` não levou esse arquivo para a imagem. Toda release
+      # publicada leu PDF de texto como "sem texto"/"não consegui ler", e o defeito
+      # atravessou as releases porque nenhum job olhava dentro da imagem: o teste de
+      # extração roda pelo `node_modules` do repositório (onde o arquivo existe) e o
+      # gate de boot aceita o app subindo — a extração só quebra quando alguém manda
+      # um PDF de verdade.
+      #
+      # A sonda roda DENTRO da imagem construída acima, sobre a MESMA fixture do teste
+      # de extração, e carrega o módulo EMPACOTADO (chunk + runtime do Turbopack), que
+      # é o caminho da rota. Um `import("pdfjs-dist")` cru mediria outro caminho — na
+      # imagem esse pacote não existe fora do bundle.
+      - name: A imagem extrai texto de PDF?
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD/tests/fixtures/sample-text.pdf:/fixture.pdf:ro" \
+            -v "$PWD/scripts/sonda-pdf-na-imagem.mjs:/sonda-pdf-na-imagem.mjs:ro" \
+            -e PDF_ESPERADO="DeskcommCRM RAG fixture" \
+            deskcomm-smoke:pr node /sonda-pdf-na-imagem.mjs
+
+      - name: Encerrar
+        if: always()
+        run: docker rm -f smoke 2>/dev/null || true
+
+  # O CANAL `stable` MOVE AQUI, E SÓ AQUI — depois que o conjunto está completo.
+  #
+  # Antes, `stable` era mais um `type=raw` na lista de tags da matriz, e por isso
+  # CADA imagem movia o canal sozinha ao terminar, sem saber se as irmãs
+  # conseguiram. Medido no registro público durante o corte da v1.12.0 (issue
+  # #488), com sonda de DIGEST — a ingênua ("a tag `stable` existe?") devolve 200
+  # nas três e não prova nada, porque `stable` existe desde a 1.11.0:
+  #
+  #   deskcommcrm          1.12.0   404
+  #   deskcommcrm          stable   sha256:0235d02b…   <- 1.11.0
+  #   deskcomm-worker      stable   sha256:66c7bde4…   <- 1.12.0
+  #   deskcomm-scheduler   stable   sha256:ac6b87cc…   <- 1.12.0
+  #
+  # Quem instalasse por `stable` naquela janela recebia app 1.11.0 com worker e
+  # scheduler 1.12.0. Os três saem do mesmo repositório e compartilham código;
+  # rodar dois numa versão e o terceiro noutra é um estado que nenhum teste cobre
+  # e que ninguém escolheu. O job do app tinha morrido em `Set up Buildx` — antes
+  # de compilar qualquer coisa, portanto por infraestrutura e não por conteúdo.
+  #
+  # `fail-fast: true` na matriz seria o conserto óbvio, e chega tarde: quando o
+  # app falhou, as irmãs JÁ tinham publicado e JÁ tinham movido o canal. Abortar
+  # não desfaz o que foi publicado. O que separa os dois atos é publicar por
+  # NÚMERO sempre (cada imagem, independente — ninguém instala por um número que
+  # o instalador não escreveu) e mover o CANAL num job final.
+  promover-stable:
+    # Sem `always()`, e isso é o ponto: `needs` só libera quando as TRÊS entradas
+    # deram `success`. Com `always()` o canal andaria por cima de uma irmã que
+    # falhou, que é exatamente o defeito de volta com outra roupa.
+    # `imagens-de-fundo-sobem` entrou aqui de propósito (#604): worker ou
+    # scheduler que não sobe/carrega o laço do event_log não pode virar o
+    # `stable` de quem self-hospeda — publicar seria empurrar o defeito da #648
+    # canal abaixo.
+    needs: [build-and-push, imagem-do-app-sobe, imagens-de-fundo-sobem]
+    # As três condições, e cada uma barra um caminho medido. Sem `push`, um
+    # dispatch numa release ANTIGA faria `stable` REGREDIR, e todo self-hoster no
+    # default do compose sofreria downgrade silencioso no próximo `up -d` — app
+    # velho sobre banco já migrado. Sem `tag`, um dispatch numa branch moveria o
+    # canal. Sem o `v`, uma tag de teste o move (o registro já tem uma
+    # `quebrada-teste`, que nenhum push na main consegue produzir).
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      # O menor escopo que faz o trabalho: reapontar tag no GHCR. Sem o bloco, o
+      # GITHUB_TOKEN herdaria o default do REPOSITÓRIO — configuração que vive
+      # fora do repo, muda num clique e não passa por PR.
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apontar `stable` para esta versão, em todas as imagens do conjunto
+        env:
+          VERSAO: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # `imagetools create` REAPONTA o índice que já foi publicado — não
+          # reconstrói. Reconstruir o mesmo commit dá um digest DIFERENTE (foi o
+          # que fez `stable` e `1.3.0` divergirem com o mesmo `revision`), e aí o
+          # canal deixaria de ser o mesmo manifesto que a versão.
+          dono=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          numero="${VERSAO#v}"
+          for img in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-voice-agent; do
+            echo "::group::${img}"
+            docker buildx imagetools create \
+              --tag "${REGISTRY}/${dono}/${img}:stable" \
+              "${REGISTRY}/${dono}/${img}:${numero}"
+            echo "::endgroup::"
+          done
+          echo "stable agora aponta para ${numero} em todas as imagens do conjunto"
+
+  # As imagens de FUNDO sobem — e o laço do event_log CARREGA? (issue #604)
+  #
+  # `imagem-do-app-sobe` prova a imagem do app. As imagens `deskcomm-worker`
+  # (Dockerfile.worker) e `deskcomm-scheduler` (Dockerfile.scheduler) eram
+  # construídas em `build-and-push` e publicadas sem que NINGUÉM as executasse
+  # antes: o defeito da #648 — um `import` que estoura só sob `tsx`, o
+  # `event_log` parado dez dias e o `/healthz` verde — atravessava build, push,
+  # tag e release sem ser visto por gate nenhum. Um job que só checa `docker ps`
+  # teria ficado verde no dia do defeito; por isso "contêiner de pé" não é o
+  # critério aqui.
+  #
+  # O QUE ESTE JOB MEDE:
+  #   1. dentro da imagem do worker, a MESMA função do boot
+  #      (`carregarDepsDoLaco`, via scripts/sonda-do-laco-de-event-log.ts)
+  #      responde `ok:true` — com a marca `event-log drain: laço carregado` no
+  #      log e `carregado:true` na prontidão;
+  #   2. o `/healthz` do worker, o MESMO caminho que a produção consulta,
+  #      publica `event_log_drain.carregado: true` (aceita 200 e 503: sem banco
+  #      no runner não há 200 honesto, e a prontidão do laço não depende do
+  #      banco estar de pé);
+  #   3. a imagem do scheduler entrega o que ela promete: crond de pé (o
+  #      HEALTHCHECK da própria imagem) E a linha `api/v1/cron/event-log-drain`
+  #      instalada no crontab — a segunda via do mesmo drain, que a produção usa
+  #      quando o laço do worker não carregou.
+  #
+  # O `if:` só pula quando o PR não alcança imagem nenhuma (`imagem=nao`, que
+  # fora de pull_request é impossível); o `imagens-ok` aceita esse `skipped`
+  # SÓ nessa condição e segue lendo qualquer outro `skipped` como reprovação.
+  # Em PR que alcança imagem ele roda e constrói as duas imagens de fundo com
+  # o mesmo escopo de cache do `build-and-push`; na tag, roda sempre.
+  #
+  # Ele entra POR BAIXO de `imagens-ok`, que é a fachada que a branch protection
+  # já exige: nenhum check obrigatório novo — a proteção da main não passa a
+  # esperar um nome que ninguém produz.
+  imagens-de-fundo-sobem:
+    needs: [a-tag-veio-da-main]
+    if: needs.a-tag-veio-da-main.outputs.imagem == 'sim'
+    # Executor próprio SÓ em PR de branch deste repo (EXECUTOR_PROPRIO=ligado).
+    # Na `main` e em tag esta imagem vira a que o parque instala: ela se constrói
+    # nas máquinas do GitHub, nunca numa máquina nossa. Guarda contra fork:
+    # comentário do e2e-parte no e2e.yml.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'deskcomm-proprio' || 'ubuntu-latest' }}
+    concurrency:
+      group: ${{ github.workflow }}-imagens-de-fundo-sobem-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    # Só leitura, explícita: sem o bloco o GITHUB_TOKEN herda o default do
+    # REPOSITÓRIO — configuração que vive fora do repo, muda num clique e não
+    # passa por PR. Mesma razão do `permissions:` dos outros jobs.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build local da imagem do worker (sem push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.worker
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: deskcomm-worker:pr
+          # Mesmo escopo de cache do build-and-push, por imagem. Os dois jobs
+          # correm em PARALELO, então o cache costuma estar frio no primeiro run
+          # de um push e quente nos seguintes — "reaproveita aquele build" só
+          # vale a partir do segundo. Medido em 16/09/2026 no primeiro run deste
+          # gate: manifesto importado, camadas reconstruídas.
+          cache-from: type=gha,scope=deskcommcrm-worker
+          # Mesma razão do job do app: em PR, quem grava o cache é este job.
+          cache-to: ${{ github.event_name == 'pull_request' && 'type=gha,mode=max,scope=deskcommcrm-worker' || '' }}
+
+      - name: Build local da imagem do scheduler (sem push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.scheduler
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: deskcomm-scheduler:pr
+          cache-from: type=gha,scope=deskcommcrm-scheduler
+          cache-to: ${{ github.event_name == 'pull_request' && 'type=gha,mode=max,scope=deskcommcrm-scheduler' || '' }}
+
+      # A QUARTA imagem (módulo opcional de telefonia, #677). Ela entrou na
+      # `main` sem nunca ter sido construída: `build-and-push` tem a matriz com
+      # as quatro, mas não roda em PR, e este job nomeava só worker e scheduler.
+      # O `imagens-ok` ficou verde e o defeito — a receita não copiava
+      # `patches/`, e o `pnpm install` morria com ENOENT — só apareceu no
+      # primeiro build de verdade, já na `main`, com a esteira de publicação
+      # travada. `tests/unit/toda-imagem-publicada-constroi-em-pr.test.ts`
+      # compara a matriz com os builds de PR e reprova quem esquecer a próxima.
+      - name: Build local da imagem do agente de voz (sem push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.voice-agent
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: deskcomm-voice-agent:pr
+          cache-from: type=gha,scope=deskcommcrm-voice-agent
+          cache-to: ${{ github.event_name == 'pull_request' && 'type=gha,mode=max,scope=deskcommcrm-voice-agent' || '' }}
+
+      - name: O laço do event_log CARREGA dentro da imagem do worker?
+        run: |
+          set -euo pipefail
+          # Env de mentira, igual à do smoke do app: o runner não tem Supabase.
+          # Montar o admin client não abre conexão — o que se mede aqui é o
+          # CAMINHO DE BOOT (o import sob `tsx`), não o banco.
+          # `--entrypoint pnpm`: a sonda substitui o CMD do worker e prova o
+          # carregamento sem depender de o entrypoint da imagem ser executável
+          # fora do cluster.
+          saida=$(docker run --rm --name worker-laco \
+            --entrypoint pnpm \
+            -e NEXT_PUBLIC_SUPABASE_URL=https://exemplo.supabase.co \
+            -e NEXT_PUBLIC_SUPABASE_ANON_KEY=chave-de-mentira \
+            -e SUPABASE_SERVICE_ROLE_KEY=chave-de-mentira \
+            -e SENTRY_DSN=off \
+            deskcomm-worker:pr \
+            exec tsx scripts/sonda-do-laco-de-event-log.ts)
+
+          echo "$saida"
+          printf '%s' "$saida" | tail -1 | grep -q '"ok":true' || {
+            echo "::error::o laço do event_log NÃO carregou dentro da imagem do worker."
+            echo "::error::Este é o defeito da #648: o worker sobe, o /healthz fica verde e o event_log fica parado."
+            exit 1
+          }
+          printf '%s' "$saida" | grep -q 'event-log drain: laço carregado' || {
+            echo "::error::a sonda não emitiu a marca 'event-log drain: laço carregado'."
+            exit 1
+          }
+
+      - name: O worker BOOTA com o CMD da imagem? (sem banco no runner, o boot para na camada de banco)
+        run: |
+          set -euo pipefail
+          # Por que este passo existe se a sonda já provou o laço: a sonda importa a
+          # cadeia do DRAIN; o boot importa bem mais (playbook-seed, waha, wacalls,
+          # cron, observabilidade). A #648 foi um `import` que estourava só sob `tsx`
+          # — a classe de defeito que só um boot de verdade pega.
+          #
+          # O que NÃO dá para medir aqui é o `/healthz` respondendo `ok`: o runner não
+          # tem Postgres, `startWorker` roda `assertHarnessSchema(pool)` (uma query)
+          # antes de escutar, e o worker sai de propósito. Então este passo
+          # CLASSIFICA a saída em vez de ignorá-la:
+          #   • `event-log drain OFF` no log            → REPROVA (é a #648 na cara);
+          #   • morte com a cadeia de boot quebrada     → REPROVA (import/módulo);
+          #   • de pé sem `event_log_drain` no /healthz → REPROVA;
+          #   • morto por banco ausente (ECONNREFUSED…) → passa com `::notice::`,
+          #     declarando o que este runner não mede;
+          #   • morto por motivo não reconhecido        → REPROVA (morte silenciosa é
+          #     exatamente o que este gate existe para não deixar passar).
+          docker rm -f worker-boot >/dev/null 2>&1 || true
+          docker run -d --name worker-boot \
+            -p 127.0.0.1:3971:3971 \
+            -e HEALTH_PORT=3971 \
+            -e NEXT_PUBLIC_SUPABASE_URL=https://exemplo.supabase.co \
+            -e NEXT_PUBLIC_SUPABASE_ANON_KEY=chave-de-mentira \
+            -e SUPABASE_SERVICE_ROLE_KEY=chave-de-mentira \
+            -e SUPABASE_DB_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres \
+            -e SENTRY_DSN=off \
+            deskcomm-worker:pr
+
+          # ESPERA UM SINAL, e não o `docker ps`: o contêiner fica `running` 0,2s
+          # depois do `run -d` — antes de o `tsx` importar a primeira linha. O loop
+          # antigo saía na PRIMEIRA volta, lia logs vazios e um `/healthz` que
+          # ninguém ainda escutava, e reprovava um worker SADIO (medido: run
+          # 35099604595, o passo morreu 0,2s depois do `docker run`). Esperar o
+          # sinal é o que separa "não bootou" de "ainda não bootou".
+          estado=nao_bootou
+          corpo=""
+          for _ in $(seq 1 30); do          # até 90s: tsx + pool + a query do harness
+            sleep 3
+            if ! docker ps --filter name=worker-boot --filter status=running -q | grep -q .; then
+              estado=saiu
+              break
+            fi
+            logs_ate_agora=$(docker logs worker-boot 2>&1 || true)
+            if printf '%s' "$logs_ate_agora" | grep -qE 'agent-engine pronto'; then
+              estado=pronto
+              break
+            fi
+            # Defeito FATAL já escrito no log: não há por que esperar os 90s — a
+            # classificação abaixo reprova por estes mesmos marcadores, então o
+            # veredito não muda; só não fica 90s parado para dizê-lo.
+            if printf '%s' "$logs_ate_agora" | grep -qE 'event-log drain OFF|Cannot find module|ERR_MODULE_NOT_FOUND|Cannot use import statement'; then
+              estado=fatal_no_log
+              break
+            fi
+            corpo=$(curl -s -m 2 "http://127.0.0.1:3971/healthz" || true)
+            if [ -n "$corpo" ]; then
+              estado=servindo
+              break
+            fi
+          done
+
+          docker logs worker-boot > boot.log 2>&1 || true
+          echo "--- logs do boot (tail) ---"
+          tail -30 boot.log
+          echo "estado: $estado"
+
+          # A volta pode ter parado no LOG de prontidão antes de o `curl`
+          # acontecer; esta última tentativa garante que o caso 4 (worker de pé)
+          # não dependa do caminho por onde o loop saiu.
+          if [ -z "$corpo" ]; then
+            corpo=$(curl -s -m 5 "http://127.0.0.1:3971/healthz" || true)
+          fi
+
+          # 1) A #648 na cara: o laço desligou no boot.
+          if grep -q 'event-log drain OFF' boot.log; then
+            echo "::error::o laço do event_log NÃO carregou no boot da imagem — este é o defeito da #648, e a sonda do passo anterior também reprovou."
+            exit 1
+          fi
+
+          # 2) Cadeia de boot quebrada (import/módulo) — a classe da #648. Vale nos
+          #    DOIS estados: o contêiner pode ter morrido, ou ter ficado de pé com a
+          #    exceção engolida em outro laço do boot.
+          if grep -qE 'Cannot find module|ERR_MODULE_NOT_FOUND|Cannot use import statement|SyntaxError|is not a function|Failed to resolve' boot.log; then
+            echo "::error::o worker morreu com a CADEIA DE BOOT quebrada (import/módulo) — a classe da #648."
+            exit 1
+          fi
+
+          # 3) Banco ausente: é o desfecho DECLARADO deste runner (não tem Postgres).
+          #    `assertHarnessSchema(pool)` roda uma query ANTES de escutar, então o
+          #    boot para aqui de propósito. O que este passo NÃO mede, por causa
+          #    disso, é o `/healthz` respondendo 200 — isso é medido em produção e
+          #    pelo e2e, que têm banco.
+          if grep -qE 'ECONNREFUSED|ENOTFOUND|getaddrinfo|schema do harness ausente|password authentication|Connection terminated|timeout expired|ECONNRESET' boot.log; then
+            echo "::notice::o worker parou na camada de banco (este runner não tem Postgres). O laço carregado foi medido pela sonda, dentro da imagem; o /healthz respondendo 200 é medido em produção e no e2e — não aqui."
+            exit 0
+          fi
+
+          # 4) De pé e servindo: aí o campo TEM de estar lá — é o sinal que o gate de
+          #    publicação lê antes de deixar a imagem ir para o canal.
+          if [ -n "$corpo" ]; then
+            echo "healthz: $corpo"
+            printf '%s' "$corpo" | grep -q '"event_log_drain"' || {
+              echo "::error::o worker está de pé mas o /healthz não publica event_log_drain (#604)."
+              exit 1
+            }
+            printf '%s' "$corpo" | grep -q '"event_log_drain":{"carregado":true' || {
+              echo "::error::o /healthz publica event_log_drain com carregado:false — o laço não carregou."
+              exit 1
+            }
+            docker logs worker-boot 2>&1 | tail -20
+            exit 0
+          fi
+
+          # 5) Não bootou, não morreu por banco, não serviu: morte silenciosa ou boot
+          #    que não chega — exatamente o que este gate existe para não deixar
+          #    passar. Se for de outro tipo, o classificador precisa de mais um caso
+          #    escrito, não de um passe livre.
+          echo "::error::o worker não bootou por um motivo que este gate não reconhece (estado: $estado)."
+          echo "::error::Se for esperado, o classificador acima precisa de mais um caso escrito — não de um passe livre."
+          exit 1
+      - name: O scheduler sobe E tem o evento do event_log no crontab?
+        run: |
+          set -euo pipefail
+          # `INTERNAL_SECRET` é obrigatório: com ele vazio o entrypoint sai 1, e é
+          # assim mesmo (cron que responderia 401 em silêncio não deve subir).
+          docker run -d --name sched \
+            --health-interval=3s --health-timeout=3s --health-start-period=3s --health-retries=20 \
+            -e INTERNAL_SECRET=chave-de-mentira \
+            -e APP_URL=http://127.0.0.1:3000 \
+            -e TZ=UTC \
+            deskcomm-scheduler:pr
+
+          cron=nao
+          for _ in $(seq 1 20); do
+            if ! docker ps --filter name=sched --filter status=running -q | grep -q .; then
+              echo "::error::o scheduler MORREU durante o boot"
+              docker logs sched 2>&1 | tail -40
+              exit 1
+            fi
+            docker exec sched sh -lc 'crontab -l 2>/dev/null || cat /etc/crontabs/root 2>/dev/null || cat "${CRONTAB_PATH:-/etc/crontabs/root}" 2>/dev/null' > cron.txt 2>/dev/null || true
+            if grep -q 'api/v1/cron/event-log-drain' cron.txt; then
+              cron=sim
+              break
+            fi
+            sleep 3
+          done
+
+          if [ "$cron" != "sim" ]; then
+            echo "::error::o crontab do scheduler não tem a linha do event-log-drain"
+            cat cron.txt || true
+            docker logs sched 2>&1 | tail -40
+            exit 1
+          fi
+          grep -c 'api/v1/cron' cron.txt | sed 's/^/linhas de cron instaladas: /'
+          grep 'event-log-drain' cron.txt
+
+          # E o crond está de pé? O HEALTHCHECK da própria imagem é quem responde
+          # (mesma checagem que o `docker ps` do compose mostra ao self-hoster).
+          saude=nao
+          for _ in $(seq 1 20); do
+            estado=$(docker inspect -f '{{.State.Health.Status}}' sched 2>/dev/null || echo sem-healthcheck)
+            if [ "$estado" = "healthy" ]; then saude=sim; break; fi
+            [ "$estado" = "sem-healthcheck" ] && { echo "::error::a imagem do scheduler perdeu o HEALTHCHECK — o compose mostraria o scheduler sem estado de saúde"; exit 1; }
+            sleep 3
+          done
+          if [ "$saude" != "sim" ]; then
+            echo "::error::o scheduler não chegou a 'healthy' (crond de pé) em 60s"
+            docker inspect -f '{{json .State.Health}}' sched || true
+            docker logs sched 2>&1 | tail -40
+            exit 1
+          fi
+          docker logs sched 2>&1 | tail -20
+
+  # Job de fachada: dá UM nome estável para a branch protection exigir. Sem ele,
+  # o required check teria que listar cada instância da matriz pelo nome gerado,
+  # e acrescentar uma imagem quebraria o gate em silêncio — o merge voltaria a
+  # passar sem que ninguém tivesse decidido isso.
+  #
+  # A previsão deste comentário foi MEDIDA: a quarta imagem
+  # (`deskcomm-voice-agent`, #677) chegou em 20/09/2026 e o gate não se mexeu.
+  imagens-ok:
+    if: always()
+    runs-on: ubuntu-latest
+    # Nenhuma permissão: este job só lê o resultado de `needs` e sai. Sem o bloco,
+    # o GITHUB_TOKEN herdaria o default do REPOSITÓRIO — configuração que vive fora
+    # do repo, muda num clique e não passa por PR.
+    #
+    # A regra e o gate que a impõe vieram do PR #241 (alertas do CodeQL), de um
+    # contribuidor. O teste dele pegou este job: eu o criei sem o bloco, e o defeito
+    # só apareceu quando a `main` entrou naquela branch. É o próprio caso que a
+    # justificativa do teste antecipa — "um job novo nasce sem bloco e herda o
+    # default de novo".
+    permissions: {}
+    needs: [a-tag-veio-da-main, build-and-push, imagem-do-app-sobe, imagens-de-fundo-sobem]
+    steps:
+      - name: Falhar se qualquer imagem não construiu — ou se o app não sobe
+        env:
+          EVENTO: ${{ github.event_name }}
+          PORTAO: ${{ needs.a-tag-veio-da-main.result }}
+          ALCANCE: ${{ needs.a-tag-veio-da-main.outputs.imagem }}
+          BUILD: ${{ needs.build-and-push.result }}
+          APP: ${{ needs.imagem-do-app-sobe.result }}
+          FUNDO: ${{ needs.imagens-de-fundo-sobem.result }}
+        run: |
+          set -euo pipefail
+          echo "evento=${EVENTO} a-tag-veio-da-main=${PORTAO} imagem=${ALCANCE:-<vazio>}"
+          echo "build-and-push:         ${BUILD}"
+          echo "imagem-do-app-sobe:     ${APP}"
+          echo "imagens-de-fundo-sobem: ${FUNDO}"
+          # O portão reprova antes de tudo: tag fora da main deixa os builds
+          # `skipped`, e nenhum `skipped` abaixo pode ler isso como aceitável.
+          [ "$PORTAO" = "success" ]
+          # Em pull_request o build-and-push é sempre `skipped` (as mesmas
+          # imagens são construídas pelos dois jobs de baixo). Fora de PR ele
+          # publica, e só `success` serve.
+          if [ "$EVENTO" = "pull_request" ]; then
+            [ "$BUILD" = "skipped" ]
+          else
+            [ "$BUILD" = "success" ]
+          fi
+          # `skipped` dos jobs que sobem as imagens só é aceito com `imagem=nao`
+          # — PR que não alcança imagem nenhuma. Qualquer outra combinação
+          # exige `success`: é a mesma régua de antes, com uma porta só.
+          # As imagens de fundo entram na mesma exigência: worker ou scheduler que
+          # não sobe (ou que sobe com o laço do event_log morto, #604) reprova o
+          # check que a branch protection já espera — sem check novo obrigatório.
+          if [ "$EVENTO" = "pull_request" ] && [ "$ALCANCE" = "nao" ]; then
+            # Linhas separadas, nunca `a && b`: sob `set -e` o primeiro termo de
+            # uma lista `&&` que falha NÃO derruba o script.
+            [ "$APP" = "skipped" ]
+            [ "$FUNDO" = "skipped" ]
+            echo "PR não alcança imagem nenhuma — builds pulados (scripts/pr-mexe-na-imagem.sh)"
+          else
+            [ "$APP" = "success" ]
+            [ "$FUNDO" = "success" ]
+          fi

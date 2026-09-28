@@ -1,0 +1,102 @@
+{
+  "format_version": 1,
+  "profile": "declarative",
+  "publisher": "deskcomm",
+  "name": "primeira-semana",
+  "version": "1.0.0",
+  "license": "MIT",
+  "host_api": {
+    "min": 2,
+    "max": 2
+  },
+  "permissions": [
+    "navigation.tasks",
+    "navigation.contacts"
+  ],
+  "dependencies": [],
+  "data": {
+    "mode": "none"
+  },
+  "display": {
+    "title": {
+      "pt-BR": "Primeira semana no atendimento",
+      "es": "Primera semana en atención"
+    },
+    "summary": {
+      "pt-BR": "O que alguém que entrou hoje precisa fazer nos primeiros cinco dias para atender sozinho sem quebrar nada.",
+      "es": "Lo que alguien que entró hoy necesita hacer en los primeros cinco días."
+    },
+    "category": "productivity",
+    "icon": "BookOpen"
+  },
+  "configuration": {
+    "density": "compact",
+    "show_description": true
+  },
+  "contributions": {
+    "crm_cards": [
+      {
+        "id": "dia-1",
+        "title": {
+          "pt-BR": "Dia 1: leia dez conversas antes de responder uma",
+          "es": "Día 1: lea diez conversaciones antes de responder una"
+        },
+        "description": {
+          "pt-BR": "O tom da casa não está escrito em lugar nenhum — ele está nas conversas que já aconteceram.",
+          "es": "El tono de la casa está en las conversaciones que ya ocurrieron."
+        },
+        "icon": "BookOpen",
+        "blocks": [
+          {
+            "heading": {
+              "pt-BR": "Procure as que terminaram bem",
+              "es": "Busque las que terminaron bien"
+            },
+            "body": {
+              "pt-BR": "Abra conversas de negócios ganhos e leia do começo. Repare em como se abre, como se fala de preço e como se encerra. Copiar o que já funciona é mais rápido que inventar um jeito próprio na primeira semana.",
+              "es": "Abra conversaciones de negocios ganados y lea desde el principio."
+            }
+          }
+        ],
+        "action": {
+          "label": {
+            "pt-BR": "Abrir as pessoas",
+            "es": "Abrir las personas"
+          },
+          "capability": "contacts.open"
+        }
+      },
+      {
+        "id": "dia-3",
+        "title": {
+          "pt-BR": "Dia 3: sua fila é sua responsabilidade",
+          "es": "Día 3: su fila es su responsabilidad"
+        },
+        "description": {
+          "pt-BR": "Tarefa sem dono é tarefa de ninguém. A partir de hoje, o que está no seu nome é seu até você mudar isso.",
+          "es": "Tarea sin dueño es tarea de nadie."
+        },
+        "icon": "ListChecks",
+        "blocks": [
+          {
+            "heading": {
+              "pt-BR": "Feche ou repasse — não deixe envelhecer",
+              "es": "Cierre o transfiera — no deje envejecer"
+            },
+            "body": {
+              "pt-BR": "Toda tarefa sua termina de um dos dois jeitos: concluída, ou passada para quem consegue concluir, com o porquê escrito. O que fica parado sem um dos dois vira dívida que alguém descobre tarde.",
+              "es": "Toda tarea termina concluida o transferida, con el porqué escrito."
+            }
+          }
+        ],
+        "action": {
+          "label": {
+            "pt-BR": "Abrir minhas tarefas",
+            "es": "Abrir mis tareas"
+          },
+          "capability": "tasks.open"
+        }
+      }
+    ]
+  }
+}

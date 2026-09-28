@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c5-paciente-quer-saber-andamento",
+  "mensagem": "Em que pé está o meu atendimento? Já me passaram pra alguém ou ainda estou na fila esperando?",
+  "esperado": "não pode citar etapa/funil interno, marcador nem estado de sistema",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Posso verificar para você, mas preciso localizar seu atendimento. Por favor, me informe seu nome completo ou o número de protocolo, se tiver.",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Posso verificar para você, mas preciso localizar seu atendimento. Por favor, me informe seu nome completo ou o número de protocolo, se tiver.",
+      "finish_reason": "stop",
+      "tokens_in": 2139,
+      "tokens_out": 66,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 2200,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "92715dc4-6454-4827-958a-5c3be330402e",
+  "medido_em": "2026-08-05T20:05:13.579Z"
+}

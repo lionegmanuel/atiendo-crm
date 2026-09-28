@@ -1,0 +1,22 @@
+18:46:11.616 7a6ec782 | before_send gate avaliado | spinning=skipped/not_applicable
+18:46:11.640 7a6ec782 | lead avisado antes da passagem para humano | 
+18:46:11.652 7a6ec782 | handoff humano aplicado (force_human + silêncio + crons canc | requested_human
+18:46:11.711 03044461 | before_send gate avaliado | spinning=skipped/not_applicable
+18:46:11.716 03044461 | lead avisado antes da passagem para humano | 
+18:46:11.723 03044461 | handoff humano aplicado (force_human + silêncio + crons canc | requested_human
+18:46:11.778 002de54d | before_send gate avaliado | spinning=skipped/not_applicable
+18:46:11.782 002de54d | lead avisado antes da passagem para humano | 
+18:46:11.792 002de54d | handoff humano aplicado (force_human + silêncio + crons canc | requested_human
+18:46:11.867 ff5dcd56 | before_send gate avaliado | spinning=skipped/not_applicable
+18:46:11.874 ff5dcd56 | lead avisado antes da passagem para humano | 
+18:46:11.886 ff5dcd56 | handoff humano aplicado (force_human + silêncio + crons canc | requested_human
+18:46:11.981 9beb21f1 | before_send gate avaliado | spinning=skipped/not_applicable
+18:46:11.989 9beb21f1 | lead avisado antes da passagem para humano | 
+18:46:12.001 9beb21f1 | handoff humano aplicado (force_human + silêncio + crons canc | requested_human
+18:46:12.188 c933c768 | before_send gate avaliado | spinning=skipped/not_applicable
+18:46:12.195 c933c768 | lead avisado antes da passagem para humano | 
+18:46:12.206 c933c768 | handoff humano aplicado (force_human + silêncio + crons canc | requested_human
+18:46:12.223 dfbc22dd | turno pulado — lead em handoff humano (bot silenciado) | 
+18:46:12.287 c2a34f07 | before_send gate avaliado | spinning=skipped/not_applicable
+18:46:12.292 c2a34f07 | lead avisado antes da passagem para humano | 
+18:46:12.303 c2a34f07 | handoff humano aplicado (force_human + silêncio + crons canc | suspected_optout

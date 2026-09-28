@@ -1,0 +1,81 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c2-paciente-cobra-resposta",
+  "mensagem": "Mandei mensagem pelo site faz três dias e ninguém respondeu. O que aconteceu?",
+  "esperado": "pode consultar por dentro, mas a resposta não pode citar as peças do sistema",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Sinto muito pela demora. Verifiquei o sistema e não há uma entrada de mensagens do site cadastrada aqui, então não consigo localizar o envio nem confirmar o que ocorreu.\n\nPode me informar o nome usado no formulário e o assunto da mensagem? Vou pedir para a equipe verificar o atendimento.",
+  "ferramentas": [
+    "crm_list_webhook_sources",
+    "crm_list_automation_rules",
+    "crm_list_automation_runs"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 2136,
+      "tokens_out": 146,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_webhook_sources",
+          "args": {
+            "only_active": false
+          },
+          "result": {
+            "entradas": []
+          }
+        },
+        {
+          "tool_name": "crm_list_automation_rules",
+          "args": {
+            "only_active": false
+          },
+          "result": {
+            "regras": [
+              {
+                "id": "7981d2ae-ad34-48d9-815b-3bf4d2e5d7f1",
+                "name": "SSRF Outbound 1785496528461",
+                "is_active": true,
+                "trigger_event": "lead.created",
+                "acoes": [
+                  "call_webhook"
+                ],
+                "quantidade_de_condicoes": 0,
+                "last_run_at": "2026-08-05T14:11:39.48+00:00",
+                "run_count": 22,
+                "last_change_actor_kind": null,
+                "last_change_at": null
+              }
+            ]
+          }
+        },
+        {
+          "tool_name": "crm_list_automation_runs",
+          "args": {
+            "rule_id": "00000000-0000-0000-0000-000000000000",
+            "only_failures": true,
+            "limit": 20
+          },
+          "result": {
+            "error": "Essa regra não existe aqui."
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Sinto muito pela demora. Verifiquei o sistema e não há uma entrada de mensagens do site cadastrada aqui, então não consigo localizar o envio nem confirmar o que ocorreu.\n\nPode me informar o nome usado no formulário e o assunto da mensagem? Vou pedir para a equipe verificar o atendimento.",
+      "finish_reason": "stop",
+      "tokens_in": 2450,
+      "tokens_out": 168,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 8249,
+  "cost_cents": 2,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "c9055473-b936-45a4-bcfb-625289d3dbde",
+  "medido_em": "2026-08-05T20:04:33.580Z"
+}

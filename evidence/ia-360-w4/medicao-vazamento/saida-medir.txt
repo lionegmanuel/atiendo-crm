@@ -1,0 +1,96 @@
+
+=== PROMPT DE OPERADOR ===
+turnos rodados: 10   com vazamento: 3   TAXA: 30.0%
+    ok  1-ler-o-funil
+        ferramentas: crm_list_pipelines → crm_list_stages
+    ok  10-mandar-resposta-pronta
+        ferramentas: crm_list_message_templates
+    ok  2-marcador-existente
+        ferramentas: crm_list_tags
+  VAZOU 3-diagnostico-de-entrada  termos=[webhook]  categorias=[arquitetura]
+        ferramentas: crm_list_webhook_sources → crm_list_webhook_sources → crm_list_automation_rules
+    ok  4-capacidade-apenas-humana
+        ferramentas: NENHUMA
+    ok  5-barreira-de-verdade
+        ferramentas: crm_list_pipelines → crm_list_stages
+    ok  6-respostas-prontas
+        ferramentas: crm_list_message_templates
+  VAZOU 7-automacoes-e-falhas  termos=[webhook, unsafe_url, https_required]  categorias=[arquitetura,snake_case]
+        ferramentas: crm_list_automation_rules → crm_list_automation_runs → crm_list_automation_runs
+    ok  8-desligar-automacao
+        ferramentas: crm_list_automation_rules
+  VAZOU 9-quem-pode-mexer  termos=[admin, manager]  categorias=[papel]
+        ferramentas: crm_list_team_members
+
+=== PROMPT DE ATENDIMENTO (voz de paciente) ===
+turnos rodados: 8   com vazamento: 0   TAXA: 0.0%
+    ok  c1-paciente-pede-retorno
+        ferramentas: NENHUMA
+    ok  c2-paciente-cobra-resposta
+        ferramentas: crm_list_webhook_sources → crm_list_automation_rules → crm_list_automation_runs
+    ok  c3-paciente-quer-prioridade
+        ferramentas: NENHUMA
+    ok  c4-paciente-cadastro-do-site
+        ferramentas: crm_list_webhook_sources
+    ok  c5-paciente-quer-saber-andamento
+        ferramentas: NENHUMA
+    ok  c6-paciente-pede-mensagem-padrao
+        ferramentas: crm_list_message_templates
+    ok  c7-paciente-pergunta-responsavel
+        ferramentas: NENHUMA
+    ok  c8-paciente-quer-sair-da-lista
+        ferramentas: NENHUMA
+
+=== TOTAL ===
+turnos rodados: 18   com vazamento: 3   TAXA: 16.7%
+    ok  c1-paciente-pede-retorno
+        ferramentas: NENHUMA
+    ok  c2-paciente-cobra-resposta
+        ferramentas: crm_list_webhook_sources → crm_list_automation_rules → crm_list_automation_runs
+    ok  c3-paciente-quer-prioridade
+        ferramentas: NENHUMA
+    ok  c4-paciente-cadastro-do-site
+        ferramentas: crm_list_webhook_sources
+    ok  c5-paciente-quer-saber-andamento
+        ferramentas: NENHUMA
+    ok  c6-paciente-pede-mensagem-padrao
+        ferramentas: crm_list_message_templates
+    ok  c7-paciente-pergunta-responsavel
+        ferramentas: NENHUMA
+    ok  c8-paciente-quer-sair-da-lista
+        ferramentas: NENHUMA
+    ok  1-ler-o-funil
+        ferramentas: crm_list_pipelines → crm_list_stages
+    ok  10-mandar-resposta-pronta
+        ferramentas: crm_list_message_templates
+    ok  2-marcador-existente
+        ferramentas: crm_list_tags
+  VAZOU 3-diagnostico-de-entrada  termos=[webhook]  categorias=[arquitetura]
+        ferramentas: crm_list_webhook_sources → crm_list_webhook_sources → crm_list_automation_rules
+    ok  4-capacidade-apenas-humana
+        ferramentas: NENHUMA
+    ok  5-barreira-de-verdade
+        ferramentas: crm_list_pipelines → crm_list_stages
+    ok  6-respostas-prontas
+        ferramentas: crm_list_message_templates
+  VAZOU 7-automacoes-e-falhas  termos=[webhook, unsafe_url, https_required]  categorias=[arquitetura,snake_case]
+        ferramentas: crm_list_automation_rules → crm_list_automation_runs → crm_list_automation_runs
+    ok  8-desligar-automacao
+        ferramentas: crm_list_automation_rules
+  VAZOU 9-quem-pode-mexer  termos=[admin, manager]  categorias=[papel]
+        ferramentas: crm_list_team_members
+
+
+=== FRASES QUE VAZARAM (trecho ao redor de cada termo) ===
+
+--- operador :: 3-diagnostico-de-entrada ---
+  [webhook] …Verifiquei a configuração: **não há nenhuma entrada automática/webhook cadastrada** para receber os envios do formulário — nem ativa nem desativada. Port…
+
+--- operador :: 7-automacoes-e-falhas ---
+  [webhook] …tbound 1785496528461**   - Disparo: criação de lead (`lead.created`)   - Ação: chamada de webhook   - Última execução: **05/08/2026 às 14:11:39 UTC**   - Total de execuções: **22**…
+  [unsafe_url] …ndo.** As execuções mais recentes — incluindo a última — deram erro na ação de webhook:  `unsafe_url:https_required`  Isso indica que a URL configurada para o webhook não está usan…
+  [https_required] …xecuções mais recentes — incluindo a última — deram erro na ação de webhook:  `unsafe_url:https_required`  Isso indica que a URL configurada para o webhook não está usando **HTTPS*…
+
+--- operador :: 9-quem-pode-mexer ---
+  [admin] …Hoje o time ativo é:  - `56252c10-8fe1-4a6b-8b3b-845e27c7156e` — **admin** - `50b65ff5-8adc-492f-bb35-28343e388eb2` — **manager** - `a3f26dd0-75ed-47ce-97f6-…
+  [manager] …c10-8fe1-4a6b-8b3b-845e27c7156e` — **admin** - `50b65ff5-8adc-492f-bb35-28343e388eb2` — **manager** - `a3f26dd0-75ed-47ce-97f6-c2161eb25c60` — **agent** - `cde689c5-a27f-4536-af7f-…

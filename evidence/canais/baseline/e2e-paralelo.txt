@@ -1,0 +1,444 @@
+
+> deskcomm-crm@0.1.0 test:e2e /Users/rafaelmelgaco/DeskcommCRM-canais
+> playwright test
+
+[WebServer] ⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+[seed] radar lead existing: ed013ae5-084f-4a17-a476-d92b79ba3ee4
+
+✅ Radar seed completo. lead=ed013ae5-084f-4a17-a476-d92b79ba3ee4 conv=320391d3-87aa-4c9a-83c1-6f78641a3346 (frio desde 2026-07-22T15:27:56.808Z)
+
+Running 58 tests using 5 workers
+
+
+✅ Followup agent fixtures seed completo. credential=da54f96d-a690-4ebc-be23-b365c97b5600 channel_session=e3a4e9f2-ba0f-4ecc-979f-7c9d564594bc
+  ✓   5 [chromium] › tests/e2e/auth.spec.ts:5:7 › auth flow › anon GET /app/inbox redirects to /login (1.1s)
+  ✓   1 [chromium] › tests/e2e/error-pages.spec.ts:4:7 › error pages › /404 renders PT-BR copy (1.2s)
+  ✓   7 [chromium] › tests/e2e/error-pages.spec.ts:11:7 › error pages › /403 renders sem permissão (417ms)
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✓   6 [chromium] › tests/e2e/auth.spec.ts:12:7 › auth flow › invalid login shows error (2.4s)
+  ✓   9 [chromium] › tests/e2e/auth.spec.ts:22:7 › auth flow › login form is keyboard navigable in tab order (844ms)
+  ✓   3 [chromium] › tests/e2e/followup-builder.spec.ts:88:7 › followup flows — lista + criação (Task 6.1) › manager cria um fluxo e ele aparece na lista com badge Rascunho (4.9s)
+  ✓  10 [chromium] › tests/e2e/auth.spec.ts:34:7 › auth flow › login page has no serious or critical a11y violations (1.3s)
+  ✘   8 [chromium] › tests/e2e/error-pages.spec.ts:16:7 › error pages › /500 renders erro interno (5.3s)
+
+✅ Follow-up promise seed completo. cron_job=98f19b12-1822-4a9d-a697-e341461f1e92 contact=c0cf3d6d-e8a4-44c5-a98b-753a5230da1e
+  ✓  11 [chromium] › tests/e2e/followup-builder.spec.ts:116:7 › followup flows — lista + criação (Task 6.1) › viewer não vê o botão de criar fluxo (RBAC) (2.6s)
+  ✓  14 [chromium] › tests/e2e/error-pages.spec.ts:21:7 › error pages › /503 renders manutenção (454ms)
+  ✓  15 [chromium] › tests/e2e/inbox-scope.spec.ts:32:7 › G4-02 — inbox com escopo › agent em modo own*: vê Minhas e Fila, NÃO vê Todas (2.5s)
+  ✓  13 [chromium] › tests/e2e/followup-builder.spec.ts:168:7 › followup flow builder — canvas visual (Task 6.2) › manager cria um fluxo, clica na linha e o canvas React Flow abre (5.3s)
+  ✓  16 [chromium] › tests/e2e/inbox-scope.spec.ts:41:7 › G4-02 — inbox com escopo › manager: vê a visão Todas (3.9s)
+  ✘   4 [chromium] › tests/e2e/degradacao-silenciosa.spec.ts:86:7 › degradação silenciosa do tempo real › com a entrega morta, a tela avisa que pode estar desatualizada (20.5s)
+  ✓  17 [chromium] › tests/e2e/followup-builder.spec.ts:192:7 › followup flow builder — canvas visual (Task 6.2) › adiciona os 4 nós via paleta e conecta trigger→wait→action→end (8.7s)
+  ✓  12 [chromium] › tests/e2e/followup-queue.spec.ts:147:7 › followup queue — fila unificada (Task 7.1) › manager vê enrollment na fila, filtra por status/fluxo, cancela, e a promessa seedada aparece (15.2s)
+  ✓  18 [chromium] › tests/e2e/inbox-scope.spec.ts:48:7 › G4-02 — inbox com escopo › deep-link para conversa fora do escopo → estado vazio claro (sem stack trace) (8.9s)
+[WebServer] [ai_agents/publish] event_log error null value in column "entity_kind" of relation "event_log" violates not-null constraint
+[WebServer] {"level":"error","msg":"[followup-flow-worker.cron] runSilenceSweep threw","ts":"2026-07-27T15:28:33.888Z","error":"","requestId":"9b664281-8081-4bfc-a8ae-bf2ef1ac90c4"}
+[WebServer] [audit] insert error Database client error. Retrying the connection.
+  ✘  21 [chromium] › tests/e2e/followup-queue.spec.ts:251:7 › followup queue — fila unificada (Task 7.1) › viewer vê a fila (leitura) mas não consegue cancelar — 403 client E server-side (10.2s)
+  ✘  22 [chromium] › tests/e2e/kanban-owner-filter.spec.ts:51:5 › filtro por responsável reflete na URL e esconde leads com dono (10.2s)
+[WebServer] [audit] insert error Could not query the database for the schema cache. Retrying.
+[WebServer] {"level":"error","msg":"[followup-flow-worker.cron] runSilenceSweep threw","ts":"2026-07-27T15:28:36.610Z","error":"Could not query the database for the schema cache. Retrying.","requestId":"65e29580-d4a1-46c6-84bb-cbf3917d1af0"}
+  ✘  23 [chromium] › tests/e2e/password-recovery.spec.ts:65:5 › recuperar senha: forgot → e-mail → nova senha → login com a nova (0ms)
+[seed] conversation reset to queue state: e85b3416-0ac4-4689-8e31-dca29247353f
+
+✅ Queue seed completo. conversation=e85b3416-0ac4-4689-8e31-dca29247353f
+  ✓  25 [chromium] › tests/e2e/rbac-roles.spec.ts:88:7 › rbac role matrix (spec 13 §4) › agent é bloqueado em api-tokens e billing (403) (4.3s)
+  ✓  19 [chromium] › tests/e2e/invite-lifecycle.spec.ts:177:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 1. ciclo feliz: convidar → aceitar → vira agent → cai no inbox (7.6s)
+  ✓  24 [chromium] › tests/e2e/queue-assign.spec.ts:70:7 › G5-03 — fila com posição + atribuição › conversa aparece na Fila com posição → worker atribui → move para Minhas (8.1s)
+  ✓  26 [chromium] › tests/e2e/rbac-roles.spec.ts:102:7 › rbac role matrix (spec 13 §4) › admin acessa api-tokens e billing (login com MFA TOTP) (5.8s)
+  ✓  28 [chromium] › tests/e2e/reset-password-mfa.spec.ts:53:5 › reset de senha com MFA pede o código TOTP e conclui (3.8s)
+  ✘  20 [chromium] › tests/e2e/followup-builder.spec.ts:239:7 › followup flow builder — canvas visual (Task 6.2) › clica no nó Aguardar e configura 10min; clica no nó Ação e configura o prompt_hint (30.1s)
+[seed] radar lead existing: ed013ae5-084f-4a17-a476-d92b79ba3ee4
+
+✅ Radar seed completo. lead=ed013ae5-084f-4a17-a476-d92b79ba3ee4 conv=320391d3-87aa-4c9a-83c1-6f78641a3346 (frio desde 2026-07-22T15:28:54.524Z)
+  ✓  29 [chromium] › tests/e2e/rbac-roles.spec.ts:115:7 › rbac role matrix (spec 13 §4) › agent vê inbox e kanban (5.7s)
+  ✓  27 [chromium] › tests/e2e/invite-lifecycle.spec.ts:216:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 2. escopo pós-aceite: agent vê inbox/kanban, bloqueado em billing/api-tokens (8.6s)
+  ✓  32 [chromium] › tests/e2e/rbac-roles.spec.ts:131:7 › rbac role matrix (spec 13 §4) › viewer não consegue enviar mensagem (403 no POST /api/v1/messages) (3.3s)
+[WebServer] [audit] insert error new row violates row-level security policy for table "api_audit_log"
+  ✓  33 [chromium] › tests/e2e/invite-lifecycle.spec.ts:233:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 3. permissão pós-aceite: agent NÃO consegue convidar (403) (4.7s)
+  ✓  31 [chromium] › tests/e2e/risk-radar.spec.ts:59:5 › o atendente vê no Radar a demanda aberta que esfriou sem próximo passo (7.5s)
+  ✓  34 [chromium] › tests/e2e/signup-journey.spec.ts:17:5 › criar conta: signup → e-mail de confirmação → onboarding → re-login (6.3s)
+  ✓  37 [chromium] › tests/e2e/smoke.spec.ts:3:5 › home returns 200 and no console errors (498ms)
+[WebServer] [audit] insert error Could not query the database for the schema cache. Retrying.
+  ✓  38 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:103:7 › J1 — onboarding do dono numa instalação fresca › J1.2 senha errada → mensagem clara, sem stack (825ms)
+  ✘  39 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:111:7 › J1 — onboarding do dono numa instalação fresca › J1.1 login do bootstrap cai no wizard (org sem onboarded_at) (104ms)
+  -  40 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:120:7 › J1 — onboarding do dono numa instalação fresca › J1.12 /app/inbox antes de concluir → volta pro onboarding
+  -  41 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:127:7 › J1 — onboarding do dono numa instalação fresca › J1.3 + J1.4 welcome: termos obrigatórios; salva nome/timezone e avança
+  -  42 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:149:7 › J1 — onboarding do dono numa instalação fresca › J1.5 WAHA ativo → QR code aparece de verdade
+  -  43 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:167:7 › J1 — onboarding do dono numa instalação fresca › J1.11 + J1.6 abandona e volta → retoma no step pendente; pular WhatsApp avança
+  -  44 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:180:7 › J1 — onboarding do dono numa instalação fresca › J1.7 setup IA: cria agente default e avança
+  -  45 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:194:7 › J1 — onboarding do dono numa instalação fresca › J1.8 convite SEM Resend: a UI não pode mentir que enviou email
+  -  46 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:221:7 › J1 — onboarding do dono numa instalação fresca › J1.9 done → onboarded_at setado e cai no inbox
+  -  47 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:233:7 › J1 — onboarding do dono numa instalação fresca › J1.10 gate MFA: enrola TOTP e VÊ os códigos de recuperação (regressão do bug do gate)
+  -  48 [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:296:7 › J1 — onboarding do dono numa instalação fresca › J1.13 wizard não reabre depois de concluído
+[WebServer] {"level":"error","msg":"[event-log.drain] select failed","ts":"2026-07-27T15:29:06.798Z","error":"Could not query the database for the schema cache. Retrying."}
+[WebServer] [ai-sentiment-worker] sentiment_classify_failed {
+[WebServer]   event_id: '520ad661-6bbd-4519-a26f-be6f8ed0d778',
+[WebServer]   error: 'Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: https://ai-sdk.dev/unauthenticated-ai-gateway'
+[WebServer] }
+  ✘  30 [chromium] › tests/e2e/followup-builder.spec.ts:283:7 › followup flow builder — canvas visual (Task 6.2) › fluxo completo: montar, publicar incompleto (422 ancorado), corrigir, publicar, recarregar, rollback desabilitado (14.3s)
+  ✘  36 [chromium] › tests/e2e/risk-radar.spec.ts:70:5 › o atendente assume a demanda direto do Radar e vira o responsável (30.1s)
+  ✘  51 [chromium] › tests/e2e/webhooks.spec.ts:102:7 › webhooks & automações — fluxo completo › cria fonte, cria automação, dispara lead real, confere atividade e kanban; agent sem acesso (6.0s)
+  ✘  50 [chromium] › tests/e2e/followup-builder.spec.ts:455:7 › followup flow builder — editor de condição de aresta / ai_classify (Task 6.3) › ai_classify só publica depois de configurar class_match/no_reply/always nas arestas de saída (30.0s)
+
+✅ Followup agent fixtures seed completo. credential=da54f96d-a690-4ebc-be23-b365c97b5600 channel_session=e3a4e9f2-ba0f-4ecc-979f-7c9d564594bc
+  ✘  52 [chromium] › tests/e2e/followup-builder.spec.ts:603:7 › followup flow selector no editor do agente (Task 7.2) › admin vincula um fluxo publicado ao agente, salva, e a persistência é provada via API (7.3s)
+  ✘  53 [chromium] › tests/e2e/followup-builder.spec.ts:707:7 › followup flow builder — controle de gatilho na PublishBar (Task 8.5) › operador arma o gatilho de Silêncio (threshold) pela UI; oferece só Manual/Silêncio; PATCH round-trips (7.0s)
+  ✘  35 [chromium] › tests/e2e/invite-lifecycle.spec.ts:241:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 4. reuso do token: aceitar 2x é idempotente (sem membership duplicada) (3.0m)
+  -  54 [chromium] › tests/e2e/invite-lifecycle.spec.ts:268:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 5. already_member: reconvidar quem já é membro → failed already_member
+  -  55 [chromium] › tests/e2e/invite-lifecycle.spec.ts:277:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 6. token expirado → convite inválido ou expirado
+  -  56 [chromium] › tests/e2e/invite-lifecycle.spec.ts:289:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 7. token adulterado (HMAC quebrado) → inválido
+  -  57 [chromium] › tests/e2e/invite-lifecycle.spec.ts:303:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 8. email não corresponde: logado com outra conta → mismatch
+  -  58 [chromium] › tests/e2e/invite-lifecycle.spec.ts:317:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 9. não autenticado → CTA de login, não o formulário de aceite
+  ✘  49 [chromium] › tests/e2e/vps-webhook-outbound-ssrf.spec.ts:95:7 › J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta) › regra call_webhook para host interno → run falha e receiver recebe ZERO hits (3.0m)
+cleanup: falha ao desativar o fluxo apiRequestContext.post: Test timeout of 300000ms exceeded.
+    at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-journey.spec.ts:603:28 {
+  log: []
+}
+cleanup: falha ao arquivar o agent apiRequestContext.delete: Test timeout of 300000ms exceeded.
+    at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-journey.spec.ts:614:36 {
+  log: []
+}
+  ✘   2 [chromium] › tests/e2e/followup-journey.spec.ts:193:7 › followup — jornada completa (Task 8.3) › silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila (5.0m)
+
+
+  1) [chromium] › tests/e2e/error-pages.spec.ts:16:7 › error pages › /500 renders erro interno ─────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/erro interno/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/erro interno/i)
+
+
+      16 |   test("/500 renders erro interno", async ({ page }) => {
+      17 |     await page.goto("/500");
+    > 18 |     await expect(page.getByText(/erro interno/i)).toBeVisible();
+         |                                                   ^
+      19 |   });
+      20 |
+      21 |   test("/503 renders manutenção", async ({ page }) => {
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/error-pages.spec.ts:18:51
+
+    Error Context: test-results/error-pages-error-pages-500-renders-erro-interno-chromium/error-context.md
+
+  2) [chromium] › tests/e2e/followup-builder.spec.ts:239:7 › followup flow builder — canvas visual (Task 6.2) › clica no nó Aguardar e configura 10min; clica no nó Ação e configura o prompt_hint 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: page.waitForURL: Test timeout of 30000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+      navigated to "http://localhost:3002/login?next=%2Fapp%2Fai%2Ffollowups%2F45c219ce-4a7c-4fef-80cc-81c9f03ff2f6"
+    ============================================================
+
+      248 |     await expect(dialog).not.toBeVisible();
+      249 |     await page.locator("li", { hasText: flowName }).getByRole("link").click();
+    > 250 |     await page.waitForURL(/\/app\/ai\/followups\/[0-9a-f-]+$/);
+          |                ^
+      251 |     await expect(page.locator(".react-flow")).toBeVisible();
+      252 |
+      253 |     await page.getByTestId("palette-add-wait").click();
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-builder.spec.ts:250:16
+
+    Error Context: test-results/followup-builder-followup--01d39-o-e-configura-o-prompt-hint-chromium/error-context.md
+
+  3) [chromium] › tests/e2e/followup-builder.spec.ts:283:7 › followup flow builder — canvas visual (Task 6.2) › fluxo completo: montar, publicar incompleto (422 ancorado), corrigir, publicar, recarregar, rollback desabilitado 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/reprovado na validação/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/reprovado na validação/i)
+
+
+      337 |     // 4. Publish INCOMPLETE — expect 422 anchored to the offending nodes.
+      338 |     await page.getByTestId("publish-button").click();
+    > 339 |     await expect(page.getByText(/reprovado na validação/i)).toBeVisible();
+          |                                                             ^
+      340 |     await expect(page.locator(`[data-testid="node-error-${waitId}"]`)).toBeVisible();
+      341 |     await expect(page.locator(`[data-testid="node-error-${actionId}"]`)).toBeVisible();
+      342 |     await expect(page.locator(`[data-testid="node-error-${endId}"]`)).toBeVisible();
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-builder.spec.ts:339:61
+
+    Error Context: test-results/followup-builder-followup--a8b5b-regar-rollback-desabilitado-chromium/error-context.md
+
+  4) [chromium] › tests/e2e/followup-builder.spec.ts:455:7 › followup flow builder — editor de condição de aresta / ai_classify (Task 6.3) › ai_classify só publica depois de configurar class_match/no_reply/always nas arestas de saída 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Novo fluxo' })
+
+
+      460 |     await page.goto("/app/ai/followups");
+      461 |     const flowName = `E2E Classify ${Date.now()}`;
+    > 462 |     await page.getByRole("button", { name: "Novo fluxo" }).click();
+          |                                                            ^
+      463 |     const dialog = page.getByRole("dialog");
+      464 |     await dialog.getByLabel("Nome").fill(flowName);
+      465 |     await dialog.getByRole("button", { name: "Criar fluxo" }).click();
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-builder.spec.ts:462:60
+
+    Error Context: test-results/followup-builder-followup--bbcdc-always-nas-arestas-de-saída-chromium/error-context.md
+
+  5) [chromium] › tests/e2e/followup-builder.spec.ts:603:7 › followup flow selector no editor do agente (Task 7.2) › admin vincula um fluxo publicado ao agente, salva, e a persistência é provada via API 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'E2E Agente Follow-up 1785166182453' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: 'E2E Agente Follow-up 1785166182453' })
+
+
+      660 |     // --- 3. abre o editor, habilita o toggle e seleciona o fluxo publicado ---
+      661 |     await page.goto(`/app/ai/agents/${agentId}`);
+    > 662 |     await expect(page.getByRole("heading", { name: agentName })).toBeVisible();
+          |                                                                  ^
+      663 |
+      664 |     const followupHeading = page.getByRole("heading", { name: "Follow-up", exact: true });
+      665 |     await followupHeading.scrollIntoViewIfNeeded();
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-builder.spec.ts:662:66
+
+    Error Context: test-results/followup-builder-followup--46628-sistência-é-provada-via-API-chromium/error-context.md
+
+  6) [chromium] › tests/e2e/followup-builder.spec.ts:707:7 › followup flow builder — controle de gatilho na PublishBar (Task 8.5) › operador arma o gatilho de Silêncio (threshold) pela UI; oferece só Manual/Silêncio; PATCH round-trips 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('flow-builder-shell')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('flow-builder-shell')
+
+
+      718 |     try {
+      719 |       await page.goto(`/app/ai/followups/${flow.id}`);
+    > 720 |       await expect(page.getByTestId("flow-builder-shell")).toBeVisible();
+          |                                                            ^
+      721 |
+      722 |       // Draft novo nasce trigger_config={kind:'manual'} — o botão mostra isso sem precisar abrir o popover.
+      723 |       const triggerButton = page.getByTestId("trigger-config-button");
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-builder.spec.ts:720:60
+
+    Error Context: test-results/followup-builder-followup--fd2c8--Silêncio-PATCH-round-trips-chromium/error-context.md
+
+  7) [chromium] › tests/e2e/followup-journey.spec.ts:193:7 › followup — jornada completa (Task 8.3) › silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila 
+
+    Test timeout of 300000ms exceeded.
+
+    Error: locator.click: Test timeout of 300000ms exceeded.
+    Call log:
+      - waiting for getByRole('tab', { name: 'Fila' })
+
+
+      580 |
+      581 |       await page.reload();
+    > 582 |       await page.getByRole("tab", { name: "Fila" }).click();
+          |                                                     ^
+      583 |       await page.getByLabel("Buscar contato").fill(seed.contactName);
+      584 |       const finalRow = page
+      585 |         .locator('[data-testid="queue-row"]', { hasText: seed.contactName })
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-journey.spec.ts:582:53
+
+    Error Context: test-results/followup-journey-followup--2b3ab-→-resposta-→-outcome-→-fila-chromium/error-context.md
+
+  8) [chromium] › tests/e2e/followup-queue.spec.ts:251:7 › followup queue — fila unificada (Task 7.1) › viewer vê a fila (leitura) mas não consegue cancelar — 403 client E server-side 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 401
+
+      122 |
+      123 |   const createContactRes = await page.request.post("/api/v1/contacts", { data: { display_name: contactName } });
+    > 124 |   expect(createContactRes.status()).toBe(201);
+          |                                     ^
+      125 |   const { data: contactResult } = (await createContactRes.json()) as ApiOk<{ contact: { id: string } }>;
+      126 |
+      127 |   const createEnrollmentRes = await page.request.post("/api/v1/ai/followups/enrollments", {
+        at createLiveEnrollment (/Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-queue.spec.ts:124:37)
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/followup-queue.spec.ts:254:18
+
+    Error Context: test-results/followup-queue-followup-qu-f68ba--—-403-client-E-server-side-chromium/error-context.md
+
+  9) [chromium] › tests/e2e/invite-lifecycle.spec.ts:241:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 4. reuso do token: aceitar 2x é idempotente (sem membership duplicada) 
+
+    Test timeout of 180000ms exceeded.
+
+    Error: page.waitForURL: Test ended.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      260 |     await page.goto(`/team/accept-invite/${token}`);
+      261 |     await page.getByRole("button", { name: /Aceitar convite/i }).click();
+    > 262 |     await page.waitForURL(/\/app\/inbox/);
+          |                ^
+      263 |     // sem duplicar membership
+      264 |     expect(await membershipCount()).toBe(1);
+      265 |     await ctx.close();
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/invite-lifecycle.spec.ts:262:16
+
+    Error Context: test-results/invite-lifecycle-ciclo-de--c26d1-e-sem-membership-duplicada--chromium/error-context.md
+
+  10) [chromium] › tests/e2e/kanban-owner-filter.spec.ts:51:5 › filtro por responsável reflete na URL e esconde leads com dono 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'Pedido E2E com responsavel' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: 'Pedido E2E com responsavel' })
+
+
+      55 |   const owned = page.getByRole("heading", { name: "Pedido E2E com responsavel" });
+      56 |   const unowned = page.getByRole("heading", { name: "Pedido E2E sem responsavel" });
+    > 57 |   await expect(owned).toBeVisible();
+         |                       ^
+      58 |   await expect(unowned).toBeVisible();
+      59 |   // A badge de ausência de dono está presente em ao menos um card.
+      60 |   await expect(page.getByText("Sem responsável").first()).toBeVisible();
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/kanban-owner-filter.spec.ts:57:23
+
+    Error Context: test-results/kanban-owner-filter-filtro-94327-RL-e-esconde-leads-com-dono-chromium/error-context.md
+
+  11) [chromium] › tests/e2e/password-recovery.spec.ts:65:5 › recuperar senha: forgot → e-mail → nova senha → login com a nova 
+
+    Error: seed org: Could not query the database for the schema cache. Retrying.
+
+      52 |     .select("id")
+      53 |     .single();
+    > 54 |   if (orgError || !org) throw new Error(`seed org: ${orgError?.message}`);
+         |                               ^
+      55 |
+      56 |   const { error: memberError } = await admin.from("user_organizations").insert({
+      57 |     user_id: data.user.id,
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/password-recovery.spec.ts:54:31
+
+    Error Context: test-results/password-recovery-recupera-d0a34-va-senha-→-login-com-a-nova-chromium/error-context.md
+
+  12) [chromium] › tests/e2e/risk-radar.spec.ts:70:5 › o atendente assume a demanda direto do Radar e vira o responsável 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: page.waitForURL: Test timeout of 30000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+      navigated to "http://localhost:3002/login?next=%2Fapp%2Fradar"
+    ============================================================
+
+      49 | async function gotoRadar(page: Page): Promise<void> {
+      50 |   await page.getByRole("link", { name: "Radar" }).click();
+    > 51 |   await page.waitForURL(/\/app\/radar/);
+         |              ^
+      52 |   await expect(page.getByRole("heading", { name: "Radar de risco" })).toBeVisible();
+      53 | }
+      54 |
+        at gotoRadar (/Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/risk-radar.spec.ts:51:14)
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/risk-radar.spec.ts:72:3
+
+    Error Context: test-results/risk-radar-o-atendente-ass-b35d9--Radar-e-vira-o-responsável-chromium/error-context.md
+
+  13) [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:111:7 › J1 — onboarding do dono numa instalação fresca › J1.1 login do bootstrap cai no wizard (org sem onboarded_at) 
+
+    {
+      code: 'PGRST002',
+      details: null,
+      hint: null,
+      message: 'Could not query the database for the schema cache. Retrying.'
+    }
+
+  14) [chromium] › tests/e2e/vps-webhook-outbound-ssrf.spec.ts:95:7 › J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta) › regra call_webhook para host interno → run falha e receiver recebe ZERO hits 
+
+    Test timeout of 180000ms exceeded.
+
+    Error: locator.click: Test timeout of 180000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: 'Webhooks' })
+
+
+      103 |       // --- fonte inbound (para gerar o lead que dispara a regra) ---
+      104 |       await login(page, creds.users.manager!.email);
+    > 105 |       await page.getByRole("link", { name: "Webhooks" }).click();
+          |                                                          ^
+      106 |       await page.waitForURL(/\/app\/webhooks/);
+      107 |       await page.getByRole("button", { name: /Nova fonte|Criar primeira fonte/ }).click();
+      108 |       await page.locator("#src-name").fill(SOURCE_NAME);
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/vps-webhook-outbound-ssrf.spec.ts:105:58
+
+    Error Context: test-results/vps-webhook-outbound-ssrf--e9f14-e-receiver-recebe-ZERO-hits-chromium/error-context.md
+
+    Error Context: test-results/vps-webhook-outbound-ssrf--e9f14-e-receiver-recebe-ZERO-hits-chromium/error-context.md
+
+  15) [chromium] › tests/e2e/webhooks.spec.ts:102:7 › webhooks & automações — fluxo completo › cria fonte, cria automação, dispara lead real, confere atividade e kanban; agent sem acesso 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: 'Webhooks' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('link', { name: 'Webhooks' })
+
+
+      112 |       // --- Step 1: login como manager; sidebar mostra "Webhooks" ---
+      113 |       await login(page, creds.users.manager!.email);
+    > 114 |       await expect(page.getByRole("link", { name: "Webhooks" })).toBeVisible();
+          |                                                                  ^
+      115 |       await page.getByRole("link", { name: "Webhooks" }).click();
+      116 |       await page.waitForURL(/\/app\/webhooks/);
+      117 |
+        at /Users/rafaelmelgaco/DeskcommCRM-canais/tests/e2e/webhooks.spec.ts:114:66
+
+    Error Context: test-results/webhooks-webhooks-automaçõ-64c41-e-e-kanban-agent-sem-acesso-chromium/error-context.md
+
+  Slow test file: [chromium] › tests/e2e/followup-journey.spec.ts (5.0m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  15 failed
+    [chromium] › tests/e2e/error-pages.spec.ts:16:7 › error pages › /500 renders erro interno ──────
+    [chromium] › tests/e2e/followup-builder.spec.ts:239:7 › followup flow builder — canvas visual (Task 6.2) › clica no nó Aguardar e configura 10min; clica no nó Ação e configura o prompt_hint 
+    [chromium] › tests/e2e/followup-builder.spec.ts:283:7 › followup flow builder — canvas visual (Task 6.2) › fluxo completo: montar, publicar incompleto (422 ancorado), corrigir, publicar, recarregar, rollback desabilitado 
+    [chromium] › tests/e2e/followup-builder.spec.ts:455:7 › followup flow builder — editor de condição de aresta / ai_classify (Task 6.3) › ai_classify só publica depois de configurar class_match/no_reply/always nas arestas de saída 
+    [chromium] › tests/e2e/followup-builder.spec.ts:603:7 › followup flow selector no editor do agente (Task 7.2) › admin vincula um fluxo publicado ao agente, salva, e a persistência é provada via API 
+    [chromium] › tests/e2e/followup-builder.spec.ts:707:7 › followup flow builder — controle de gatilho na PublishBar (Task 8.5) › operador arma o gatilho de Silêncio (threshold) pela UI; oferece só Manual/Silêncio; PATCH round-trips 
+    [chromium] › tests/e2e/followup-journey.spec.ts:193:7 › followup — jornada completa (Task 8.3) › silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila 
+    [chromium] › tests/e2e/followup-queue.spec.ts:251:7 › followup queue — fila unificada (Task 7.1) › viewer vê a fila (leitura) mas não consegue cancelar — 403 client E server-side 
+    [chromium] › tests/e2e/invite-lifecycle.spec.ts:241:7 › ciclo de vida do convite (ponta a ponta + adversarial) › 4. reuso do token: aceitar 2x é idempotente (sem membership duplicada) 
+    [chromium] › tests/e2e/kanban-owner-filter.spec.ts:51:5 › filtro por responsável reflete na URL e esconde leads com dono 
+    [chromium] › tests/e2e/password-recovery.spec.ts:65:5 › recuperar senha: forgot → e-mail → nova senha → login com a nova 
+    [chromium] › tests/e2e/risk-radar.spec.ts:70:5 › o atendente assume a demanda direto do Radar e vira o responsável 
+    [chromium] › tests/e2e/vps-fresh-onboarding.spec.ts:111:7 › J1 — onboarding do dono numa instalação fresca › J1.1 login do bootstrap cai no wizard (org sem onboarded_at) 
+    [chromium] › tests/e2e/vps-webhook-outbound-ssrf.spec.ts:95:7 › J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta) › regra call_webhook para host interno → run falha e receiver recebe ZERO hits 
+    [chromium] › tests/e2e/webhooks.spec.ts:102:7 › webhooks & automações — fluxo completo › cria fonte, cria automação, dispara lead real, confere atividade e kanban; agent sem acesso 
+  14 did not run
+  29 passed (5.2m)
+ ELIFECYCLE  Command failed with exit code 1.
+exit=1

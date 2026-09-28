@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "6-respostas-prontas",
+  "mensagem": "Que respostas prontas a gente já tem cadastradas? Lista o nome de cada uma pra mim.",
+  "esperado": "crm_list_message_templates",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Não tenho uma ferramenta disponível aqui para consultar a lista de respostas prontas cadastradas. Se você me passar os nomes ou IDs delas, consigo ajudar a revisar e preencher uma resposta específica.",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Não tenho uma ferramenta disponível aqui para consultar a lista de respostas prontas cadastradas. Se você me passar os nomes ou IDs delas, consigo ajudar a revisar e preencher uma resposta específica.",
+      "finish_reason": "stop",
+      "tokens_in": 1440,
+      "tokens_out": 73,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 2510,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "77b63cc2-7b50-4a17-87a8-ad49cae9795d",
+  "medido_em": "2026-08-06T16:32:39.453Z"
+}

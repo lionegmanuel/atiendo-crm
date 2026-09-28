@@ -1,0 +1,13 @@
+lado,sha,rodada,resultado,arquivo_que_falhou
+base,99cd0fc,1,verde,
+branch,6a49417,1,verde,
+base,99cd0fc,2,verde,
+branch,6a49417,2,verde,
+base,99cd0fc,3,verde,
+branch,6a49417,3,verde,
+base,99cd0fc,4,verde,
+branch,6a49417,4,verde,
+base,99cd0fc,5,verde,
+branch,6a49417,5,verde,
+base,99cd0fc,6,verde,
+branch,6a49417,6,verde,

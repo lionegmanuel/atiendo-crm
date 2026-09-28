@@ -1,0 +1,45 @@
+# Caddy — reverse proxy + HTTPS automático (Let's Encrypt) para o DeskcommCRM.
+# HTTP→HTTPS e emissão/renovação de certificado são automáticos.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip
+
+	# `route` é obrigatório aqui: fora dele o Caddy reordena as diretivas pela
+	# ordem padrão dele, na qual `respond` vem DEPOIS de `reverse_proxy` — o
+	# catch-all atendia primeiro e o 403 abaixo nunca era alcançado (medido: o
+	# POST sem assinatura ainda respondia 200). Dentro de `route`, vale a ordem
+	# escrita.
+	route {
+		# O webhook GLOBAL do WAHA (sem token na URL) não é publicado na internet.
+		#
+		# Nesta stack o WAHA fala com o app pela rede interna do Docker
+		# (http://app:3000/api/v1/webhooks/waha), então essa rota nunca precisou ser
+		# alcançável de fora — e estando aberta, qualquer pessoa que soubesse o
+		# endereço injetava mensagem falsa no CRM, escolhia o remetente e fazia o
+		# WhatsApp do dono responder para um número arbitrário (queimando o
+		# orçamento de IA e arriscando banimento do número).
+		#
+		# Quem roda o WAHA em OUTRO servidor deve usar a rota por tenant,
+		# /api/v1/webhooks/waha/<token>, que carrega um token imprevisível na URL e
+		# continua pública — é a variante canônica para essa topologia.
+		@waha_global path /api/v1/webhooks/waha
+		respond @waha_global 403
+
+		# O runner de agente de IA (ToolLoop) pode levar até ~5min por requisição.
+		# Timeout estendido só nessa rota pra o proxy não cortar a resposta longa.
+		@agentrun path /api/internal/agents/run*
+		reverse_proxy @agentrun app:3000 {
+			transport http {
+				read_timeout 320s
+				write_timeout 320s
+			}
+		}
+
+		# Todo o resto do app.
+		reverse_proxy app:3000
+	}
+}

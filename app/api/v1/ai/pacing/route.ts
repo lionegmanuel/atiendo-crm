@@ -1,0 +1,239 @@
+import { requireSupportWrite } from "@/lib/impersonate/support";
+/**
+ * Épico Operação Visível (F2ii) — knobs do anti-ban por conexão.
+ *
+ * GET  → todas as conexões da org com knobs efetivos (override sobre default),
+ *        overrides crus, defaults e bounds (a tela explica sem cravar números).
+ * PUT  → upsert de channel_knobs para UMA conexão + teto diário em
+ *        channel_sessions.daily_message_limit (fonte única — regra dura nº 3).
+ *        Campo null = volta ao default conservador do engine.
+ */
+import { randomUUID } from "node:crypto";
+import { type NextRequest } from "next/server";
+
+import { ok, fail } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
+import { requireRole } from "@/lib/auth/require-role";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { PROVIDERS_DE_MENSAGEM } from "@/lib/channels/capabilities";
+import {
+  pacingKnobsUpdateSchema,
+  knobsView,
+  effectiveKnobs,
+  windowIsValid,
+  WARMUP_PULADO,
+  type ChannelKnobsRow,
+} from "@/lib/ai/pacing-knobs";
+
+export const dynamic = "force-dynamic";
+
+const KNOB_COLUMNS =
+  "throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, allow_sunday, timezone, warmup_daily_caps, number_activated_at";
+
+/**
+ * `organizations.timezone`, para a tela mostrar o fuso em que o motor avalia a
+ * janela de quem não escolheu um no número (`fusoDaJanela`). Falha vira `null`
+ * e a tela cai no padrão — é exibição, não pode derrubar a ficha.
+ */
+async function lerFusoDaOrganizacao(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+): Promise<string | null> {
+  const { data } = await admin.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
+  return (data as { timezone?: string | null } | null)?.timezone ?? null;
+}
+
+export async function GET(): Promise<Response> {
+  const requestId = randomUUID();
+  const authz = await requireRole("agent", { requestId, resource: "channel_knobs" });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  const { org } = authz;
+
+  const admin = createAdminClient();
+  const [{ data: sessions, error: sErr }, { data: knobs, error: kErr }, fusoDaOrg] = await Promise.all([
+    admin
+      .from("channel_sessions")
+      .select("id, waha_session_name, display_name, phone_number, status, daily_message_limit")
+      .eq("organization_id", org.orgId)
+      // Canal arquivado foi excluído pelo usuário: não volta como opção aqui.
+      .is("archived_at", null)
+      // Ritmo de envio é regra de canal de MENSAGEM. A linha de chamada de voz
+      // (spec 18) não dispara nada e não tem intervalo a calibrar.
+      .in("provider", [...PROVIDERS_DE_MENSAGEM])
+      .order("created_at", { ascending: true }),
+    admin
+      .from("channel_knobs")
+      .select(`channel_session_id, ${KNOB_COLUMNS}`)
+      .eq("organization_id", org.orgId),
+    lerFusoDaOrganizacao(admin, org.orgId),
+  ]);
+  if (sErr || kErr) {
+    return fail("internal_error", t("Falha ao carregar conexões/knobs."), 500, { requestId });
+  }
+
+  const byuSession = new Map<string, ChannelKnobsRow>(
+    (knobs ?? []).map((k) => [k.channel_session_id as string, k as unknown as ChannelKnobsRow]),
+  );
+  const items = (sessions ?? []).map((s) => ({
+    channel_session: s,
+    ...knobsView(byuSession.get(s.id) ?? null, new Date(), fusoDaOrg),
+  }));
+  return ok({ items }, { requestId });
+}
+
+export async function PUT(req: NextRequest): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
+
+  const requestId = randomUUID();
+  const authz = await requireRole("manager", { requestId, resource: "channel_knobs" });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  const { user: authUser, org } = authz;
+
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return fail("invalid_request", t("Body JSON inválido."), 400, { requestId });
+  }
+  const parsed = pacingKnobsUpdateSchema.safeParse(raw);
+  if (!parsed.success) {
+    return fail("validation_failed", t("Campos inválidos."), 422, {
+      requestId,
+      details: parsed.error.flatten(),
+    });
+  }
+  const {
+    channel_session_id,
+    daily_message_limit,
+    skip_warmup,
+    number_activated_at,
+    ...camposDiretos
+  } = parsed.data;
+  // `skip_warmup` é pergunta da TELA; a coluna guarda a forma que o motor lê.
+  // A tradução mora aqui, num lugar só: a tela não deveria precisar conhecer o
+  // formato dos degraus para dizer "este número já está aquecido".
+  const knobFields = {
+    ...camposDiretos,
+    // `null` na data é "não estou declarando", NUNCA "grave nulo": esta é a
+    // única coluna `not null` da tabela, e um null explícito ANULA o
+    // `default now()` em vez de cair nele — 23502, e a ficha inteira deixava de
+    // salvar para quem nunca informou a data (toda instalação nova). Omitindo,
+    // a linha nova nasce com `now()` (idade 0 — o "recém-criado" que a tela
+    // promete) e a linha existente preserva a data que já tem, em vez de
+    // rejuvenescer o número em silêncio de volta ao teto de 20 envios/dia.
+    ...(number_activated_at != null ? { number_activated_at } : {}),
+    ...(skip_warmup !== undefined
+      ? { warmup_daily_caps: skip_warmup ? [...WARMUP_PULADO] : null }
+      : {}),
+  };
+
+  const admin = createAdminClient();
+  const { data: session } = await admin
+    .from("channel_sessions")
+    .select("id")
+    .eq("id", channel_session_id)
+    .eq("organization_id", org.orgId)
+    // O MESMO filtro do GET, e não por simetria: sem ele a tela sumia com a
+    // conexão excluída e a rota continuava aceitando gravar knobs e teto diário
+    // nela — configuração viva pendurada num canal que não envia mais, à espera
+    // de confundir quem investigar o próximo envio que não saiu.
+    .is("archived_at", null)
+    .maybeSingle();
+  if (!session) {
+    return fail("session_not_found", t("Conexão não encontrada nesta organização."), 404, {
+      requestId,
+    });
+  }
+
+  // Valida a JANELA RESULTANTE (enviado sobre o estado atual): update parcial
+  // não pode deixar start >= end no efetivo.
+  const { data: currentRow } = await admin
+    .from("channel_knobs")
+    .select(KNOB_COLUMNS)
+    .eq("organization_id", org.orgId)
+    .eq("channel_session_id", channel_session_id)
+    .maybeSingle();
+  const merged: ChannelKnobsRow = {
+    ...((currentRow as unknown as ChannelKnobsRow) ?? {
+      throttle_ms: null,
+      jitter_max_ms: null,
+      window_start_hour: null,
+      window_end_hour: null,
+      allow_sunday: null,
+      timezone: null,
+      warmup_daily_caps: null,
+    }),
+    ...knobFields,
+  };
+  const eff = effectiveKnobs(merged);
+  if (!windowIsValid(eff.windowStartHour, eff.windowEndHour)) {
+    return fail(
+      "validation_failed",
+      `Janela inválida: início (${eff.windowStartHour}h) precisa ser antes do fim (${eff.windowEndHour}h).`,
+      422,
+      { requestId },
+    );
+  }
+
+  if (Object.keys(knobFields).length > 0) {
+    const { error: upErr } = await admin.from("channel_knobs").upsert(
+      {
+        organization_id: org.orgId,
+        channel_session_id,
+        ...knobFields,
+      },
+      { onConflict: "organization_id,channel_session_id" },
+    );
+    if (upErr) {
+      // O motivo cru vai em `details`, não na `message` que o operador lê: foi a
+      // ausência dele que transformou um `not null` num diagnóstico de horas —
+      // nem a tela nem o log diziam QUAL campo o banco recusou.
+      return fail("internal_error", t("Falha ao salvar os knobs."), 500, {
+        requestId,
+        details: { motivo: upErr.message },
+      });
+    }
+  }
+
+  if (daily_message_limit !== undefined) {
+    const { error: dlErr } = await admin
+      .from("channel_sessions")
+      .update({ daily_message_limit })
+      .eq("id", channel_session_id)
+      .eq("organization_id", org.orgId);
+    if (dlErr) {
+      return fail("internal_error", t("Falha ao salvar o teto diário."), 500, { requestId });
+    }
+  }
+
+  await audit({
+    action: "ai.pacing_knobs_updated",
+    actorUserId: authUser.id,
+    organizationId: org.orgId,
+    resourceType: "channel_knobs",
+    resourceId: channel_session_id,
+    metadata: { ...knobFields, daily_message_limit: daily_message_limit ?? null },
+  });
+
+  const { data: savedRow } = await admin
+    .from("channel_knobs")
+    .select(KNOB_COLUMNS)
+    .eq("organization_id", org.orgId)
+    .eq("channel_session_id", channel_session_id)
+    .maybeSingle();
+  return ok(
+    {
+      channel_session_id,
+      ...knobsView(
+        (savedRow as unknown as ChannelKnobsRow) ?? null,
+        new Date(),
+        await lerFusoDaOrganizacao(admin, org.orgId),
+      ),
+    },
+    { requestId },
+  );
+}

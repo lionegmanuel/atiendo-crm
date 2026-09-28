@@ -1,0 +1,64 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "10-mandar-resposta-pronta",
+  "mensagem": "Pega a resposta pronta de confirmação de consulta, preenche com o nome do paciente e me mostra como vai ficar.",
+  "esperado": "crm_render_message_template",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Não encontrei uma resposta pronta chamada **“confirmação de consulta”**. As respostas disponíveis são três variações de “recebemos seu contato e retornamos em breve”.\n\nTambém preciso do contato ou lead do paciente para preencher o nome. Pode me indicar qual é o paciente?",
+  "ferramentas": [
+    "crm_list_message_templates"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 2172,
+      "tokens_out": 38,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_message_templates",
+          "args": {},
+          "result": {
+            "modelos": [
+              {
+                "id": "deb0d36c-d36b-494e-bd1b-aa247f51858c",
+                "titulo": "Resposta QA 1785966451563",
+                "corpo": "Olá {{nome}}, recebemos seu contato e retornamos em breve.",
+                "atalho": null,
+                "compartilhado": false
+              },
+              {
+                "id": "1d99ce13-996b-44a0-9c47-0fbaecfad5fb",
+                "titulo": "Resposta QA 1785965730905",
+                "corpo": "Olá {{nome}}, recebemos seu contato e retornamos em breve.",
+                "atalho": null,
+                "compartilhado": false
+              },
+              {
+                "id": "83aee375-9447-4e29-b053-3d8f394fdff8",
+                "titulo": "Resposta QA 1785944501033",
+                "corpo": "Olá {{nome}}, recebemos seu contato e retornamos em breve.",
+                "atalho": null,
+                "compartilhado": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Não encontrei uma resposta pronta chamada **“confirmação de consulta”**. As respostas disponíveis são três variações de “recebemos seu contato e retornamos em breve”.\n\nTambém preciso do contato ou lead do paciente para preencher o nome. Pode me indicar qual é o paciente?",
+      "finish_reason": "stop",
+      "tokens_in": 2425,
+      "tokens_out": 62,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 3608,
+  "cost_cents": 2,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "db986d8b-d6ac-411e-87f9-37427871b2e6",
+  "medido_em": "2026-08-06T16:18:28.978Z"
+}

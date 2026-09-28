@@ -1,0 +1,68 @@
+# Merge entre sessões paralelas.
+#
+# O conflito que mais custa neste repo não é o do CHANGELOG (o git auto-mescla
+# aquele: medido entre os PRs #354 e #349, `git merge-file` sai com 0). É o dos
+# dois arquivos append-only que TODA migration toca — e neles os dois lados
+# estão sempre certos: cada sessão acrescentou a sua linha no fim.
+
+# `union` = fica com os dois lados, sem marcador. Para uma tabela de registro,
+# é a resolução que um humano faria à mão em 100% dos casos.
+supabase/migrations/MANIFEST.md merge=union
+
+# ─── E por que `supabase/baseline.sql` NÃO está aqui ────────────────────────
+#
+# Porque `union` nele é pior que o conflito. Medido num merge real seguido de
+# aplicação num Postgres 17: o merge sai LIMPO (exit 0, "Merge made by the
+# 'ort' strategy", zero marcadores) e o SQL resultante intercala duas funções —
+# uma declarada e nunca definida, a outra com o corpo da primeira. Aí:
+#
+#   - no `install.sh` (banco novo, ON_ERROR_STOP=1) morre com syntax error;
+#   - no `update.sh` do CLIENTE (sem ON_ERROR_STOP) sai com codigo 0, deixando
+#     zero funções criadas e engolindo o resto do arquivo em silêncio.
+#
+# O marcador de conflito, aqui, é FEATURE: ele é a única coisa que obriga
+# alguém a olhar antes de o arquivo chegar à VPS de um cliente. `merge=binary`
+# tem o mesmo defeito pelo outro lado (fica com "ours" e um `git add` descarta
+# o outro lado sem ninguém ver).
+#
+# O conserto certo para o baseline é de processo, não de atributo: apêndice
+# idempotente por migration, como a doutrina de migrations do CLAUDE.md manda.
+
+# ─── Fim de linha fixo em LF pra todo .sql ───────────────────────────────────
+#
+# supabase/baseline.sql tem blocos que se autoconferem por md5(body) contra uma
+# constante `v_md5` gravada no próprio arquivo (ex.: migration 0191, playbook
+# `agendamento`). Sem esta regra, um clone com `core.autocrlf=true` (padrão do
+# instalador git pra Windows) faz checkout do arquivo com CRLF — o hash
+# declarado foi calculado sobre o blob LF do git, então o corpo inserido no
+# banco (lido do disco, já CRLF) diverge do declarado e o self-check do
+# `do $pub$ ... end $pub$;` derruba `pnpm test:db` antes de qualquer teste
+# rodar. CI passa porque `ubuntu-latest` não converte por padrão — só quem
+# clona no Windows vê a falha. `eol=lf` fixa LF no checkout independente do
+# `core.autocrlf` de quem clonou.
+*.sql text eol=lf
+
+# ─── Fim de linha fixo em LF para TODO arquivo de texto ──────────────────────
+#
+# A regra de `*.sql` acima resolveu um caso de um problema que é geral, e o
+# resto dele continuava de pé. Num clone feito no Windows com o padrão do
+# instalador git (`core.autocrlf=true`), TODO arquivo de texto chega ao disco
+# com CRLF — e os gates deste repo leem arquivo de texto o tempo todo: o
+# workflow YAML, o mapa de jornadas, o selo da tradução, a lista de specs do
+# e2e. Um `\r` no fim da linha derruba regex ancorada e comparação de string.
+#
+# Medido num clone limpo desta main, rodando `pnpm test:unit` em Windows:
+#
+#     core.autocrlf=true  (padrão)  ->  9 arquivos / 20 casos vermelhos
+#     core.autocrlf=false           ->  5 arquivos /  8 casos vermelhos
+#
+# Os 5 arquivos e 12 casos da diferença NÃO têm defeito nenhum: são
+# `tag-so-nasce-da-main`, `e2e-cobertura-completa`, `numero-de-jornada-e-unico`,
+# `traducao-nao-defasa` e `marca-logo-spec-ancora-a-rota` lendo `\r` que o CI
+# nunca vê, porque `ubuntu-latest` não converte. É o mesmo raciocínio que o
+# bloco de `*.sql` já escreveu — só que ele vale para o repo inteiro.
+#
+# `text=auto` deixa o git detectar binário sozinho; só o que ele já trata como
+# texto é normalizado. Os blobs JÁ estão em LF, então isto não reescreve
+# arquivo nenhum: muda apenas o que o checkout entrega.
+* text=auto eol=lf

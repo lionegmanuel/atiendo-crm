@@ -1,0 +1,10 @@
+14:48:52 | d9e198c1 | tools MCP bloqueadas no turno do engine (envio/handoff são do harness) | 
+14:49:32 | d9e198c1 | tools MCP bloqueadas no turno do engine (envio/handoff são do harness) | 
+14:49:55 | d9e198c1 | turno do agente concluído | 1
+14:50:02 | d9e198c1 | tools MCP bloqueadas no turno do engine (envio/handoff são do harness) | 
+14:50:32 | d9e198c1 | turno do agente concluído | 1
+14:51:27 | d9e198c1 | turno pulado — lead em handoff humano (bot silenciado) | 
+14:54:41 | 4435a78d | tools MCP bloqueadas no turno do engine (envio/handoff são do harness) | 
+14:55:09 | 4435a78d | turno do agente concluído | 1
+14:55:46 | 4435a78d | handoff humano aplicado (force_human + silêncio + crons cancelados + inbox) | requested_human
+14:55:46 | 4435a78d | handoff humano acionado por pedido explícito do lead (detecção determinísti | 

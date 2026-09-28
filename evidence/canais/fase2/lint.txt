@@ -1,0 +1,588 @@
+
+> deskcomm-crm@0.1.0 lint /Users/rafaelmelgaco/DeskcommCRM-canais
+> eslint .
+
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/admin/(protected)/lgpd/_client.tsx
+  4:10  warning  'Button' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/admin/(protected)/tenants/new/_form.tsx
+  143:21  warning  Compilation Skipped: Use of incompatible library
+
+This API returns functions which cannot be memoized without leading to stale UI. To prevent this, by default React Compiler will skip memoizing this component/hook. However, you may see issues if values from this API are passed to other components/hooks that are memoized.
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/admin/(protected)/tenants/new/_form.tsx:143:21
+  141 |   });
+  142 |
+> 143 |   const planValue = watch("plan");
+      |                     ^^^^^ React Hook Form's `useForm()` API returns a `watch()` function which cannot be memoized safely.
+  144 |
+  145 |   return (
+  146 |     <div className="mx-auto max-w-2xl space-y-6">  react-hooks/incompatible-library
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/ai/agents/_components/AgentsList.tsx
+  25:9  warning  The 'agents' logical expression could make the dependencies of useMemo Hook (at line 36) change on every render. To fix this, wrap the initialization of 'agents' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/ai/agents/_components/RenameAgentDialog.tsx
+  32:15  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/ai/agents/_components/RenameAgentDialog.tsx:32:15
+  30 |
+  31 |   useEffect(() => {
+> 32 |     if (open) setName(agent.name);
+     |               ^^^^^^^ Avoid calling setState() directly within an effect
+  33 |   }, [open, agent.name]);
+  34 |
+  35 |   const onSubmit = (e: React.FormEvent) => {  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/ai/followups/[id]/_components/TriggerConfigControl.tsx
+  100:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/ai/followups/[id]/_components/TriggerConfigControl.tsx:100:5
+   98 |     if (open) return;
+   99 |     const next = parseTriggerConfig(triggerConfig);
+> 100 |     setSaved(next);
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  101 |     setForm(next);
+  102 |   }, [triggerConfig, open]);
+  103 |  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/templates/_components/TemplateFormDialog.tsx
+  70:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/templates/_components/TemplateFormDialog.tsx:70:5
+  68 |   React.useEffect(() => {
+  69 |     if (!open) return;
+> 70 |     setTitle(template?.title ?? "");
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  71 |     setBody(template?.body ?? "");
+  72 |     setShortcut(template?.shortcut ?? "");
+  73 |     setShared(template ? template.owner_user_id === null : false);  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/webhooks/_components/CreateSourceDialog.tsx
+  51:7  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/webhooks/_components/CreateSourceDialog.tsx:51:7
+  49 |   React.useEffect(() => {
+  50 |     if (!open) {
+> 51 |       setName("");
+     |       ^^^^^^^ Avoid calling setState() directly within an effect
+  52 |       setPipelineId("");
+  53 |       setStageId("");
+  54 |       setRedirectTo("");  react-hooks/set-state-in-effect
+  59:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/webhooks/_components/CreateSourceDialog.tsx:59:5
+  57 |
+  58 |   React.useEffect(() => {
+> 59 |     setStageId("");
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  60 |   }, [pipelineId]);
+  61 |
+  62 |   const onSubmit = async (e: React.FormEvent) => {                  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/webhooks/_components/RuleEditor.tsx
+  114:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/app/webhooks/_components/RuleEditor.tsx:114:5
+  112 |   React.useEffect(() => {
+  113 |     if (!open) return;
+> 114 |     setName(rule?.name ?? "");
+      |     ^^^^^^^ Avoid calling setState() directly within an effect
+  115 |     setTriggerEvent((rule?.trigger_event as TriggerEvent) ?? "");
+  116 |     setConditions(
+  117 |       rule?.conditions.map((c) => ({ field: c.field, op: c.op, value: c.value })) ?? [],  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/design/lib/variant-context.tsx
+  114:9  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/design/lib/variant-context.tsx:114:9
+  112 |       if (raw) {
+  113 |         const parsed = JSON.parse(raw) as Partial<State>;
+> 114 |         setState((prev) => ({ ...prev, ...parsed }));
+      |         ^^^^^^^^ Avoid calling setState() directly within an effect
+  115 |       }
+  116 |     } catch {}
+  117 |     setHydrated(true);  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/global-error.tsx
+  20:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/app/global-error.tsx:20:5
+  18 |   useEffect(() => {
+  19 |     const id = Sentry.captureException(error);
+> 20 |     setEventId(id);
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  21 |   }, [error]);
+  22 |
+  23 |   const displayId = eventId ?? error.digest ?? "—";  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/ai/AgentEditor.tsx
+  107:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/ai/AgentEditor.tsx:107:5
+  105 |   React.useEffect(() => {
+  106 |     if (!agent) return;
+> 107 |     setFormState((prev) => prev ?? buildFormState(agent));
+      |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  108 |     setBaselineState((prev) => prev ?? buildFormState(agent));
+  109 |   }, [agent]);
+  110 |  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/ai/BudgetCard.tsx
+  130:7  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/ai/BudgetCard.tsx:130:7
+  128 |   useEffect(() => {
+  129 |     if (open) {
+> 130 |       setLimitBrl((status.monthly_limit_cents / 100).toFixed(2));
+      |       ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  131 |       setThresholdPct(status.alarm_threshold_pct);
+  132 |       setAction(status.action_at_100pct);
+  133 |     }  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/auth/TOTPInput.tsx
+  38:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/auth/TOTPInput.tsx:38:5
+  36 |
+  37 |   useEffect(() => {
+> 38 |     setChars(Array.from({ length: LENGTH }, (_, i) => value[i] ?? ""));
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  39 |   }, [value]);
+  40 |
+  41 |   useEffect(() => {  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/connections/AntiBanSheet.tsx
+  67:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/connections/AntiBanSheet.tsx:67:5
+  65 |
+  66 |   useEffect(() => {
+> 67 |     setForm(item ? fromItem(item) : null);
+     |     ^^^^^^^ Avoid calling setState() directly within an effect
+  68 |   }, [item]);
+  69 |
+  70 |   const label = useMemo(() => {  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/contacts/MergeDialog.tsx
+  52:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/contacts/MergeDialog.tsx:52:5
+  50 |     if (!open || !queueItemId) return;
+  51 |     let cancelled = false;
+> 52 |     setLoading(true);
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  53 |     const supabase = createClient();
+  54 |     supabase
+  55 |       .from("merge_queue")  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/feedback/SegmentError.tsx
+  23:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/feedback/SegmentError.tsx:23:5
+  21 |       tags: segment ? { segment } : undefined,
+  22 |     });
+> 23 |     setEventId(id);
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  24 |   }, [error, segment]);
+  25 |
+  26 |   const displayId = eventId ?? error.digest ?? "—";  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/inbox/CRMSidePanel.tsx
+  118:7  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/inbox/CRMSidePanel.tsx:118:7
+  116 |   useEffect(() => {
+  117 |     if (!contactId) {
+> 118 |       setLeads(null);
+      |       ^^^^^^^^ Avoid calling setState() directly within an effect
+  119 |       setOrders(null);
+  120 |       setActivities(null);
+  121 |       return;  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/inbox/composer/AttachmentPreviewDialog.tsx
+  20:19  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/inbox/composer/AttachmentPreviewDialog.tsx:20:19
+  18 | export function AttachmentPreviewDialog({ file, sending, onCancel, onSend }: Props) {
+  19 |   const [caption, setCaption] = useState("");
+> 20 |   useEffect(() => setCaption(""), [file]);
+     |                   ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  21 |
+  22 |   const objectUrl = useMemo(() => (file && /^(image|video)\//.test(file.type) ? URL.createObjectURL(file) : null), [file]);
+  23 |   useEffect(() => () => {  react-hooks/set-state-in-effect
+  39:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       @next/next/no-img-element
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/inbox/media/ImageMedia.tsx
+  43:9   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  48:11  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/inbox/media/StickerMedia.tsx
+  16:7  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/kanban/KanbanBoard.tsx
+  123:9  warning  The 'data' conditional could make the dependencies of useMemo Hook (at line 141) change on every render. To fix this, wrap the initialization of 'data' in its own useMemo() Hook      react-hooks/exhaustive-deps
+  123:9  warning  The 'data' conditional could make the dependencies of useCallback Hook (at line 205) change on every render. To fix this, wrap the initialization of 'data' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/kanban/LeadTimeline.tsx
+  7:3  warning  'actorLabel' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/kanban/NewLeadDialog.tsx
+  125:19  warning  Compilation Skipped: Use of incompatible library
+
+This API returns functions which cannot be memoized without leading to stale UI. To prevent this, by default React Compiler will skip memoizing this component/hook. However, you may see issues if values from this API are passed to other components/hooks that are memoized.
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/kanban/NewLeadDialog.tsx:125:19
+  123 |   }
+  124 |
+> 125 |   const stageId = form.watch("stage_id");
+      |                   ^^^^ React Hook Form's `useForm()` API returns a `watch()` function which cannot be memoized safely.
+  126 |
+  127 |   return (
+  128 |     <Dialog open={open} onOpenChange={onOpenChange}>  react-hooks/incompatible-library
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/kanban/OwnerBadge.tsx
+  1:10  warning  'Badge' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/components/shell/SearchTrigger.tsx
+  9:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/hooks/ai/useDebugToggle.ts
+  17:28  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/hooks/ai/useDebugToggle.ts:17:28
+  15 |     try {
+  16 |       const stored = window.localStorage.getItem(KEY);
+> 17 |       if (stored === null) setEnabled(defaultFor(role));
+     |                            ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  18 |       else setEnabled(stored === "1");
+  19 |     } catch {
+  20 |       /* SSR / disabled */  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/hooks/kanban/useBoard.ts
+  52:9  warning  The 'queryKey' array makes the dependencies of useCallback Hook (at line 111) change on every render. To fix this, wrap the initialization of 'queryKey' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/hooks/leads/useLeadTimeline.ts
+  68:9  warning  The 'queryKey' array makes the dependencies of useCallback Hook (at line 88) change on every render. To fix this, wrap the initialization of 'queryKey' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/hooks/realtime/useRealtimeChannel.ts
+  174:7  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/hooks/realtime/useRealtimeChannel.ts:174:7
+  172 |   useEffect(() => {
+  173 |     if (!enabled) {
+> 174 |       setStatus("closed");
+      |       ^^^^^^^^^ Avoid calling setState() directly within an effect
+  175 |       return;
+  176 |     }
+  177 |     const supabase = createClient();  react-hooks/set-state-in-effect
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/lib/agent-engine/edge/llm/run-model-call.ts
+  97:17  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/lib/agent-engine/guardrails/promise/engine.ts
+  93:65  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/lib/followup/graph-schema.test.ts
+  2:1  warning  Imports "NodeType", "FlowGraph", "FlowNode" and "FlowEdge" are only used as type  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/lib/leads/score-formula.ts
+  86:11  warning  'Parcela' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/lib/logger.ts
+  28:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  32:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/loop/setup-claude-guard.mjs
+  49:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  56:1  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/loop/update-feature.ts
+  113:1  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/bootstrap-owner.ts
+   71:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+   81:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+   93:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  107:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  124:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  134:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  145:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  157:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  165:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/check-roles.ts
+  19:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/check-user.ts
+  15:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  17:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  20:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  22:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/create-test-user.ts
+  45:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  47:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  54:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  64:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  79:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  88:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  91:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  92:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  93:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  94:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  95:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/dbg-login.ts
+  10:7  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  20:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  21:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  24:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  25:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  27:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/e2e-followup-journey-helpers.ts
+  63:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/inspect-source-schema.ts
+  16:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  17:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  28:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  39:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/probe-redirect.ts
+  27:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  51:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  52:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  53:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/provoke-agent-turn.ts
+   71:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+   91:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  112:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  122:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  167:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  180:7  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/qa-wave-10.ts
+  77:10  warning  'utcDay' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/qa-wave-11.ts
+  394:16  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  397:16  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/reset-user-onboarding.ts
+  28:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  50:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  54:7  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  56:7  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  66:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  75:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  77:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  78:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/revoke-sessions.ts
+  25:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/screenshot-ai-tabs.ts
+  53:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  58:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  63:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  78:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/seed-crm-vivo.ts
+  255:5   warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  275:3   warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  316:3   warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  414:5   warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  432:3   warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  493:19  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  574:3   warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/seed-e2e-credentials.ts
+   58:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+   75:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+   84:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+   96:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  113:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  123:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  134:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  162:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  196:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  204:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  236:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  267:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  268:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  269:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  270:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/seed-e2e-followup-agent.ts
+  107:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/seed-e2e-followup-promise.ts
+  110:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/seed-e2e-invite.ts
+  46:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  63:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  69:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  78:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  83:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  88:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/seed-e2e-kanban.ts
+   75:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+   93:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  147:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/seed-e2e-queue.ts
+  119:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  133:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  144:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/scripts/smoke-llm.ts
+   48:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  102:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  114:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  131:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  190:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/invariants/agent-no-credential.test.ts
+  41:36  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  42:17  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  43:24  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  44:32  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/invariants/case-reply-turn.test.ts
+  19:46  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/invariants/reactivation-schema.test.ts
+  14:10  warning  'violacao' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/invariants/webhooks-bulk-events.test.ts
+  34:46  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/sonda-decisao-reativacao.ts
+  14:10  warning  'BASE' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/sonda-rede-de-seguranca.ts
+  37:20  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/sonda-rede-dossie.ts
+  33:20  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/rafaelmelgaco/DeskcommCRM-canais/tests/sonda-tela-agente-move.ts
+  30:35  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+✖ 156 problems (0 errors, 156 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+

@@ -1,0 +1,85 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "2-marcador-existente",
+  "mensagem": "Quero marcar este atendimento como urgente. Que marcadores a gente já usa? Não quero criar um repetido.",
+  "esperado": "crm_list_tags antes de qualquer crm_manage_tags",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Já existe o marcador oficial **“urgente”**. Posso aplicá-lo a este atendimento se você me confirmar.",
+  "ferramentas": [
+    "crm_list_tags"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 2171,
+      "tokens_out": 19,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_tags",
+          "args": {
+            "limit": 60
+          },
+          "result": {
+            "marcadores": [
+              {
+                "marcador": "devolução",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "dúvida",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "elogio",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "orçamento",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "pós-venda",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "reclamação",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "troca",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "urgente",
+                "conversas": 0,
+                "oficial": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Já existe o marcador oficial **“urgente”**. Posso aplicá-lo a este atendimento se você me confirmar.",
+      "finish_reason": "stop",
+      "tokens_in": 2359,
+      "tokens_out": 29,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 3982,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "db986d8b-d6ac-411e-87f9-37427871b2e6",
+  "medido_em": "2026-08-06T16:17:32.281Z"
+}

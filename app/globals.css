@@ -1,0 +1,966 @@
+@import "tailwindcss" source(none);
+
+/* Alcance do scanner. O v4 acha os arquivos sozinho a partir da raiz do git,
+   mas isso varreria `docs/` (149 markdowns cheios de exemplo de classe) e
+   `tests/` — o CSS engordaria com utilitário que nenhuma tela usa, e um
+   `bg-red-500` escrito numa doc viraria regra publicada. `source(none)` desliga
+   a descoberta automática e as quatro linhas abaixo repõem EXATAMENTE o
+   `content` que o `tailwind.config.ts` declarava. Ao criar pasta nova de UI,
+   acrescente-a aqui — senão as classes dela somem sem erro nenhum. */
+@source "../app";
+@source "../components";
+@source "../lib";
+@source "../hooks";
+
+/* Escuro por atributo, não por classe. Equivale ao `darkMode: ["class",
+   "[data-theme='dark']"]` do v3: a forma de duas casas do v3 NÃO acumula com
+   `.dark` — ela SUBSTITUI o seletor padrão, e o produto inteiro liga o tema
+   por `<html data-theme="dark">` (ver `[data-theme="dark"]` mais abaixo e o
+   `color-scheme` no `@layer base`).
+
+   O `:where()` zera a especificidade do seletor de tema, para que `dark:bg-x`
+   e `bg-x` continuem competindo só pela ordem em que aparecem — sem ele, todo
+   utilitário `dark:` ganharia um ponto de especificidade a mais e venceria
+   coisas que no v3 ele não vencia. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DeskcommCRM — Design System tokens (Sage palette · density Aerada)
+   Source of truth: /app/design/lib/tokens.ts (PALETTES.sage)
+   Light + dark drawn separately (NOT inverted).
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Surfaces (light) */
+  --color-bg: #faf9f6;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f5f3ee;
+  --color-overlay: rgba(28, 26, 22, 0.42);
+
+  /* Text (light) */
+  --color-text: #1c1a16;
+  --color-text-muted: #5d594f;
+  --color-text-subtle: #7d786c;
+
+  /* Borders (light) */
+  --color-border: #e7e3da;
+  --color-border-strong: #d2cdbf;
+
+  /* Accent — Sage (11 stops) */
+  --color-accent-50:  #f3f6f1;
+  --color-accent-100: #e4ebe0;
+  --color-accent-200: #c8d6c1;
+  --color-accent-300: #a4ba9a;
+  --color-accent-400: #82a077;
+  --color-accent-500: #67885d;
+  --color-accent-600: #506d48;
+  --color-accent-700: #41573b;
+  --color-accent-800: #374731;
+  --color-accent-900: #2f3c2b;
+  --color-accent-950: #171f15;
+  --color-accent: var(--color-accent-600);
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: var(--color-accent-100);
+  --color-accent-hover: var(--color-accent-700);
+
+  /* Neutrals — greige (11 stops, light) */
+  --color-neutral-50:  #faf9f6;
+  --color-neutral-100: #f3f1ec;
+  --color-neutral-200: #e7e3da;
+  --color-neutral-300: #d2cdbf;
+  --color-neutral-400: #a9a395;
+  --color-neutral-500: #7d786c;
+  --color-neutral-600: #5d594f;
+  --color-neutral-700: #46433b;
+  --color-neutral-800: #2e2c26;
+  --color-neutral-900: #1c1a16;
+  --color-neutral-950: #0e0d0a;
+
+  /* States (light) */
+  --color-success: #5a8a5f;
+  --color-success-bg: rgba(90, 138, 95, 0.12);
+  --color-success-fg: #41673f;
+  --color-warning: #b07a2b;
+  --color-warning-bg: rgba(176, 122, 43, 0.12);
+  --color-warning-fg: #875a1a;
+  --color-error: #a94a3c;
+  --color-error-bg: rgba(169, 74, 60, 0.12);
+  --color-error-fg: #8a3a2e;
+  --color-info: #4a7a93;
+  --color-info-bg: rgba(74, 122, 147, 0.12);
+  --color-info-fg: #355d72;
+
+  /* Spacing (4-base) */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* Radius */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows — desaturated, neutral-based */
+  --shadow-xs: 0 1px 2px 0 rgba(20, 18, 14, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(20, 18, 14, 0.05), 0 1px 1px 0 rgba(20, 18, 14, 0.03);
+  --shadow-md: 0 4px 12px -2px rgba(20, 18, 14, 0.06), 0 2px 4px -1px rgba(20, 18, 14, 0.04);
+  --shadow-lg: 0 12px 32px -6px rgba(20, 18, 14, 0.10), 0 4px 12px -2px rgba(20, 18, 14, 0.06);
+  --shadow-xl: 0 24px 48px -12px rgba(20, 18, 14, 0.16), 0 8px 16px -4px rgba(20, 18, 14, 0.08);
+
+  /* Density — Aerada */
+  --density-row: 56px;
+  --density-gap: 24px;
+  --density-px: 20px;
+  --density-py: 16px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+
+  /* Z-index */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-dropdown: 20;
+  --z-sticky: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+
+  /* shadcn-compat aliases (mantém consumers legados funcionando) */
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-fg);
+  --secondary: var(--color-surface-elevated);
+  --secondary-foreground: var(--color-text);
+  --muted: var(--color-surface-elevated);
+  --muted-foreground: var(--color-text-muted);
+  --accent-foreground: var(--color-accent-fg);
+  --destructive: var(--color-error);
+  --destructive-foreground: #ffffff;
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-accent-500);
+  --radius: var(--radius-md);
+  /* ---- Agenda · cor de pessoa (8 trilhas) ------------------------------
+   * Quem é o dono do compromisso é o eixo visual da grade, e a accent NÃO
+   * serve para isso: ela é substituída em runtime pelo revendedor
+   * (`<style id="marca-instalacao">` no layout), então uma agenda pintada
+   * com ela ficaria monocromática — e azul — na instalação que comprou a
+   * marca em azul.
+   *
+   * OS VALORES SÃO DERIVADOS, NÃO ESCOLHIDOS A OLHO — e a primeira versão
+   * destas linhas dizia "os matizes saem de Okabe-Ito", o que a medição
+   * desmentiu: eu tinha ajustado tanto a luminosidade que a separação da
+   * referência não sobreviveu. Medido no par mais próximo, em OKLab:
+   *
+   *     versão anterior (azul x petróleo) : 0.0507   <- indistinguíveis
+   *     Okabe-Ito, a referência (n=7)     : 0.1558
+   *     esta versão, pior par             : 0.1162
+   *
+   * A régua é a distância OKLab entre os pares, e ela vem da própria
+   * referência em vez de um número inventado. Não alcançamos os 0.1558 dela
+   * por duas razões declaradas: são OITO trilhas no espaço em que ela põe
+   * sete, e o croma fica limitado a 0.13 porque este produto é para quem
+   * encara a tela oito horas por dia — a Okabe-Ito não tem essa restrição.
+   *
+   * Os matizes (30 70 100 190 225 262 300 340) são espalhados de propósito, e
+   * não pelo que maximiza a distância: uma busca livre chegou a 0.1155 pondo
+   * TRÊS trilhas na faixa dos roxos. Distância mede distinguibilidade e não
+   * mede NOMEABILIDADE — "o roxo da Ana" e "o roxo do Bruno" não servem numa
+   * equipe. Por isso Telha, Âmbar, Oliva, Turquesa, Azul, Índigo, Violeta,
+   * Framboesa: oito palavras diferentes.
+   *
+   * A faixa 113-165 é vetada: é onde mora a accent Sage (139 graus). Cor de
+   * PESSOA não pode ser confundida com cor de ESTADO do sistema.
+   *
+   * A luminosidade ALTERNA entre vizinhos, que é o truque da Okabe-Ito para
+   * separar o azul-céu do azul — e foi exatamente o que a minha versão
+   * anterior perdeu ao uniformizar o brilho.
+   *
+   * MESMO ASSIM, cor nunca é a única informação: todo lugar que usa uma
+   * destas trilhas carrega junto a inicial da pessoa.
+   *
+   * O fundo suave de cada bloco é derivado com `color-mix` no ponto de uso,
+   * não duplicado aqui — assim a relação entre a faixa e o fundo é uma só,
+   * e não dois hex que envelhecem separados.
+   */
+  --agenda-pessoa-1: #ac4d40;   /* telha */
+  --agenda-pessoa-2: #bd7c20;   /* âmbar */
+  --agenda-pessoa-3: #7e6f01;   /* oliva */
+  --agenda-pessoa-4: #11a19b;   /* turquesa */
+  --agenda-pessoa-5: #0b7a9a;   /* azul */
+  --agenda-pessoa-6: #608bda;   /* índigo */
+  --agenda-pessoa-7: #7b5bad;   /* violeta */
+  --agenda-pessoa-8: #cc77b1;   /* framboesa */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Espelho do tema claro para SUBÁRVORE.
+
+   `:root` casa só o `<html>`. Medido antes de escrever: `grep -c
+   'data-theme="light"' app/globals.css` = 0 — ou seja, um `<div
+   data-theme="light">` dentro de uma página escura NÃO recebia nenhum token
+   claro; herdava os escuros do `<html>` e renderizava uma tela que mente. É
+   exatamente o que o preview lado a lado da marca precisa fazer.
+
+   Custom property herdada não tem como voltar ao valor do `:root` dentro de
+   uma subárvore (`initial`/`revert` a deixam sem valor, não com o valor de
+   cima), então redeclarar é obrigação da linguagem, não escolha. O conjunto
+   redeclarado é EXATAMENTE o que `[data-theme="dark"]` sobrescreve — 59
+   props — e um teste (`tests/unit/branding-tema-claro-escopavel.test.ts`)
+   reprova quando os dois divergem; sem ele a cópia envelhece calada.
+
+   Por que a seletor NÃO é `:root, [data-theme="light"]`, que seria a forma
+   óbvia: `extrairRegua` (lib/branding/contraste.ts) acha o bloco claro por
+   igualdade exata de seletor (`r.seletor === ":root"`), e a lista o quebraria
+   — a régua inteira, e com ela os 37 testes de contraste, deixariam de ser
+   extraídos.
+
+   As 11 paradas `--color-accent-NNN` ficam DE FORA de propósito. Elas são
+   idênticas nos dois blocos do produto, então omiti-las não muda pixel algum
+   aqui; e, na instalação que trocou a cor, a subárvore clara passa a herdar a
+   rampa do `<html>` (a do revendedor) em vez de fixar a Sage. Pelo mesmo
+   motivo os papéis abaixo mantêm a forma `var(--color-accent-NNN)`.
+
+   Buraco conhecido: `--color-accent-fg` é literal `#ffffff` e, numa subárvore
+   clara sob página escura, ficaria preso ao branco mesmo quando a marca exige
+   preto. Fechar isso pede um bloco de escopo claro no CSS injetado
+   (lib/branding/css.ts), que só ganha consumidor com a tela de marca.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg: #faf9f6;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f5f3ee;
+  --color-overlay: rgba(28, 26, 22, 0.42);
+  --color-text: #1c1a16;
+  --color-text-muted: #5d594f;
+  --color-text-subtle: #7d786c;
+  --color-border: #e7e3da;
+  --color-border-strong: #d2cdbf;
+  --color-accent: var(--color-accent-600);
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: var(--color-accent-100);
+  --color-accent-hover: var(--color-accent-700);
+  --color-neutral-50: #faf9f6;
+  --color-neutral-100: #f3f1ec;
+  --color-neutral-200: #e7e3da;
+  --color-neutral-300: #d2cdbf;
+  --color-neutral-400: #a9a395;
+  --color-neutral-500: #7d786c;
+  --color-neutral-600: #5d594f;
+  --color-neutral-700: #46433b;
+  --color-neutral-800: #2e2c26;
+  --color-neutral-900: #1c1a16;
+  --color-neutral-950: #0e0d0a;
+  --color-success: #5a8a5f;
+  --color-success-bg: rgba(90, 138, 95, 0.12);
+  --color-success-fg: #41673f;
+  --color-warning: #b07a2b;
+  --color-warning-bg: rgba(176, 122, 43, 0.12);
+  --color-warning-fg: #875a1a;
+  --color-error: #a94a3c;
+  --color-error-bg: rgba(169, 74, 60, 0.12);
+  --color-error-fg: #8a3a2e;
+  --color-info: #4a7a93;
+  --color-info-bg: rgba(74, 122, 147, 0.12);
+  --color-info-fg: #355d72;
+  --shadow-xs: 0 1px 2px 0 rgba(20, 18, 14, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(20, 18, 14, 0.05), 0 1px 1px 0 rgba(20, 18, 14, 0.03);
+  --shadow-md: 0 4px 12px -2px rgba(20, 18, 14, 0.06), 0 2px 4px -1px rgba(20, 18, 14, 0.04);
+  --shadow-lg: 0 12px 32px -6px rgba(20, 18, 14, 0.10), 0 4px 12px -2px rgba(20, 18, 14, 0.06);
+  --shadow-xl: 0 24px 48px -12px rgba(20, 18, 14, 0.16), 0 8px 16px -4px rgba(20, 18, 14, 0.08);
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-fg);
+  --secondary: var(--color-surface-elevated);
+  --secondary-foreground: var(--color-text);
+  --muted: var(--color-surface-elevated);
+  --muted-foreground: var(--color-text-muted);
+  --accent-foreground: var(--color-accent-fg);
+  --destructive: var(--color-error);
+  --destructive-foreground: #ffffff;
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-accent-500);
+  /* ---- Agenda · cor de pessoa (espelho do :root) -----------------------
+   * Espelhado aqui porque o tema escuro sobrescreve estas oito chaves, e
+   * `tests/unit/branding-tema-claro-escopavel.test.ts` exige que este bloco
+   * cubra EXATAMENTE o que o escuro cobre: uma subárvore `data-theme="light"`
+   * dentro de página escura herdaria os valores escuros, e a amostra de cor
+   * mentiria sobre a cor que a pessoa tem.
+   */
+  --agenda-pessoa-1: #ac4d40;   /* telha */
+  --agenda-pessoa-2: #bd7c20;   /* âmbar */
+  --agenda-pessoa-3: #7e6f01;   /* oliva */
+  --agenda-pessoa-4: #11a19b;   /* turquesa */
+  --agenda-pessoa-5: #0b7a9a;   /* azul */
+  --agenda-pessoa-6: #608bda;   /* índigo */
+  --agenda-pessoa-7: #7b5bad;   /* violeta */
+  --agenda-pessoa-8: #cc77b1;   /* framboesa */
+}
+
+[data-theme="dark"] {
+  /* Surfaces (dark — drawn) */
+  --color-bg: #161510;
+  --color-surface: #1d1c17;
+  --color-surface-elevated: #272620;
+  --color-overlay: rgba(0, 0, 0, 0.55);
+
+  /* Text (dark) */
+  --color-text: #f5f4ef;
+  --color-text-muted: #8e8b7f;
+  --color-text-subtle: #605e54;
+
+  /* Borders (dark) */
+  --color-border: #33312a;
+  --color-border-strong: #444239;
+
+  /* Accent stays same hex stops; default shifts up for dark contrast */
+  --color-accent-50:  #f3f6f1;
+  --color-accent-100: #e4ebe0;
+  --color-accent-200: #c8d6c1;
+  --color-accent-300: #a4ba9a;
+  --color-accent-400: #82a077;
+  --color-accent-500: #67885d;
+  --color-accent-600: #506d48;
+  --color-accent-700: #41573b;
+  --color-accent-800: #374731;
+  --color-accent-900: #2f3c2b;
+  --color-accent-950: #171f15;
+  --color-accent: var(--color-accent-400);
+  --color-accent-fg: #161510;
+  --color-accent-soft: rgba(130, 160, 119, 0.16);
+  --color-accent-hover: var(--color-accent-300);
+
+  /* Neutrals — greige (11 stops, dark) */
+  --color-neutral-50:  #f5f4ef;
+  --color-neutral-100: #e6e4dc;
+  --color-neutral-200: #bbb8ac;
+  --color-neutral-300: #8e8b7f;
+  --color-neutral-400: #605e54;
+  --color-neutral-500: #444239;
+  --color-neutral-600: #33312a;
+  --color-neutral-700: #272620;
+  --color-neutral-800: #1d1c17;
+  --color-neutral-900: #161510;
+  --color-neutral-950: #0c0b08;
+
+  /* States (dark) */
+  --color-success: #82a077;
+  --color-success-bg: rgba(130, 160, 119, 0.18);
+  --color-success-fg: #a4ba9a;
+  --color-warning: #d09455;
+  --color-warning-bg: rgba(208, 148, 85, 0.18);
+  --color-warning-fg: #e0ad77;
+  --color-error: #c87263;
+  --color-error-bg: rgba(200, 114, 99, 0.18);
+  --color-error-fg: #d99182;
+  --color-info: #7da9bf;
+  --color-info-bg: rgba(125, 169, 191, 0.18);
+  --color-info-fg: #9bbfd2;
+
+  /* Shadows — heavier in dark */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.40), 0 1px 1px 0 rgba(0, 0, 0, 0.20);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 4px -1px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 12px 32px -6px rgba(0, 0, 0, 0.55), 0 4px 12px -2px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 24px 48px -12px rgba(0, 0, 0, 0.65), 0 8px 16px -4px rgba(0, 0, 0, 0.50);
+
+  /* shadcn-compat aliases */
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-fg);
+  --secondary: var(--color-surface-elevated);
+  --secondary-foreground: var(--color-text);
+  --muted: var(--color-surface-elevated);
+  --muted-foreground: var(--color-text-muted);
+  --accent-foreground: var(--color-accent-fg);
+  --destructive: var(--color-error);
+  --destructive-foreground: #ffffff;
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-accent-400);
+  /* ---- Agenda · cor de pessoa (tema escuro) ----------------------------
+   * Mais claras e menos saturadas que as do claro: sobre `#161510` a versão
+   * escura de cada matiz sumiria. Mesma ordem, mesmos nomes.
+   */
+  --agenda-pessoa-1: #f89080;
+  --agenda-pessoa-2: #ca8931;
+  --agenda-pessoa-3: #d1bf55;
+  --agenda-pessoa-4: #0cafa8;
+  --agenda-pessoa-5: #4ccffb;
+  --agenda-pessoa-6: #6c97e7;
+  --agenda-pessoa-7: #be9ef6;
+  --agenda-pessoa-8: #cc77b1;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Ponte token → utilitário (o que era `theme.extend` no `tailwind.config.ts`).
+
+   `@theme inline` e não `@theme`: com `inline`, o utilitário recebe o
+   `var(--color-…)` LITERAL em vez de uma cópia do valor. É o que preserva o
+   tema — `.bg-bg` vira `background-color: var(--color-bg)` e passa a valer o
+   que `[data-theme="dark"]` disser naquele ponto da árvore. Com `@theme` sem
+   `inline`, o valor claro seria assado dentro do utilitário e o tema escuro
+   pararia de existir.
+
+   Os três blocos de token acima (`:root`, `[data-theme="light"]`,
+   `[data-theme="dark"]`) ficam onde estão, sem layer e sem renomear. Não é
+   preferência: `extrairRegua` (lib/branding/contraste.ts) acha o bloco claro
+   por igualdade EXATA de seletor (`r.seletor === ":root"`), e
+   `tests/unit/branding-tema-claro-escopavel.test.ts` compara prop a prop os
+   blocos claro e escuro. Mover qualquer um deles para dentro de `@theme`
+   quebraria os dois.
+
+   Efeito colateral conhecido e inofensivo: como os nomes de token daqui são os
+   MESMOS do bloco `:root` (o produto já batizava tudo de `--color-*`), o v4
+   emite, dentro de `@layer theme`, linhas auto-referentes do tipo
+   `--color-bg: var(--color-bg)`. Elas nunca vencem — declaração sem layer tem
+   precedência sobre declaração em layer, e o `:root` autoral está fora de
+   layer. Vigiado por `tests/unit/tailwind-tokens.test.ts`; se um dia alguém
+   embrulhar o `:root` num `@layer`, o teste reprova e a explicação está aqui.
+   ───────────────────────────────────────────────────────────────────────── */
+@theme inline {
+  /* Foundation */
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-overlay: var(--color-overlay);
+
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-subtle: var(--color-text-subtle);
+
+  /* Accent — Sage */
+  --color-accent: var(--color-accent);
+  --color-accent-foreground: var(--color-accent-fg);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-50: var(--color-accent-50);
+  --color-accent-100: var(--color-accent-100);
+  --color-accent-200: var(--color-accent-200);
+  --color-accent-300: var(--color-accent-300);
+  --color-accent-400: var(--color-accent-400);
+  --color-accent-500: var(--color-accent-500);
+  --color-accent-600: var(--color-accent-600);
+  --color-accent-700: var(--color-accent-700);
+  --color-accent-800: var(--color-accent-800);
+  --color-accent-900: var(--color-accent-900);
+  --color-accent-950: var(--color-accent-950);
+
+  /* Neutrals — greige */
+  --color-neutral-50: var(--color-neutral-50);
+  --color-neutral-100: var(--color-neutral-100);
+  --color-neutral-200: var(--color-neutral-200);
+  --color-neutral-300: var(--color-neutral-300);
+  --color-neutral-400: var(--color-neutral-400);
+  --color-neutral-500: var(--color-neutral-500);
+  --color-neutral-600: var(--color-neutral-600);
+  --color-neutral-700: var(--color-neutral-700);
+  --color-neutral-800: var(--color-neutral-800);
+  --color-neutral-900: var(--color-neutral-900);
+  --color-neutral-950: var(--color-neutral-950);
+
+  /* States */
+  --color-success: var(--color-success);
+  --color-success-bg: var(--color-success-bg);
+  --color-success-fg: var(--color-success-fg);
+  --color-warning: var(--color-warning);
+  --color-warning-bg: var(--color-warning-bg);
+  --color-warning-fg: var(--color-warning-fg);
+  --color-error: var(--color-error);
+  --color-error-bg: var(--color-error-bg);
+  --color-error-fg: var(--color-error-fg);
+  --color-info: var(--color-info);
+  --color-info-bg: var(--color-info-bg);
+  --color-info-fg: var(--color-info-fg);
+
+  /* Aliases shadcn (consumers ainda não migrados). Espelham 1:1 o que o
+     `tailwind.config.ts` mapeava — inclusive `ring`, que apontava para a
+     parada 500 fixa e NÃO para `--ring` (que muda no escuro). Mantido igual de
+     propósito: trocar aqui mudaria o anel de foco de toda a aplicação, e isso
+     é decisão de design, não de migração. */
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-input: var(--color-border);
+  --color-ring: var(--color-accent-500);
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --color-primary: var(--color-accent);
+  --color-primary-foreground: var(--color-accent-fg);
+  --color-secondary: var(--color-surface-elevated);
+  --color-secondary-foreground: var(--color-text);
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: #ffffff;
+  --color-muted: var(--color-surface-elevated);
+  --color-muted-foreground: var(--color-text-muted);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-text);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-text);
+
+  /* Tipografia */
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+
+  /* Espaçamento. Os valores são px LITERAIS (`--space-6` = 24px), não rem — e
+     essa diferença é carregada por quem consome: ver o cálculo de altura em
+     `components/inbox/InboxLayout.tsx`, que soma `var(--space-6)` a um `3.5rem`
+     justamente porque as duas parcelas NÃO estão na mesma unidade.
+
+     As paradas fora desta lista (`p-7`, `gap-1.5`, `mt-14`…) continuam
+     existindo: o v4 as calcula pelo multiplicador `--spacing` (0.25rem), do
+     mesmo jeito que a escala default do v3 as fornecia. */
+  --spacing-0: var(--space-0);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
+  --spacing-20: var(--space-20);
+  --spacing-24: var(--space-24);
+  --spacing-32: var(--space-32);
+
+  /* Raio */
+  --radius-none: var(--radius-none);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  /* Sombra */
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+
+  /* Motion */
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+  --ease-spring: var(--ease-spring);
+}
+
+/* `duration-*` não tem espaço de tema no v4 (o `transitionDuration` do v3 não
+   tem equivalente em `@theme`), então o apelido vira utilitário explícito. */
+@utility duration-fast {
+  transition-duration: var(--duration-fast);
+}
+@utility duration-base {
+  transition-duration: var(--duration-base);
+}
+@utility duration-slow {
+  transition-duration: var(--duration-slow);
+}
+
+
+@layer base {
+  /* O preflight do v4 não pinta mais borda por padrão (`border: 0 solid`, cor
+     = `currentColor`), então os ~300 `class="border"` sem cor desta base
+     dependem inteiramente desta regra. Ela já existia no v3 pelo mesmo motivo;
+     o que mudou é que os pseudo-elementos entraram na lista — o preflight do
+     v4 os zera junto com o elemento, e sem eles um `::before` com `border`
+     desenharia na cor do texto. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
+
+  /* ---- cursor de botão · reposto do preflight do Tailwind v3 -------------
+     NÃO É REDUNDANTE — não apague achando que o preflight já faz isto. Até a
+     v3 estas duas regras vinham de graça no `@tailwind base`
+     (`tailwindcss@3.4.19`, `src/css/preflight.css:339-353`, verbatim). O v4
+     as REMOVEU de propósito, para se alinhar ao default do navegador — e o
+     default do navegador para `<button>` é a SETA, não a mãozinha.
+
+     Sem este bloco, todo controle do produto que renda um `<button>` nativo
+     passa a mostrar a seta: `<Button>`, `SelectTrigger`, `TabsTrigger`,
+     `Switch`, os gatilhos de Dropdown/Popover/Tooltip/Dialog/Sheet/
+     AlertDialog e os `<button>` crus. Para recontar sem confiar neste texto:
+
+       git grep -o -F '<button' -- 'app/*.tsx' 'components/*.tsx' | wc -l
+
+     Por que aqui e não em `buttonVariants`: uma classe em `buttonVariants` só
+     alcança o que passa por `<Button>` (e por `AlertDialogAction`/`Cancel`,
+     que a reusam) — deixaria de fora todo o resto acima, além do `<button>`
+     que uma biblioteca de terceiro renderiza dentro da nossa árvore, que
+     classe nenhuma nossa tocaria.
+
+     A segunda regra é o par obrigatório da primeira, e vinha logo depois dela
+     no v3 pelo mesmo motivo: sem ela, botão DESABILITADO passa a convidar o
+     clique. Ela tem de vir DEPOIS — `:disabled` (0,1,0) empata em
+     especificidade com `[role="button"]` (0,1,0), e quem decide o empate é a
+     ordem no arquivo.
+
+     Nada aqui vence uma classe: `@layer base` perde para `@layer utilities`,
+     então os `cursor-default`, `cursor-not-allowed` e `disabled:cursor-*` que
+     já existem no código continuam mandando. */
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  :disabled {
+    cursor: default;
+  }
+
+  html {
+    color-scheme: light;
+    /* Rede de segurança DE VERDADE contra scroll horizontal da PÁGINA — a
+       de `main` (app/app/_components/AppShell.tsx) não bastava porque
+       TopBar e Sidebar ficam FORA de `main`; qualquer estouro ali (ou em
+       qualquer página que esqueça de conter o próprio overflow) ainda
+       chegava até aqui e movia a tela inteira. Isto NUNCA deixa a barra de
+       scroll horizontal aparecer, não importa o que role solto lá dentro —
+       o componente que precisa de scroll horizontal (tabela, kanban)
+       continua rolando, contido nele mesmo; só a página como um todo não.
+
+       ⚠️ `clip` DEPOIS de `hidden`, e as duas linhas são necessárias.
+
+       `overflow-x: hidden` faz o elemento virar CONTÊINER DE ROLAGEM (a
+       especificação computa o eixo oposto para `auto`), e um contêiner de
+       rolagem no `<html>` quebra `position: sticky` lá dentro: a barra lateral
+       — que é `sticky top-0 h-screen` em `components/shell/Sidebar.tsx`, com um
+       comentário longo explicando por que não é `fixed` — deixava de grudar e
+       rolava com a página, sumindo do alto e deixando faixa vazia embaixo.
+
+       `overflow-x: clip` corta igual e NÃO cria contêiner de rolagem, então a
+       proteção continua inteira e o sticky volta. A linha `hidden` fica como
+       reserva para motor que não conhece `clip` (Safari < 16): lá o
+       comportamento segue exatamente o de hoje — protegido, sem sticky. */
+    overflow-x: hidden;
+    overflow-x: clip;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+  /* Par do espelho de tokens acima: sem isto, uma subárvore clara dentro de uma
+     página escura recebe os tokens claros mas mantém o `color-scheme: dark` do
+     `<html>` — e o navegador continua pintando scrollbar, `<input>` e menu
+     nativo em escuro dentro de uma caixa clara. */
+  [data-theme="light"] {
+    color-scheme: light;
+  }
+
+  body {
+    /* Mesma trava do `html` logo acima, duplicada aqui de propósito: alguns
+       motores móveis (Safari/iOS em particular) ignoram `overflow-x` só no
+       `html` em certas versões — as duas juntas é o par que realmente
+       bloqueia em todo navegador testado pela comunidade.
+
+       Mesmo par `hidden` + `clip` do `<html>`, e pela mesma razão: sem o `clip`
+       aqui o `<body>` volta a ser contêiner de rolagem e a barra lateral perde
+       o sticky de novo — consertar só um dos dois não conserta nada. */
+    overflow-x: hidden;
+    overflow-x: clip;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-atkinson), ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  code, kbd, pre, samp {
+    font-family: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo,
+      Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-200);
+    color: var(--color-accent-950);
+  }
+  [data-theme="dark"] ::selection {
+    background-color: var(--color-accent-700);
+    color: var(--color-accent-50);
+  }
+
+  /* Focus ring: Sage 500/400, 2px with offset */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  [data-theme="dark"] :focus-visible {
+    outline-color: var(--color-accent-400);
+  }
+
+  /* Modo de alto contraste do sistema (Windows High Contrast / forced-colors).
+     O problema: arquivos que matam o `outline` e desenham o foco com `ring-*`
+     — que é `box-shadow`, e o forced-colors APAGA box-shadow. Neles o
+     indicador de foco some por completo naquele modo: quem navega por teclado
+     perde a posição do cursor. É WCAG 2.4.7 nível A, não preferência.
+
+     Quantos são hoje (comando, e não número — número envelhece; a migração
+     para o Tailwind 4 já invalidou o que estava escrito aqui, porque
+     `outline-none` virou `outline-hidden` e o grep antigo passou a devolver
+     zero):
+
+       grep -rlE 'outline-hidden|outline:\s*none|outline-\[?transparent' \
+         app components lib --include='*.tsx' --include='*.ts' | wc -l
+       # …| xargs grep -lE 'ring-[a-z0-9]' | wc -l   ← os que dependem de ring
+
+     `Highlight` é cor de sistema (a paleta do usuário), a única que o modo não
+     substitui. `!important` porque o que precisa ser vencido é justamente o
+     `outline: none`/`outline: transparent` desses 14 arquivos. */
+  @media (forced-colors: active) {
+    :focus-visible {
+      outline: 2px solid Highlight !important;
+      outline-offset: 2px !important;
+    }
+  }
+
+  /* Scrollbar — subtle greige */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-neutral-300) transparent;
+  }
+  [data-theme="dark"] * {
+    scrollbar-color: var(--color-neutral-600) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-neutral-300);
+    border-radius: var(--radius-full);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-neutral-400);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+  [data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background-color: var(--color-neutral-600);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+  [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-neutral-500);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+}
+
+/* ---- XYFlow · controles do canvas de follow-up --------------------------
+   A lib pinta o botão de zoom com fundo `#fefefe` e `color: inherit`. O SVG
+   usa `fill: currentColor`. No tema escuro o texto da página é claro, então
+   o ícone some no branco: o usuário vê um retângulo branco e os botões de
+   zoom/encaixe parecem ausentes.
+
+   As vars SEM o sufixo `-default` vencem o fallback da folha da lib. Os
+   tokens já trocam com `[data-theme]`, então claro e escuro saem do mesmo
+   bloco — não precisa do `colorMode` do React Flow (que no SSR nasceria
+   `light` e divergiria do `data-theme` já pintado pelo script do layout). */
+.react-flow {
+  --xy-controls-button-background-color: var(--color-surface);
+  --xy-controls-button-background-color-hover: var(--color-surface-elevated);
+  --xy-controls-button-color: var(--color-text);
+  --xy-controls-button-color-hover: var(--color-text);
+  --xy-controls-button-border-color: var(--color-border);
+  --xy-controls-box-shadow: var(--shadow-md);
+  --xy-edge-label-background-color: var(--color-surface);
+  --xy-edge-label-color: var(--color-text);
+  /* A linha que liga dois passos é o desenho do fluxo, não enfeite: no cinza
+     padrão da lib (#b1b1b7) ela dava 2,03:1 sobre o fundo claro — abaixo dos
+     3:1 que a WCAG pede para elemento gráfico essencial, e no print do canvas
+     ela some. `text-muted` é o único token que passa nos DOIS temas
+     (claro 6,63:1, escuro 5,35:1); `text-subtle` cairia para 2,81:1 no escuro. */
+  --xy-edge-stroke: var(--color-text-muted);
+  --xy-edge-stroke-selected: var(--color-accent);
+  /* A linha que segue o cursor enquanto se arrasta uma ligação lia a mesma var
+     default da lib — o cinza reprovado acima. */
+  --xy-connectionline-stroke: var(--color-accent);
+  --xy-handle-background-color: var(--color-accent);
+  --xy-handle-border-color: var(--color-surface);
+}
+
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* ---- Pulso de chegada no card do Kanban (CRM Vivo, Wave 3) --------------
+   Vivo é o que RESPONDE, não o que se agita: um pulso, uma vez, e cessa.
+   A animação não repete (sem `infinite`) — ficar animando é rejeição de review.
+
+   `prefers-reduced-motion: reduce` NÃO é o caminho degradado: o mesmo anel
+   aparece, só que parado. O card continua dizendo "acabei de mudar" para quem
+   desligou animação — e continua LEGÍVEL, que é o ponto (ver o media query).
+
+   BORDA, e não `box-shadow`: este overlay ocupa o card inteiro e o card é
+   `overflow-hidden`, então uma sombra externa (`0 0 0 2px`) seria recortada
+   justamente na faixa onde ela desenha. Borda com `box-sizing: border-box`
+   desenha para dentro da própria caixa e não depende do overflow do pai.
+   Provado na tela nos três cenários (claro, escuro, reduce) —
+   `evidence/wave3-pulso/`. */
+@keyframes deskcomm-card-pulse {
+  from {
+    border-color: var(--color-accent);
+  }
+  to {
+    border-color: transparent;
+  }
+}
+
+/* Overlay próprio, e não uma classe no card: o elemento é REMONTADO a cada
+   evento (key = contador de pulsos), e é a remontagem que faz a animação
+   recomeçar. Alternar classe no mesmo nó não reinicia animação em CSS. */
+.card-pulse {
+  animation: deskcomm-card-pulse var(--duration-slow) var(--ease-out) 1;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-pulse {
+    animation: none;
+    /* Anel ESTÁTICO, não fundo: no tema claro `--color-accent-soft` é cor
+       sólida (#e4ebe0), e um overlay sólido sobre o card inteiro deixaria quem
+       usa movimento reduzido 1,2s SEM LER o card. O caminho de acessibilidade
+       é para ser igual, não pior — então o aviso é o mesmo anel, só que parado.
+       Ele dura os PULSE_MS inteiros (useBoard.ts), NÃO os 320ms da animação:
+       a diferença entre os dois números é deliberada e está explicada lá. */
+    border-color: var(--color-accent);
+  }
+}
+
+/* ---- Agenda · a coluna de horários que desliza para dentro ----------------
+   O painel de marcação tem três tempos (escolher dia → escolher horário →
+   confirmar) e a coluna de horários NÃO existe no primeiro. Quando o dia é
+   escolhido, ela entra pela direita e o painel cresce — é isso que dá a
+   sensação de "abriu" em vez de "trocou de tela", e é o único motivo pelo qual
+   um painel de marcação parece fluido em vez de parecer um formulário de três
+   páginas.
+
+   Por que `width` e `grid-template-columns` não: animar a coluna do grid
+   funciona em Chrome recente e falha calado em Safari, e este produto roda no
+   celular do dono da clínica. `width` + `overflow: hidden` anima em tudo.
+
+   `tailwindcss-animate` NÃO está instalado neste repo (`plugins: []` no
+   tailwind.config.ts) — `animate-in`/`slide-in-from-*` são classes que não
+   existem e falham em silêncio. Os seis Sheets em produção abrem sem transição
+   nenhuma por causa disso. Daí este bloco ser CSS à mão, no modelo do
+   `.card-pulse` acima, que é o precedente local. */
+.agenda-coluna-horarios {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateX(8px);
+  transition:
+    width var(--duration-base) var(--ease-out),
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+.agenda-coluna-horarios[data-aberta="true"] {
+  width: var(--agenda-largura-horarios, 240px);
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ⚠️ NO CELULAR A COLUNA OCUPA TUDO — e isto era só um comentário até agora.
+   `PainelDeMarcacao.tsx:184` já dizia "no celular a coluna ocupa tudo" como
+   justificativa para o `min-width` do corpo. O CSS não implementava: a coluna
+   abria com 240px fixos e `shrink-0` em QUALQUER largura, e numa tela de 390px
+   o painel passava 67px da borda.
+
+   O sintoma não era barra de rolagem: `overflow-x: hidden` no `html` e no
+   `body` cortava o excedente, então a coluna de horários simplesmente sumia
+   pela direita — sem rolagem, sem aviso, sem como alcançá-la. E a asserção que
+   deveria pegar isso media `documentElement.scrollWidth`, que o mesmo
+   `overflow-x: hidden` grampeia: o gate dava zero enquanto o usuário perdia a
+   metade da tela em que se escolhe o horário.
+
+   Trocada a medida para `body.scrollWidth`, o estouro apareceu na primeira
+   execução. */
+/* ⚠️ O CORTE MUDOU DE 767 PARA 1023, e é o conserto do defeito da v1.8.0.
+   As três colunas do painel somam 980px, e entre 768 e 1023 o Sheet que as
+   hospeda tem 768: a coluna de horários ficava fora da tela — medido em 1280,
+   só 42 dos 280px apareciam. Empilhada, ela ocupa a largura toda e cabe. */
+@media (max-width: 1023px) {
+  .agenda-coluna-horarios[data-aberta="true"] {
+    width: 100%;
+  }
+}
+
+/* A borda só existe quando a coluna existe. Deixá-la no estado fechado
+   desenharia um risco vertical de 1px no meio de um painel sem coluna
+   nenhuma — e daria à coluna "de largura zero" um retângulo de 1px de
+   largura, que é uma medida difícil de explicar a quem lê o teste. */
+/* A borda-esquerda só existe quando a coluna É uma coluna. Empilhada, ela
+   desenharia um risco vertical no meio de uma seção que ocupa a largura toda.
+   Por isso as duas regras moram no MESMO breakpoint em que o painel vira
+   `flex-row` — separá-las foi o que deixou uma borda de coluna numa seção
+   empilhada entre 768 e 1023. */
+@media (min-width: 1024px) {
+  .agenda-coluna-horarios[data-aberta="true"] {
+    width: var(--agenda-largura-horarios-lg, 280px);
+    border-left: 1px solid var(--color-border);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* O destino é o MESMO — só chega sem o percurso. Esconder a coluna, ou
+     entregá-la por um caminho diferente, faria de "movimento reduzido" uma
+     versão pior do produto em vez de uma versão calma dele. */
+  .agenda-coluna-horarios {
+    transition: none;
+    transform: none;
+  }
+}

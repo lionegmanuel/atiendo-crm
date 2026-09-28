@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "8-desligar-automacao",
+  "mensagem": "Desliga a automação de boas-vindas agora, ela está disparando na hora errada e o pessoal está reclamando.",
+  "esperado": "crm_set_automation_rule_active (pode bater em papel/apenasHumano)",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Não tenho uma ferramenta disponível para desligar automações diretamente. Recomendo pausar imediatamente a regra de boas-vindas no painel de automações e revisar o gatilho/horário antes de reativá-la.",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Não tenho uma ferramenta disponível para desligar automações diretamente. Recomendo pausar imediatamente a regra de boas-vindas no painel de automações e revisar o gatilho/horário antes de reativá-la.",
+      "finish_reason": "stop",
+      "tokens_in": 1447,
+      "tokens_out": 111,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 5219,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "77b63cc2-7b50-4a17-87a8-ad49cae9795d",
+  "medido_em": "2026-08-06T16:32:48.654Z"
+}

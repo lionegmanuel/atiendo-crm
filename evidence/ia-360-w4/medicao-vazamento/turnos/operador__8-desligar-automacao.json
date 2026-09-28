@@ -1,0 +1,59 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "8-desligar-automacao",
+  "mensagem": "Desliga a automação de boas-vindas agora, ela está disparando na hora errada e o pessoal está reclamando.",
+  "esperado": "crm_set_automation_rule_active (pode bater em papel/apenasHumano)",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Encontrei uma automação ativa, mas ela não está identificada como “boas-vindas”: **“SSRF Outbound 1785496528461”**, disparada na criação de lead.\n\nNão tenho, por aqui, uma ação para desligar regras automáticas. Desative-a imediatamente no painel de automações da clínica; se quiser, posso verificar os últimos disparos e falhas para ajudar a confirmar se é essa a responsável.",
+  "ferramentas": [
+    "crm_list_automation_rules"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 2175,
+      "tokens_out": 68,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_automation_rules",
+          "args": {
+            "only_active": true
+          },
+          "result": {
+            "regras": [
+              {
+                "id": "7981d2ae-ad34-48d9-815b-3bf4d2e5d7f1",
+                "name": "SSRF Outbound 1785496528461",
+                "is_active": true,
+                "trigger_event": "lead.created",
+                "acoes": [
+                  "call_webhook"
+                ],
+                "quantidade_de_condicoes": 0,
+                "last_run_at": "2026-08-06T15:27:34.791+00:00",
+                "run_count": 30,
+                "last_change_actor_kind": null,
+                "last_change_at": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Encontrei uma automação ativa, mas ela não está identificada como “boas-vindas”: **“SSRF Outbound 1785496528461”**, disparada na criação de lead.\n\nNão tenho, por aqui, uma ação para desligar regras automáticas. Desative-a imediatamente no painel de automações da clínica; se quiser, posso verificar os últimos disparos e falhas para ajudar a confirmar se é essa a responsável.",
+      "finish_reason": "stop",
+      "tokens_in": 2372,
+      "tokens_out": 96,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 4735,
+  "cost_cents": 2,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "db986d8b-d6ac-411e-87f9-37427871b2e6",
+  "medido_em": "2026-08-06T16:18:09.380Z"
+}

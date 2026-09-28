@@ -1,0 +1,78 @@
+# O RELÓGIO DE QUEM NÃO TEM AGENDADOR.
+#
+# Existe para instalação sem agendador próprio — hospedagem que não oferece cron
+# de minuto, ou instalação em que o serviço `scheduler` do compose não está de
+# pé. Sem alguém batendo, follow-up agendado e `event_log` ficam parados até uma
+# pessoa abrir o sistema, e um lead que responde de madrugada espera até de manhã.
+#
+# ⚠️ NASCE DESLIGADO, e isto não é cautela decorativa: este arquivo vai para a
+# `main` de um produto self-host, e o fork de cada pessoa herda o agendamento.
+# Um workflow que já saísse batendo apontaria o cron do fork de todo mundo para
+# um lugar que não é dele. O `if` abaixo exige a variável `RELOGIO_LIGADO`; sem
+# ela o job nem começa, e o custo em minutos de Actions é zero.
+#
+# ⚠️ O `schedule:` do Actions só roda na branch DEFAULT. Workflow que fica só
+# numa branch de trabalho nunca dispara — está escrito no runbook e é a primeira
+# coisa que confunde quem liga isto.
+#
+# Como ligar, com os três valores e o teste manual:
+# docs/runbooks/relogio-http.md
+name: relogio
+
+on:
+  schedule:
+    # A cada 5 min. O GitHub atrasa schedule com folga (5–15 min é normal); quem
+    # precisa de minuto a minuto usa a Opção B do runbook (cron-job.org).
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# Nenhum escopo: este job não fala com a API do GitHub, só faz um POST na
+# instalação de quem ligou. Token sem permissão é token que não vaza nada.
+permissions: {}
+
+concurrency:
+  # Uma batida por vez. Duas em paralelo não corrompem nada (o drain reivindica
+  # cada linha com claim otimista), mas empilhar tick sobre tick numa instalação
+  # lenta só gasta minuto de Actions.
+  group: relogio
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    # A variável é do REPOSITÓRIO de quem instalou, não deste. `workflow_dispatch`
+    # passa mesmo sem ela para que o teste manual do runbook funcione antes de
+    # alguém confiar no agendamento.
+    if: vars.RELOGIO_LIGADO == '1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Bater o tick
+        env:
+          APP_URL: ${{ secrets.RELOGIO_APP_URL }}
+          SECRET: ${{ secrets.RELOGIO_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL}" ] || [ -z "${SECRET}" ]; then
+            echo "::error::RELOGIO_APP_URL ou RELOGIO_SECRET ausente — ver docs/runbooks/relogio-http.md"
+            exit 1
+          fi
+          BASE="${APP_URL%/}"
+          # -w com o código, e o corpo separado: `curl -f` sozinho esconde o
+          # motivo, e o motivo é o que a pessoa precisa para consertar.
+          CORPO=$(mktemp)
+          CODIGO=$(curl -sS -o "$CORPO" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${SECRET}" \
+            --max-time 90 \
+            "${BASE}/api/v1/system/relogio/tick" || echo "000")
+          echo "HTTP ${CODIGO}"
+          head -c 2000 "$CORPO" || true
+          echo
+          # ⚠️ A GUARDA QUE FAZ ESTE ARQUIVO VALER ALGUMA COISA. Sem ela o
+          # Actions fica VERDE com 401, 404 ou 500 — e o follow-up parado, com o
+          # painel dizendo que o relógio está saudável. Falha-em-verde é o pior
+          # desfecho num produto que a pessoa instala sozinha: ninguém está
+          # olhando, e o silêncio se parece com "está tudo bem".
+          case "${CODIGO}" in
+            2??) echo "tick ok" ;;
+            *) echo "::error::tick devolveu ${CODIGO} — o relógio NÃO bateu"; exit 1 ;;
+          esac

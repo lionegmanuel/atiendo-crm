@@ -1,0 +1,95 @@
+"use client";
+
+import { useState, useTransition } from "react";
+
+import { useT } from "@/hooks/i18n/useT";
+import { recoverOrganization } from "@/app/actions/auth/recoverOrganization";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+/**
+ * As frases em português são as CHAVES do dicionário — a mesma convenção do
+ * resto da casa (`lib/i18n/dicionario.ts`). Passar por `t()` na hora de exibir é
+ * o que separa "acrescentei um idioma" de "mudei a tela de quem já usava".
+ */
+const MENSAGENS: Record<string, string> = {
+  validation_error: "Informe um nome de empresa com 2 a 120 caracteres.",
+  rate_limited: "Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.",
+  invite_pending:
+    "Esta conta tem um convite pendente ou inválido. Use o link do convite ou peça um novo ao administrador.",
+  somente_convite:
+    "Esta instalação aceita cadastro apenas por convite. Peça um convite a quem administra o sistema.",
+  provision_failed:
+    "Não foi possível concluir a organização agora. Tente novamente ou contate o administrador da instalação.",
+  // Diz a verdade sobre o que aconteceu. Antes, quem tinha o acesso revogado
+  // recebia a frase de `invite_pending` — por acaso, porque o convite ainda
+  // estava no `user_metadata` — e ia procurar um link de convite que não
+  // resolveria nada.
+  access_revoked:
+    "Seu acesso a esta organização foi retirado. Fale com quem administra a empresa — criar uma organização nova não devolve o acesso.",
+  pedido_recusado:
+    "Quem administra esta instalação não aprovou o pedido. Se você recebeu um convite, use o link que chegou no seu e-mail.",
+};
+
+/**
+ * `nomeSugerido` é o nome de empresa que a pessoa digitou no CADASTRO e que
+ * viajou até aqui pelo `user_metadata` — o mesmo canal que `/auth/confirm` usa
+ * para provisionar. Ele só semeia o campo: quem valida continua sendo o Zod da
+ * action, e a pessoa pode trocar antes de enviar. Sem isto, quem cai na
+ * recuperação precisa digitar de novo um dado que o sistema já tem, no momento
+ * em que ela está mais propensa a desistir.
+ */
+export function RecoverOrganizationForm({
+  nomeSugerido,
+  comAprovacao = false,
+}: {
+  nomeSugerido?: string;
+  /** Instalação em `com_aprovacao`: o envio vira pedido, e o botão diz isso. */
+  comAprovacao?: boolean;
+}) {
+  const t = useT();
+  const [name, setName] = useState(nomeSugerido ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    startTransition(async () => {
+      const result = await recoverOrganization(name);
+      // O caminho de sucesso não volta: a action redireciona (onboarding, ou a
+      // própria tela mostrando o pedido enviado).
+      if (!result.ok) setError(t(MENSAGENS[result.error] ?? MENSAGENS.provision_failed!));
+    });
+  }
+
+  return (
+    <form method="post" className="space-y-4" onSubmit={submit} noValidate>
+      <div className="space-y-1.5">
+        <Label htmlFor="recovery-org-name">{t("Nome da empresa")}</Label>
+        <Input
+          id="recovery-org-name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoComplete="organization"
+          autoFocus
+          disabled={isPending}
+          aria-invalid={Boolean(error)}
+        />
+      </div>
+      {error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+      <Button className="w-full" type="submit" disabled={isPending || name.trim().length < 2}>
+        {isPending
+          ? t("Preparando seu ambiente…")
+          : comAprovacao
+            ? t("Enviar pedido")
+            : t("Continuar para o onboarding")}
+      </Button>
+    </form>
+  );
+}

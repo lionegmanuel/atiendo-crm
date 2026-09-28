@@ -1,0 +1,31 @@
+# Arquivo pronto para awesome-selfhosted-data.
+#
+# Destino: software/deskcommcrm.yml  (kebab-case, um item por PR)
+# Só copiar o conteúdo abaixo desta linha de comentários. NÃO enviar os campos
+# stargazers_count, updated_at, current_release e commit_history: um bot do
+# repositório os injeta depois do merge. Preenchê-los à mão é o sinal mais
+# barato de que o autor não leu o processo — e o revisor lê isso antes do produto.
+#
+# A ordem das tags importa: no modo página única o projeto aparece APENAS sob a
+# primeira. CRM é a que queremos, e ela hoje tem só dois projetos (django-crm,
+# espocrm), nenhum com WhatsApp.
+#
+# Nomes de tag/plataforma conferidos contra o campo `name:` de cada arquivo do
+# repositório em 28/07/2026 — não contra o nome do arquivo, que é diferente.
+
+name: DeskcommCRM
+website_url: https://deskcomm.com.br
+source_code_url: https://github.com/melgarafael/DeskcommCRM
+description: Sales CRM with built-in AI agents that answer, qualify and advance deals over WhatsApp. Multi-tenant with row-level isolation, a per-tenant RAG knowledge base, and an audit log of every action the AI takes.
+licenses:
+  - MIT
+platforms:
+  - Nodejs
+  - Docker
+tags:
+  - Customer Relationship Management (CRM)
+  - Automation
+# Verdadeiro e deliberado: os agentes precisam de um provedor de LLM externo.
+# O WhatsApp via WAHA e o Postgres via Supabase são auto-hospedáveis; o modelo
+# não é. Declarar falso aqui é o tipo de imprecisão que o revisor confere.
+depends_3rdparty: true

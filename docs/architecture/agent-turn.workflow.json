@@ -1,0 +1,824 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Turno do Agente de IA",
+    "subtitle": "do inbound no WhatsApp à resposta aprovada pelos guardrails",
+    "output": "agent-turn.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "canal",
+      "label": "Canal (WAHA)"
+    },
+    {
+      "id": "app",
+      "label": "App (ingestão)"
+    },
+    {
+      "id": "worker",
+      "label": "Agent Worker"
+    },
+    {
+      "id": "guardrails",
+      "label": "Guardrails"
+    },
+    {
+      "id": "humano",
+      "label": "Handoff Humano",
+      "variant": "exception"
+    },
+    {
+      "id": "config",
+      "label": "Config (Memória da Org)",
+      "variant": "exception"
+    },
+    {
+      "id": "skills",
+      "label": "Skills instaláveis (Fase 2)",
+      "variant": "exception"
+    },
+    {
+      "id": "router",
+      "label": "Intent Router (Fase 3)",
+      "variant": "exception"
+    },
+    {
+      "id": "evolucao",
+      "label": "Evolução da IA (Fase 4)",
+      "variant": "exception"
+    },
+    {
+      "id": "funil",
+      "label": "Funil: etapas + mapeamento",
+      "variant": "exception"
+    },
+    {
+      "id": "contrato",
+      "label": "Contrato entre os papéis (spec 16 §5)"
+    },
+    {
+      "id": "operacao",
+      "label": "Operação — o 2º turno, sem canal (§3.2)"
+    },
+    {
+      "id": "desfecho",
+      "label": "Onde o desfecho aparece"
+    }
+  ],
+  "mainPath": [
+    "inbound",
+    "ingest",
+    "eventlog",
+    "turn",
+    "gates",
+    "send"
+  ],
+  "nodes": [
+    {
+      "id": "inbound",
+      "lane": "canal",
+      "col": 0,
+      "type": "frontend",
+      "label": "Msg inbound",
+      "sublabel": "cliente escreve"
+    },
+    {
+      "id": "send",
+      "lane": "canal",
+      "col": 5,
+      "type": "frontend",
+      "label": "Resposta sai",
+      "sublabel": "via WahaAdapter"
+    },
+    {
+      "id": "ingest",
+      "lane": "app",
+      "col": 1,
+      "type": "backend",
+      "label": "Webhook ingest",
+      "sublabel": "HMAC + dedup"
+    },
+    {
+      "id": "eventlog",
+      "lane": "app",
+      "col": 3,
+      "type": "messagebus",
+      "label": "event_log",
+      "sublabel": "fila em Postgres"
+    },
+    {
+      "id": "followup",
+      "lane": "worker",
+      "col": 1,
+      "type": "backend",
+      "label": "Follow-up cron",
+      "sublabel": "reentrada agendada"
+    },
+    {
+      "id": "turn",
+      "lane": "worker",
+      "col": 3,
+      "type": "backend",
+      "label": "Turno IA",
+      "sublabel": "contexto + RAG · 2 chamadas: resposta + fechamento · kinds: inbound_turn, followup_turn, case_reply_turn",
+      "tag": "runAgentTurn"
+    },
+    {
+      "id": "toolbreaker",
+      "lane": "guardrails",
+      "col": 2,
+      "type": "security",
+      "label": "Tool Breaker",
+      "sublabel": "circuit breaker de tools"
+    },
+    {
+      "id": "gates",
+      "lane": "guardrails",
+      "col": 4,
+      "type": "security",
+      "label": "Before-send",
+      "sublabel": "cadeia de 10 gates (v6)",
+      "tag": "veto = HARD"
+    },
+    {
+      "id": "handoff",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "Handoff",
+      "sublabel": "humano: roteamento G5"
+    },
+    {
+      "id": "memoryscreen",
+      "lane": "config",
+      "col": 0,
+      "type": "frontend",
+      "label": "Memória da Org",
+      "sublabel": "tela + API (app/app/ai/memory)"
+    },
+    {
+      "id": "orgmemory",
+      "lane": "config",
+      "col": 1,
+      "type": "backend",
+      "label": "org_memory",
+      "sublabel": "versão + ponteiro + aprendizados"
+    },
+    {
+      "id": "capacidades",
+      "lane": "config",
+      "col": 3,
+      "type": "frontend",
+      "label": "Capacidades",
+      "sublabel": "pacotes + uso real + callback_enabled (app/app/ai/agents)",
+      "width": 150
+    },
+    {
+      "id": "skillsscreen",
+      "lane": "skills",
+      "col": 0,
+      "type": "frontend",
+      "label": "Skills",
+      "sublabel": "tela + import .zip (app/app/ai/skills)"
+    },
+    {
+      "id": "skillcatalog",
+      "lane": "skills",
+      "col": 1,
+      "type": "backend",
+      "label": "Skill catalog",
+      "sublabel": "skill_versions + pointers"
+    },
+    {
+      "id": "routerscreen",
+      "lane": "router",
+      "col": 0,
+      "type": "frontend",
+      "label": "Routers",
+      "sublabel": "tela + API (app/app/ai/routers)"
+    },
+    {
+      "id": "routerconfig",
+      "lane": "router",
+      "col": 1,
+      "type": "backend",
+      "label": "ai_routers",
+      "sublabel": "intents + min_confidence + sticky"
+    },
+    {
+      "id": "evolutionscreen",
+      "lane": "evolucao",
+      "col": 0,
+      "type": "frontend",
+      "label": "Evolução da IA",
+      "sublabel": "tela + API (app/app/ai/evolution)"
+    },
+    {
+      "id": "knowledgesearches",
+      "lane": "evolucao",
+      "col": 1,
+      "type": "backend",
+      "label": "Buscas na base",
+      "sublabel": "knowledge_searches: hits + limiar"
+    },
+    {
+      "id": "stagesscreen",
+      "lane": "funil",
+      "col": 0,
+      "type": "frontend",
+      "label": "Etapas",
+      "sublabel": "tela + API: criar · renomear · ganho/perda · arquivar"
+    },
+    {
+      "id": "mappingscreen",
+      "lane": "funil",
+      "col": 2,
+      "type": "frontend",
+      "label": "Mapa do funil",
+      "sublabel": "tela (settings/tenant/pipelines)"
+    },
+    {
+      "id": "stagehint",
+      "lane": "funil",
+      "col": 4,
+      "type": "database",
+      "label": "crm_stages",
+      "sublabel": "agent_stage_hint: passo → etapa"
+    },
+    {
+      "id": "declaracao",
+      "lane": "contrato",
+      "col": 5,
+      "type": "database",
+      "label": "Declaração",
+      "sublabel": "lead_checkpoints.declaracao — ausente ≠ vazia"
+    },
+    {
+      "id": "operador",
+      "lane": "operacao",
+      "col": 5,
+      "type": "backend",
+      "label": "Operador",
+      "sublabel": "sem send_message no toolset · kind: operator_turn",
+      "tag": "operator_turn"
+    },
+    {
+      "id": "inbox",
+      "lane": "desfecho",
+      "col": 5,
+      "type": "frontend",
+      "label": "Alertas",
+      "sublabel": "a Central (/app/ai/inbox)"
+    },
+    {
+      "id": "transactional_delivery",
+      "lane": "worker",
+      "col": 5,
+      "type": "service",
+      "label": "Entrega transacional Meet",
+      "sublabel": "Corpo determinístico no idioma contato/org; claim/fronteira originais; ponte send existente, sem LLM"
+    },
+    {
+      "id": "meet_intent",
+      "lane": "app",
+      "col": 5,
+      "type": "service",
+      "label": "Intenção Meet no compromisso",
+      "sublabel": "Booking no atendimento ou clique humano explícito; ready + intenção válida agenda entrega"
+    },
+    {
+      "id": "reply_review",
+      "lane": "humano",
+      "col": 6,
+      "type": "frontend",
+      "label": "Sugestão para revisão",
+      "sublabel": "Mesma configuração e core; texto editável e feedback por atendimento; propostas exigem autorização própria"
+    },
+    {
+      "id": "approved_reply",
+      "lane": "worker",
+      "col": 6,
+      "type": "service",
+      "label": "Entrega da resposta aprovada",
+      "sublabel": "Texto autorizado, fronteira e aquisição originais; recibo e liquidação recuperáveis, sem novo LLM"
+    },
+    {
+      "id": "jevRoteador",
+      "lane": "router",
+      "col": 2,
+      "type": "external",
+      "label": "Jev no roteador",
+      "sublabel": "lib/ai/decisao/roteador.ts — a mesma escolha, só a última mensagem, em paralelo ao classificador; observando o turno não espera; decidindo vale a dele (min_confidence sobre a probabilidade), com a IA de sempre de reserva; sem ela, nunca o Jev (R2)"
+    },
+    {
+      "id": "jevObservacoesRoteador",
+      "lane": "router",
+      "col": 3,
+      "type": "database",
+      "label": "jev_observacoes (roteador)",
+      "sublabel": "o par: agente a que o Jev levaria × agente a que a IA de sempre levou — mesmo agente final = concordou; + custo em llm_calls (intent_router, typesafe)"
+    },
+    {
+      "id": "jevCartaoRoteador",
+      "lane": "router",
+      "col": 4,
+      "type": "frontend",
+      "label": "Cartão do Jev (/app/ai/providers)",
+      "sublabel": "'Escolher qual agente atende': concordou em X de Y (30 dias); 'Não roda' sem roteador ativo; 'Deixar o Jev decidir' por tarefa"
+    }
+  ],
+  "edges": [
+    {
+      "id": "inbound-ingest",
+      "from": "inbound",
+      "to": "ingest",
+      "route": "drop"
+    },
+    {
+      "id": "ingest-eventlog",
+      "from": "ingest",
+      "to": "eventlog",
+      "label": "emite evento"
+    },
+    {
+      "id": "eventlog-turn",
+      "from": "eventlog",
+      "to": "turn",
+      "label": "drain",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "followup-turn",
+      "from": "followup",
+      "to": "turn",
+      "label": "reentrada",
+      "variant": "dashed"
+    },
+    {
+      "id": "turn-toolbreaker",
+      "from": "turn",
+      "to": "toolbreaker",
+      "label": "tools do CRM",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "route": "drop",
+      "labelDy": -75
+    },
+    {
+      "id": "turn-gates",
+      "from": "turn",
+      "to": "gates",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "bias": 0.6
+    },
+    {
+      "id": "gates-veto",
+      "from": "gates",
+      "to": "turn",
+      "label": "veto instrutivo",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "left",
+      "route": "return-left"
+    },
+    {
+      "id": "gates-send",
+      "from": "gates",
+      "to": "send",
+      "label": "aprovado",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "route": "outside-right"
+    },
+    {
+      "id": "turn-handoff",
+      "from": "turn",
+      "to": "handoff",
+      "label": "handoff",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "memoryscreen-orgmemory",
+      "from": "memoryscreen",
+      "to": "orgmemory",
+      "label": "escreve versão/aprendizado",
+      "labelDy": 50
+    },
+    {
+      "id": "orgmemory-turn",
+      "from": "orgmemory",
+      "to": "turn",
+      "label": "injeta no prefixo estável",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "route": "drop"
+    },
+    {
+      "id": "skillsscreen-skillcatalog",
+      "from": "skillsscreen",
+      "to": "skillcatalog",
+      "label": "importa .zip / instala do catálogo",
+      "labelAt": [
+        154,
+        903
+      ]
+    },
+    {
+      "id": "skillcatalog-turn",
+      "from": "skillcatalog",
+      "to": "turn",
+      "label": "índice no prefixo + corpo casado no sufixo + read_skill_reference",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelDy": 40
+    },
+    {
+      "id": "routerscreen-routerconfig",
+      "from": "routerscreen",
+      "to": "routerconfig",
+      "label": "cria/edita router · testa classificação",
+      "labelDy": 50
+    },
+    {
+      "id": "routerconfig-turn",
+      "from": "routerconfig",
+      "to": "turn",
+      "label": "classifica a intenção e decide o agentConfig do turno",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelDy": 60
+    },
+    {
+      "id": "turn-knowledgesearches",
+      "from": "turn",
+      "to": "knowledgesearches",
+      "label": "toda busca na base grava hits · top_score · limiar",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelDy": 80
+    },
+    {
+      "id": "knowledgesearches-evolutionscreen",
+      "from": "knowledgesearches",
+      "to": "evolutionscreen",
+      "label": "quantas perguntas a base respondeu (e quais quase acertaram)",
+      "labelDy": 50
+    },
+    {
+      "id": "evolutionscreen-routerscreen",
+      "from": "evolutionscreen",
+      "to": "routerscreen",
+      "label": "lacuna vira ação: cadastrar o assunto",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "route": "drop",
+      "labelDy": 40
+    },
+    {
+      "id": "evolutionscreen-mappingscreen",
+      "from": "evolutionscreen",
+      "to": "mappingscreen",
+      "label": "lacuna vira ação: escolher a etapa que recebe o passo",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelDy": 40,
+      "labelDx": -50
+    },
+    {
+      "id": "stagesscreen-stagehint",
+      "from": "stagesscreen",
+      "to": "stagehint",
+      "label": "cria · renomeia · ganho/perda · arquiva",
+      "fromSide": "top",
+      "toSide": "top",
+      "route": "up-channel",
+      "labelAt": [
+        400,
+        1196
+      ]
+    },
+    {
+      "id": "stagesscreen-mappingscreen",
+      "from": "stagesscreen",
+      "to": "mappingscreen",
+      "label": "arquivar mata o vínculo com o assistente",
+      "labelDy": 44
+    },
+    {
+      "id": "mappingscreen-stagesscreen",
+      "from": "mappingscreen",
+      "to": "stagesscreen",
+      "label": "sem etapa de fechamento, conserta aqui",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "route": "bottom-channel",
+      "labelDy": 0,
+      "channelY": 1276,
+      "labelAt": [
+        190,
+        1288
+      ]
+    },
+    {
+      "id": "mappingscreen-stagehint",
+      "from": "mappingscreen",
+      "to": "stagehint",
+      "label": "grava os 7 passos de uma vez",
+      "labelDy": 50
+    },
+    {
+      "id": "stagehint-turn",
+      "from": "stagehint",
+      "to": "turn",
+      "label": "o card anda para a etapa escolhida (mirrorLeadStageToCrm)",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelDy": 100
+    },
+    {
+      "id": "capacidades-turn",
+      "from": "capacidades",
+      "to": "turn",
+      "label": "tool_ids + callback_enabled da versão",
+      "variant": "dashed",
+      "labelDy": 120,
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right"
+    },
+    {
+      "id": "turn-capacidades",
+      "from": "turn",
+      "to": "capacidades",
+      "label": "uso e falha auditados",
+      "variant": "dashed",
+      "labelDy": 140,
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right"
+    },
+    {
+      "id": "turn-declaracao",
+      "from": "turn",
+      "to": "declaracao",
+      "label": "grava a declaração no fechamento",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelDy": 170
+    },
+    {
+      "id": "declaracao-operador",
+      "from": "declaracao",
+      "to": "operador",
+      "label": "ausente OU vazia decide se há chamada de modelo (lida pela chave do turno)",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelDy": 26
+    },
+    {
+      "id": "declaracao-handoff",
+      "from": "declaracao",
+      "to": "handoff",
+      "label": "um artefato, dois leitores",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelDy": 68
+    },
+    {
+      "id": "capacidades-operador",
+      "from": "capacidades",
+      "to": "operador",
+      "label": "liga/desliga · modelo · operator_tool_ids",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelAt": [
+        692,
+        1399
+      ]
+    },
+    {
+      "id": "handoff-operador",
+      "from": "handoff",
+      "to": "operador",
+      "label": "lead com pessoa: o Operador não mexe",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelAt": [
+        692,
+        1531
+      ]
+    },
+    {
+      "id": "operador-inbox",
+      "from": "operador",
+      "to": "inbox",
+      "label": "promessa sem dono vira aviso",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelAt": [
+        470,
+        1531
+      ]
+    },
+    {
+      "id": "turn-inbox",
+      "from": "turn",
+      "to": "inbox",
+      "label": "capacidade que não montou também avisa aqui",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "labelAt": [
+        692,
+        1565
+      ]
+    },
+    {
+      "id": "meet-existing-gates",
+      "from": "transactional_delivery",
+      "to": "gates",
+      "label": "beforeSend canônico → ledger → sink; callback cercado",
+      "route": "drop"
+    },
+    {
+      "id": "meet-delivery-notice",
+      "from": "transactional_delivery",
+      "to": "inbox",
+      "label": "stale/falha pede nova ação humana",
+      "route": "drop"
+    },
+    {
+      "id": "booking-meet-intent",
+      "from": "turn",
+      "to": "meet_intent",
+      "label": "booking com contexto interno do job",
+      "route": "drop"
+    },
+    {
+      "id": "meet-intent-job",
+      "from": "meet_intent",
+      "to": "transactional_delivery",
+      "label": "ready + intenção ativa, job sem URL/corpo",
+      "route": "drop"
+    },
+    {
+      "id": "meet-job-receipt",
+      "from": "transactional_delivery",
+      "to": "meet_intent",
+      "label": "settle cercado; ready não significa sent",
+      "route": "drop"
+    },
+    {
+      "id": "turn-reply-review",
+      "from": "turn",
+      "to": "reply_review",
+      "label": "modo assistido ou sugestão humana executa prévia sem efeitos externos",
+      "route": "drop"
+    },
+    {
+      "id": "review-approved-reply",
+      "from": "reply_review",
+      "to": "approved_reply",
+      "label": "aprovação explícita do texto e revisão atual cria intenção única",
+      "route": "drop"
+    },
+    {
+      "id": "approved-reply-gates",
+      "from": "approved_reply",
+      "to": "gates",
+      "label": "beforeSend canônico, ledger e envio na mesma cadeia",
+      "route": "drop"
+    },
+    {
+      "id": "approved-reply-receipt",
+      "from": "approved_reply",
+      "to": "reply_review",
+      "label": "envio, falha ou contexto obsoleto aparecem na conversa",
+      "route": "drop"
+    },
+    {
+      "id": "routerconfig-jevroteador",
+      "from": "routerconfig",
+      "to": "jevRoteador",
+      "label": "as intenções (1 a 254) viram as opções da escolha; a mesma régua de sticky e min_confidence (destinoDoVeredito)"
+    },
+    {
+      "id": "jevroteador-turn",
+      "from": "jevRoteador",
+      "to": "turn",
+      "label": "decidindo: a escolha dele decide o agente do turno",
+      "variant": "dashed"
+    },
+    {
+      "id": "routerscreen-jevroteador",
+      "from": "routerscreen",
+      "to": "jevRoteador",
+      "label": "Testar classificação: as duas escolhas lado a lado, sem observação (R5)"
+    },
+    {
+      "id": "jevroteador-observacoes",
+      "from": "jevRoteador",
+      "to": "jevObservacoesRoteador",
+      "label": "gravado quando ele responde, depois de o turno seguir"
+    },
+    {
+      "id": "observacoes-cartao",
+      "from": "jevObservacoesRoteador",
+      "to": "jevCartaoRoteador",
+      "label": "concordância por tarefa, contada no banco — o laço de retorno"
+    },
+    {
+      "id": "cartao-jevroteador",
+      "from": "jevCartaoRoteador",
+      "to": "jevRoteador",
+      "label": "Deixar o Jev decidir / Pausar esta tarefa (settings.jev.tarefas.roteador)",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Saídas do painel (Fase 4)",
+      "items": [
+        "Roteador e Mapa do funil são as arestas desenhadas; as outras saem por CTA",
+        "Memória da Org (publicar regra) · Skills (instalar habilidade)",
+        "Base de conhecimento (publicar material que faltou)",
+        "Sem saída o painel seria vitrine: o número existe para virar conserto"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Ordem dos 10 gates (invariante)",
+      "items": [
+        "1 stop/opt-out · 2 LGPD · 3 pacing anti-ban · 4 janela de atendimento",
+        "5 spinning · 6 promise · 7 promise semântica · 8 promise de caso",
+        "9 internal_vocabulary (vocabulário interno) · 10 disclosure (1ª msg se apresenta como IA)",
+        "Veto volta ao modelo como erro instrutivo",
+        "A ordem é constante de código, travada por tests/unit/before-send-chain-shape.test.ts"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Capacidades: configurar e observar são a mesma peça",
+      "items": [
+        "Entrada: o humano liga pacotes por jornada; capacidade de risco crítico exige marcação individual",
+        "Saída: tool_ids da versão publicada escolhe capacidades; callback_enabled filtra só a criação de retorno",
+        "Volta: api_audit_log (mcp.tool_called) → fn_agent_tool_usage → usos, falhas e última vez na aba Capacidades",
+        "Sem a volta, ligar uma capacidade era um ato de fé: o log existia desde a Spec 11 e nenhuma tela lia"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "São DOIS turnos por mensagem, não um",
+      "items": [
+        "Turno 1 (Conversador): responde ao cliente e, no fechamento, DECLARA o que entendeu — duas chamadas de modelo, purpose 'agent_turn' e 'checkpoint'",
+        "Turno 2 (Operador): job próprio na fila, purpose 'operator_turn', modelo e capacidades próprios — roda DEPOIS do envio, o lead nunca espera o CRM",
+        "O disparo é do RUNTIME, não do modelo: o Conversador nunca chama o Operador — se chamasse, o turno em que ele 'não achasse necessário' seria um lead parado em silêncio. Mas NÃO é incondicional: o job nasce depois de o checkpoint existir e SÓ com o papel ligado (decidirSeEnfileiraOperador), porque enfileirar com o papel desligado gastava fila e a vaga do lead para escrever uma linha de log",
+        "A declaração ausente e a declaração vazia NÃO se confundem: vazia poupa a 2ª chamada; ausente a EXIGE, porque ausente significa que ninguém avaliou"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Não-ligações deliberadas",
+      "items": [
+        "O Operador NÃO tem aresta para o canal: 'send_message' não está no toolset dele, e a ponte troca a lista em UM ponto só (operator-turn.ts). É ausência, não regra de prompt — a única forma que não depende de o modelo obedecer",
+        "A projeção (§4) NÃO se aplica ao Operador: ele precisa do dado cru para operar, e não tem canal por onde vazar. Projetar os dois seria cegar quem opera para proteger quem não fala",
+        "O Operador NÃO decide qual unidade atende: isso é do Intent Router. Os dois eixos convivem"
+      ]
+    }
+  ]
+}

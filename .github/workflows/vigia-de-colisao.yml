@@ -1,0 +1,61 @@
+name: vigia-de-colisao
+
+# O verde de um PR de schema é uma FOTO, e o número dele pode ser tomado depois.
+#
+# O `verify` mede colisão no minuto em que roda. Medido em 19/09/2026: o `verify`
+# do #965 terminou em 16/09 às 20:09Z e seguia verde com CINCO números que a
+# `main` ganhou depois. Nenhuma lógica dentro daquele job conserta um job de três
+# dias atrás — é este vigia que fecha a classe, remedindo os PRs de schema
+# abertos contra a `main` de agora.
+#
+# Quatro limites, cada um pago numa madrugada de triagem (o porquê de cada um
+# está no cabeçalho de scripts/vigia-colisao-de-migration.ts):
+#   (a) NÃO dispara CI — mede por `git` e pela API. A cura não pode custar mais
+#       fila que a doença, que é o gargalo que este repositório está desentupindo.
+#   (b) UM comentário por PR, EDITADO quando o estado muda.
+#   (c) Só fala com colisão REAL medida no minuto, dizendo qual número e por quem.
+#   (d) Declara o que não mede: ordem semântica.
+#
+# De hora em hora é ruído; de 6 em 6 horas é tarde para uma fila que vira em um
+# dia. 2h é o meio-termo declarado, não medido — e o custo é um job de segundos.
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch: {}
+
+# `pull-requests: write` é o mínimo que comenta e rotula. Sem o bloco, o token
+# herdaria o default do REPOSITÓRIO, que vive fora do repo e muda num clique.
+permissions:
+  contents: read
+  pull-requests: write
+
+# Duas rodadas ao mesmo tempo escreveriam o mesmo comentário duas vezes — a
+# idempotência do script é por leitura, e ela não protege contra si mesma em
+# paralelo.
+concurrency:
+  group: vigia-de-colisao
+  cancel-in-progress: false
+
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # `fetch-depth: 0` não é preciso: o script lê a ÁRVORE de origin/main, não
+      # o histórico.
+      - uses: actions/checkout@v7
+
+      # E a ref é buscada EXPLICITAMENTE: não depende de o checkout raso de um
+      # `schedule` ter criado `refs/remotes/origin/main`. Sem ela o script lê zero
+      # migrations, o controle de vivacidade reprova, e o vigia ficaria vermelho
+      # para sempre (achado 11 da revisão do #1268).
+      - name: Buscar a main de agora
+        run: git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
+      - uses: ./.github/actions/preparar-node
+        timeout-minutes: 5
+
+      - name: Remedir os PRs de schema abertos contra a main de agora
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm tsx scripts/vigia-colisao-de-migration.ts --escrever

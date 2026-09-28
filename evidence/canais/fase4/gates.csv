@@ -1,0 +1,10 @@
+gate,verdict,code
+case_promise,pass,""
+disclosure,pass,""
+lgpd,pass,""
+messaging_window,skipped,not_applicable
+pacing,pass,""
+promise,pass,""
+semantic_promise,pass,""
+spinning,pass,""
+stop,pass,""

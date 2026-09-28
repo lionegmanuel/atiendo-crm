@@ -1,0 +1,143 @@
+# DeskcommCRM — override para VPS que JÁ TEM um proxy reverso Traefik.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.traefik.yml up -d
+#
+# QUANDO USAR
+# -----------
+# O stack padrão sobe um Caddy que publica as portas 80 e 443. Isso é o certo
+# num VPS "cru". Mas várias hospedagens entregam a VPS com um Traefik próprio
+# já ocupando essas portas — Hostinger, Coolify, Dokploy, CapRover e afins. É
+# esse Traefik que dá HTTPS automático a tudo que o painel instala; desligá-lo
+# quebraria as automações da hospedagem, presentes e futuras.
+#
+# Dois processos não podem ouvir a mesma porta, então o `up -d` padrão falha no
+# bind e a instalação morre no meio. Com este override:
+#
+#   1. o serviço `caddy` ganha um profile que nunca é ativado — o compose
+#      simplesmente não o cria (o Traefik da hospedagem faz o papel dele);
+#   2. o serviço `app` ganha labels do Traefik que reproduzem, uma a uma, as
+#      regras do Caddyfile.
+#
+# O comportamento padrão (sem este arquivo) fica EXATAMENTE como antes: quem
+# não passa o `-f docker-compose.traefik.yml` não é afetado por nada aqui.
+#
+# EQUIVALÊNCIA COM O Caddyfile
+# ----------------------------
+# - `reverse_proxy app:3000`  → router `deskcomm` + loadbalancer.server.port
+# - `encode gzip`             → middleware `deskcomm-compress`
+# - `respond @waha_global 403`→ router `deskcomm-waha-block` (ver abaixo)
+#
+# Os timeouts longos que o Caddyfile dá a /api/internal/agents/run* NÃO precisam
+# de equivalente: no Traefik o writeTimeout e o responseHeaderTimeout já são
+# ilimitados por padrão, então uma resposta de 5 minutos passa inteira.
+#
+# PRÉ-REQUISITOS NO TRAEFIK DA HOSPEDAGEM
+# ---------------------------------------
+# Espera-se um entrypoint `websecure` (443) e um certresolver `letsencrypt` —
+# os nomes padrão dessas instalações. Se a sua usa outros nomes, ajuste
+# TRAEFIK_ENTRYPOINT e TRAEFIK_CERTRESOLVER no .env.
+#
+# A REDE onde o Traefik encontra o app é TRAEFIK_NETWORK, e ela varia por
+# instalação. O install.sh a descobre e grava no .env — são dois cenários com
+# respostas OPOSTAS, ambos medidos (o porquê de cada um está na função
+# `rede_do_traefik`, em hostgator-setup-kit/install.sh):
+#
+#   Traefik numa bridge PRÓPRIA (Coolify, Dokploy) → a rede DELE, que já existe.
+#   Traefik em `--network host` (Hostinger)        → uma bridge "<projeto>_proxy"
+#     que o install.sh CRIA. Em modo host o proxy não está em rede nenhuma do
+#     Docker, e alcança qualquer bridge pela stack do host.
+#
+# O default abaixo ("traefik") cobre a instalação manual mais comum.
+
+services:
+  app:
+    # Só o `app` entra na rede do proxy. O inverso — juntar o Traefik à rede
+    # `internal` — colocaria um contêiner que serve OUTROS tenants da VPS dentro
+    # de uma rede onde o redis roda sem senha (docker-compose.prod.yml: `redis-server
+    # --save '' --appendonly no`, sem requirepass). waha, redis e srh ficam de fora.
+    networks:
+      - internal
+      - proxy
+    labels:
+      traefik.enable: "true"
+      # Este label diz ao Traefik em qual rede pegar o IP do contêiner. Com o
+      # Traefik numa bridge própria, é a rede do PROXY — apontando para a
+      # `internal` ele mira um IP que não alcança e a requisição pendura até dar
+      # timeout, mesmo com o contêiner já conectado nas duas redes. Medido com
+      # Traefik v3.3 real:
+      #   app só na internal, label=internal   -> HTTP 000 (timeout)
+      #   app nas duas redes, label=internal   -> HTTP 000 (ainda o IP errado)
+      #   app nas duas redes, label=proxy      -> HTTP 200
+      # Com o Traefik em modo host a conclusão não se inverte, ela se generaliza:
+      # continua sendo a rede `proxy` — só que lá ela é a bridge que o install.sh
+      # cria para este projeto, porque um proxy em modo host não tem rede própria
+      # (e alcança qualquer bridge pela stack do host).
+      traefik.docker.network: "${TRAEFIK_NETWORK:-traefik}"
+
+      # Rota principal — equivale ao `reverse_proxy app:3000` do Caddyfile.
+      traefik.http.routers.deskcomm.rule: "Host(`${DOMAIN}`)"
+      traefik.http.routers.deskcomm.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.deskcomm.tls.certresolver: "${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      traefik.http.routers.deskcomm.middlewares: "deskcomm-compress"
+      traefik.http.services.deskcomm.loadbalancer.server.port: "3000"
+
+      # `encode gzip` do Caddyfile.
+      traefik.http.middlewares.deskcomm-compress.compress: "true"
+
+      # `respond @waha_global 403` do Caddyfile. O webhook GLOBAL do WAHA não
+      # pode ser alcançável da internet: quem soubesse o endereço injetaria
+      # mensagem falsa no CRM e faria o WhatsApp do dono responder a um número
+      # arbitrário. Aqui dentro o WAHA fala com o app pela rede do Docker, então
+      # esta rota nunca precisou ser pública.
+      #
+      # O Traefik não tem um "responda 403" direto. O equivalente é um
+      # ipallowlist cuja única faixa permitida é 192.0.2.1/32 — TEST-NET-1
+      # (RFC 5737), um endereço reservado para documentação que nenhum cliente
+      # real tem. Toda requisição àquele caminho cai fora da lista e recebe 403,
+      # que é exatamente o comportamento desejado. A prioridade alta é o que faz
+      # esta rota vencer a principal, que casaria o mesmo Host.
+      traefik.http.routers.deskcomm-waha-block.rule: "Host(`${DOMAIN}`) && Path(`/api/v1/webhooks/waha`)"
+      traefik.http.routers.deskcomm-waha-block.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.deskcomm-waha-block.tls.certresolver: "${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      traefik.http.routers.deskcomm-waha-block.priority: "1000"
+      traefik.http.routers.deskcomm-waha-block.service: "deskcomm"
+      traefik.http.routers.deskcomm-waha-block.middlewares: "deskcomm-deny"
+      traefik.http.middlewares.deskcomm-deny.ipallowlist.sourcerange: "192.0.2.1/32"
+
+      # HTTP -> HTTPS. O Caddy fazia isto automaticamente; no Traefik precisa ser
+      # dito. Sem este router, quem digitar http:// não recebe resposta nenhuma.
+      traefik.http.routers.deskcomm-http.rule: "Host(`${DOMAIN}`)"
+      traefik.http.routers.deskcomm-http.entrypoints: "${TRAEFIK_ENTRYPOINT_HTTP:-web}"
+      traefik.http.routers.deskcomm-http.middlewares: "deskcomm-https"
+      traefik.http.routers.deskcomm-http.service: "deskcomm"
+      traefik.http.middlewares.deskcomm-https.redirectscheme.scheme: "https"
+      traefik.http.middlewares.deskcomm-https.redirectscheme.permanent: "true"
+
+  # O Caddy não é removido do compose (isso exigiria editar o arquivo base e
+  # quebraria quem usa o padrão) — ele só é posto num profile que nunca é
+  # ligado. Sem profile ativo, o compose não cria o contêiner e as portas 80/443
+  # seguem com o Traefik da hospedagem.
+  #
+  # ATENÇÃO a um detalhe do Compose: nomear o serviço explicitamente
+  # (`docker compose up -d caddy`) ATIVA o profile dele automaticamente e o
+  # contêiner sobe assim mesmo, indo bater de frente com o Traefik. Por isso o
+  # update.sh checa REVERSE_PROXY antes de recriar o proxy.
+  caddy:
+    profiles: ["caddy-nao-usado-com-proxy-externo"]
+
+# `external: true` = quem cria esta rede não é o compose. Nos dois cenários ela
+# já existe quando o `up -d` roda: ou é a rede do proxy da hospedagem (coolify,
+# dokploy-network, traefik...), ou é a bridge que o install.sh criou para este
+# projeto quando o Traefik está em modo host.
+#
+# Rede externa AUSENTE é recusada ANTES de o compose criar qualquer coisa —
+# medido com o compose v2.38.2 contra este mesmo arquivo: "network X declared as
+# external, but could not be found", sem dizer de onde saiu o nome. Vale
+# inclusive quando X é a `<projeto>_internal` que o próprio compose criaria neste
+# mesmo `up` (a checagem de rede externa vem antes de qualquer criação); por isso
+# a bridge do modo host é uma rede separada, e o install.sh a cria antes de subir
+# a stack.
+networks:
+  proxy:
+    external: true
+    name: "${TRAEFIK_NETWORK:-traefik}"

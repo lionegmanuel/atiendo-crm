@@ -1,0 +1,158 @@
+import { currentExecutionBoundary, currentExecutionJob } from '@/lib/atendimento/fronteira-server';
+import { claimOfJob } from '@/lib/agent-engine/queue/claim';
+/**
+ * Tools MCP habilitadas NA TELA entrando no turno do engine (Fase 2B-tools).
+ *
+ * Reusa a MESMA ponte in-process do runtime nativo (lib/ai/runtime/tools:
+ * pickToolsFromMcp) — audit em api_audit_log, ensureRole/ensureScope e redação
+ * de PII idênticos. O actor do audit é o ai_agents.id do agente publicado, com
+ * token efêmero mintado pelo padrão do repo (TTL curto, revogado no fim do turno).
+ *
+ * FILTRO DE SEGURANÇA (inegociável, não é knob):
+ *   - crm_send_whatsapp_message NUNCA entra: enviar é SEMPRE a tool send_message
+ *     do engine, atrás da cadeia runBeforeSend (CLAUDE.md princípio 2) — uma tool
+ *     de envio por fora furaria anti-ban/opt-out/disclosure inteiros;
+ *   - crm_request_human_handoff NUNCA entra (e a auto-injeção da ponte fica
+ *     desligada): o engine tem a própria request_human_handoff com silêncio
+ *     durável + cancelamento de follow-ups — duas tools de handoff confundiriam
+ *     o modelo e a variante do CRM não silencia o harness.
+ */
+import type { Tool } from 'ai';
+
+import { pickToolsFromMcp, type RuntimeHandoffSignal } from '@/lib/ai/runtime/tools';
+import { mintEphemeralToken, revokeEphemeralToken } from '@/lib/ai/runtime/mcp_token';
+import { IDS_DO_HARNESS, motivoDoHarness } from '@/lib/mcp/tools/ferramentas-do-harness';
+import type { McpAuthResult } from '@/lib/mcp/auth';
+import type { McpContext } from '@/lib/mcp/types';
+import { modulosLigados } from '@/lib/instalacao/modulos';
+import { filtrarToolsComCallbackDesabilitado } from '@/lib/followup/callback-policy';
+
+import type { Logger } from '../../obs/logger';
+import type { CrmEdgeConfig } from './mcp-client';
+import type { PublishedAgentConfig } from '../../agent/agent-config';
+
+/**
+ * Tools do catálogo que jamais entram num turno do engine (ver doc acima).
+ *
+ * A lista VIVE em `lib/mcp/tools/ferramentas-do-harness.ts` — com o motivo de
+ * cada uma escrito para a tela — e é reexportada aqui porque este é o lado que
+ * recusa. Enquanto ela existiu só aqui, o dono marcava `crm_send_whatsapp_message`
+ * no pacote "Atender e responder" e o turno descartava sem que a tela soubesse.
+ *
+ * Exportado para ser ASSERÍVEL: a garantia de que o papel Operador não tem canal
+ * (spec 16 §3.2) depende desta lista, e uma garantia que nenhum teste consegue
+ * ler é uma garantia que ninguém percebe quando some.
+ */
+export const BLOCKED_TOOL_IDS: ReadonlySet<string> = IDS_DO_HARNESS;
+
+export interface McpTurnTools {
+  tools: Record<string, Tool>;
+  /** ids efetivamente montados (para o log do turno — auditável). */
+  toolIds: string[];
+  /** revoga o token efêmero — chamar no fim do turno (caminho feliz). */
+  cleanup: () => Promise<void>;
+}
+
+export async function buildMcpTurnTools(
+  cfg: CrmEdgeConfig,
+  /** `contactId`: o contato do turno — ver `contatoDoTurno` em `lib/ai/runtime/tools.ts`. */
+  ids: { organizationId: string; jobId: string; contactId?: string },
+  agentConfig: PublishedAgentConfig,
+  log: Logger,
+  options?: { readOnly: boolean },
+): Promise<McpTurnTools | null> {
+  const callbackFiltered = filtrarToolsComCallbackDesabilitado(
+    agentConfig.toolIds,
+    agentConfig.followup,
+  );
+  const allowed = callbackFiltered.filter((id) => !BLOCKED_TOOL_IDS.has(id));
+  const blocked = agentConfig.toolIds.filter((id) => BLOCKED_TOOL_IDS.has(id));
+  if (blocked.length > 0) {
+    // A tela não oferece mais estas capacidades (a rota serve `marcavel: false`
+    // com o motivo), então chegar aqui significa versão de agente PUBLICADA
+    // antes da correção, ou configuração escrita por fora da tela. O log deixou
+    // de ser o ÚNICO sinal — a tela mostra o porquê — mas o turno continua
+    // recusando em silêncio para o modelo, de propósito.
+    log.warn('tools MCP bloqueadas no turno do engine (envio/handoff são do harness)', {
+      blocked_tool_ids: blocked,
+      motivos: blocked.map((id) => motivoDoHarness(id)),
+    });
+  }
+  if (allowed.length === 0) {
+    return null;
+  }
+
+  const ephemeral = await mintEphemeralToken({
+    organizationId: ids.organizationId,
+    runId: ids.jobId,
+    readOnly: options?.readOnly,
+    versionCreatedBy: agentConfig.versionCreatedBy ?? undefined,
+    agentCreatedBy: agentConfig.agentCreatedBy ?? undefined,
+  });
+
+  const originJob = currentExecutionJob();
+  const boundary = currentExecutionBoundary();
+  const claim = originJob ? claimOfJob(originJob) : undefined;
+  const ctx: McpContext = {
+    sourceJobId: ids.jobId,
+    ...(originJob?.id === ids.jobId && boundary && claim
+      ? { meetingBooking: { sourceJobId: originJob.id, claim, boundary } }
+      : {}),
+    organizationId: ids.organizationId,
+    role: 'ai_operator',
+    // `agent_id` explícito porque é ele que vai para colunas com FK (atividade
+    // da timeline); `id` continua sendo a identidade de correlação do audit.
+    actor: {
+      type: 'ai_agent',
+      id: agentConfig.agentId,
+      agent_id: agentConfig.agentId,
+      role: 'ai_operator',
+      api_token_id: ephemeral.id,
+    },
+    apiTokenId: ephemeral.id,
+    requestId: ids.jobId,
+    supabase: cfg.supabase,
+  };
+  const auth: McpAuthResult = {
+    organizationId: ids.organizationId,
+    role: 'ai_operator',
+    actor: ctx.actor,
+    apiTokenId: ephemeral.id,
+    scopes: options?.readOnly
+      ? ['mcp:read', 'actor:ai_agent']
+      : ['mcp:read', 'mcp:write', 'actor:ai_agent'],
+  };
+  // O engine não usa o sinal de handoff da ponte (a tool está bloqueada) — dummy.
+  const handoffSignal: RuntimeHandoffSignal = { triggered: false };
+
+  const tools = pickToolsFromMcp({
+    supabase: cfg.supabase,
+    ctx,
+    auth,
+    toolIds: allowed,
+    handoffToolEnabled: false,
+    handoffSignal,
+    // "Em que negócios ele pode mexer" — o campo é OPCIONAL na interface, e
+    // omiti-lo não é neutro: `escopo ?? []` e vazio significa NENHUM. Este
+    // turno, que é o de produção, montava as capacidades de CRM sem escopo, e
+    // por isso TODA escrita de lead era recusada — com a capacidade ligada na
+    // tela e o card parado. Quem passava era só o dispatcher antigo.
+    pipelineIds: agentConfig.pipelineIds,
+    modulosLigados: await modulosLigados(cfg.supabase),
+    ...(ids.contactId ? { contatoDoTurno: ids.contactId } : {}),
+  });
+
+  return {
+    tools,
+    toolIds: Object.keys(tools),
+    // ponytail: revoke só no caminho feliz — em crash do turno o token expira
+    // pelo TTL curto do mint (mesmo tradeoff aceito pelo runtime nativo no grace).
+    cleanup: async () => {
+      try {
+        await revokeEphemeralToken(ephemeral.id);
+      } catch {
+        // token expira sozinho; revogação é higiene, não invariante.
+      }
+    },
+  };
+}

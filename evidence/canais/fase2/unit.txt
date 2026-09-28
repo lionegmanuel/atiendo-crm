@@ -1,0 +1,62 @@
+
+> deskcomm-crm@0.1.0 test:unit /Users/rafaelmelgaco/DeskcommCRM-canais
+> vitest run
+
+
+ RUN  v4.1.10 /Users/rafaelmelgaco/DeskcommCRM-canais
+
+ ❯ tests/unit/evidencia-citada.test.ts (30 tests | 1 failed) 1885ms
+     × docs/growth/lp-prompts-imagens.md não cita imagem fora do versionamento 85ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/evidencia-citada.test.ts > evidência citada > docs/growth/lp-prompts-imagens.md não cita imagem fora do versionamento
+AssertionError: docs/growth/lp-prompts-imagens.md aponta para arquivo que não está em git ls-files — quem clonar acha o vazio:
+  docs/growth/mesa-01-a-tampo.png
+  docs/growth/mesa-01-b-trilhas.png
+  docs/growth/mesa-01-c-pecas.png
+  docs/growth/mesa-01-d-lead.png
+  docs/growth/cena-01-chega.png
+  docs/growth/cena-02-contexto.png
+  docs/growth/cena-03-gates.png
+  docs/growth/cena-04-veto.png
+  docs/growth/cena-05-move.png
+  docs/growth/cena-06-handoff.png
+  docs/growth/cena-07-followup.png: expected [ …(11) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "docs/growth/mesa-01-a-tampo.png",
++   "docs/growth/mesa-01-b-trilhas.png",
++   "docs/growth/mesa-01-c-pecas.png",
++   "docs/growth/mesa-01-d-lead.png",
++   "docs/growth/cena-01-chega.png",
++   "docs/growth/cena-02-contexto.png",
++   "docs/growth/cena-03-gates.png",
++   "docs/growth/cena-04-veto.png",
++   "docs/growth/cena-05-move.png",
++   "docs/growth/cena-06-handoff.png",
++   "docs/growth/cena-07-followup.png",
++ ]
+
+ ❯ tests/unit/evidencia-citada.test.ts:268:9
+    266|         `${doc} aponta para arquivo que não está em git ls-files — que…
+    267|           mortas.map((m) => `  ${m}`).join("\n"),
+    268|       ).toEqual([]);
+       |         ^
+    269|     });
+    270|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 141 passed (142)
+      Tests  1 failed | 1080 passed (1081)
+   Start at  09:12:06
+   Duration  74.40s (transform 11.86s, setup 65.99s, import 153.40s, tests 52.77s, environment 371.89s)
+
+ ELIFECYCLE  Command failed with exit code 1.
+exit=1

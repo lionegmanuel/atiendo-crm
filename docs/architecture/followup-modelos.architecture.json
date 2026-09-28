@@ -1,0 +1,405 @@
+{
+  "schema_version": 1,
+  "diagram_type": "fluxo",
+  "meta": {
+    "titulo": "Modelos prontos de follow-up (clínica)",
+    "pergunta": "Como uma clínica recém-instalada passa a ter follow-up sem desenhar um grafo?",
+    "resumo": "O catálogo é dado do produto. A galeria manda só o id do modelo; a rota valida o grafo do catálogo e grava um ponteiro RASCUNHO com o gatilho armado. Publicar e armar no agente continuam sendo atos de gente — e quando o segundo não acontece, quem denuncia é o cron `followup-sem-agente`, que abre um aviso na Central e o FECHA sozinho quando o vínculo aparece."
+  },
+  "lanes": [
+    {
+      "id": "humano",
+      "label": "O que o humano vê"
+    },
+    {
+      "id": "borda",
+      "label": "Borda HTTP"
+    },
+    {
+      "id": "regra",
+      "label": "Regras puras"
+    },
+    {
+      "id": "dados",
+      "label": "Banco"
+    },
+    {
+      "id": "motor",
+      "label": "O motor (worker 24/7)"
+    }
+  ],
+  "mainPath": [
+    "galeria",
+    "rota",
+    "catalogo",
+    "pointers",
+    "construtor",
+    "publish",
+    "gatilhos",
+    "engine"
+  ],
+  "nodes": [
+    {
+      "id": "lista",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "FlowsList (aba Fluxos)",
+      "sublabel": "tela vazia oferece MODELO antes de folha em branco"
+    },
+    {
+      "id": "galeria",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "ModelosDialog",
+      "sublabel": "4 jornadas · toques e horizonte CALCULADOS do grafo"
+    },
+    {
+      "id": "etapas",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "useEtapasDeGatilho",
+      "sublabel": "etapa por NOME + funil — nunca uuid na tela"
+    },
+    {
+      "id": "construtor",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "/app/ai/followups/[id]",
+      "sublabel": "abre já desenhado: a pessoa lê os textos e publica"
+    },
+    {
+      "id": "agente",
+      "lane": "humano",
+      "col": 5,
+      "type": "frontend",
+      "label": "Agentes › Follow-up",
+      "sublabel": "FollowupFlowPicker — o passo que a galeria AVISA que falta"
+    },
+    {
+      "id": "rota",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "POST /ai/followup-flows/from-model",
+      "sublabel": "manager+ · só `model_id` no body, nunca o grafo"
+    },
+    {
+      "id": "publish",
+      "lane": "borda",
+      "col": 5,
+      "type": "api",
+      "label": "POST /ai/followup-flows/[id]/publish",
+      "sublabel": "allowlist de kind com motor + etapa viva"
+    },
+    {
+      "id": "catalogo",
+      "lane": "regra",
+      "col": 3,
+      "type": "regra",
+      "label": "lib/followup/modelos/",
+      "sublabel": "4 modelos de clínica · textos sem dado de saúde"
+    },
+    {
+      "id": "escada",
+      "lane": "regra",
+      "col": 2,
+      "type": "regra",
+      "label": "montarEscada()",
+      "sublabel": "o desenho escrito uma vez: manda, espera, insiste, para"
+    },
+    {
+      "id": "validador",
+      "lane": "regra",
+      "col": 3,
+      "type": "regra",
+      "label": "flowGraphSchema + validateFlowForPublish",
+      "sublabel": "grafo inválido é 500 nosso, nunca linha no banco"
+    },
+    {
+      "id": "gate",
+      "lane": "regra",
+      "col": 6,
+      "type": "regra",
+      "label": "resolveAgentForAutomaticTrigger",
+      "sublabel": "sem agente publicado armando, gatilho automático não enrolla"
+    },
+    {
+      "id": "pointers",
+      "lane": "dados",
+      "col": 4,
+      "type": "tabela",
+      "label": "followup_flow_pointers",
+      "sublabel": "status='draft' · draft_graph · trigger_config armado"
+    },
+    {
+      "id": "stages",
+      "lane": "dados",
+      "col": 3,
+      "type": "tabela",
+      "label": "crm_stages",
+      "sublabel": "etapa conferida contra a org ANTES de gravar"
+    },
+    {
+      "id": "audit",
+      "lane": "dados",
+      "col": 4,
+      "type": "tabela",
+      "label": "api_audit_log",
+      "sublabel": "followup_flow.created com model_id — de onde o fluxo veio"
+    },
+    {
+      "id": "enrollments",
+      "lane": "dados",
+      "col": 7,
+      "type": "tabela",
+      "label": "followup_enrollments",
+      "sublabel": "1 vivo por contato na org inteira"
+    },
+    {
+      "id": "gatilhos",
+      "lane": "motor",
+      "col": 6,
+      "type": "worker",
+      "label": "silence-sweep · gatilho-etapa · presença",
+      "sublabel": "os três produtores que os 4 modelos usam"
+    },
+    {
+      "id": "engine",
+      "lane": "motor",
+      "col": 7,
+      "type": "worker",
+      "label": "cron followup-flow-worker",
+      "sublabel": "1×/min: anda a escada e manda o texto fixo"
+    },
+    {
+      "id": "reatividade",
+      "lane": "motor",
+      "col": 8,
+      "type": "worker",
+      "label": "reactivity (cancel_on_reply)",
+      "sublabel": "respondeu qualquer coisa → cancela e devolve ao atendimento"
+    },
+    {
+      "id": "watcher",
+      "lane": "motor",
+      "col": 6,
+      "type": "worker",
+      "label": "cron followup-sem-agente",
+      "sublabel": "1×/hora: reconcilia — abre o aviso e o fecha quando conserta"
+    },
+    {
+      "id": "central",
+      "lane": "humano",
+      "col": 6,
+      "type": "frontend",
+      "label": "Central de avisos",
+      "sublabel": "kind `followup_sem_agente` · warn · um por fluxo"
+    }
+  ],
+  "edges": [
+    {
+      "id": "m1",
+      "from": "lista",
+      "to": "galeria",
+      "label": "«Começar de um modelo» — primeiro botão da tela vazia"
+    },
+    {
+      "id": "m2",
+      "from": "catalogo",
+      "to": "escada",
+      "label": "cada modelo declara toques, prazos e textos — o desenho é montado, não copiado"
+    },
+    {
+      "id": "m3",
+      "from": "catalogo",
+      "to": "galeria",
+      "label": "import direto: dado estático do produto, não rota"
+    },
+    {
+      "id": "m4",
+      "from": "etapas",
+      "to": "galeria",
+      "label": "só nos 2 modelos de gatilho por etapa"
+    },
+    {
+      "id": "m5",
+      "from": "galeria",
+      "to": "rota",
+      "label": "{ model_id, stage_id? } — o desenho NÃO viaja"
+    },
+    {
+      "id": "m6",
+      "from": "rota",
+      "to": "stages",
+      "label": "etapa existe, é da org e não está arquivada?"
+    },
+    {
+      "id": "m7",
+      "from": "rota",
+      "to": "catalogo",
+      "label": "modeloPorId — quem manda o grafo é o catálogo"
+    },
+    {
+      "id": "m8",
+      "from": "escada",
+      "to": "validador",
+      "label": "o grafo montado passa pelo mesmo schema que o construtor usa"
+    },
+    {
+      "id": "m9",
+      "from": "validador",
+      "to": "rota",
+      "label": "reprovou → 500 modelo_invalido (defeito nosso)"
+    },
+    {
+      "id": "m10",
+      "from": "rota",
+      "to": "pointers",
+      "label": "INSERT draft + trigger armado · 23505 → 409 com o nome"
+    },
+    {
+      "id": "m11",
+      "from": "rota",
+      "to": "audit",
+      "label": "fire-and-forget, com model_id"
+    },
+    {
+      "id": "m12",
+      "from": "rota",
+      "to": "construtor",
+      "label": "redireciona: instalar é o começo, não o fim"
+    },
+    {
+      "id": "m13",
+      "from": "pointers",
+      "to": "construtor",
+      "label": "carrega o rascunho já desenhado"
+    },
+    {
+      "id": "m14",
+      "from": "construtor",
+      "to": "publish",
+      "label": "a pessoa lê os textos e publica"
+    },
+    {
+      "id": "m15",
+      "from": "publish",
+      "to": "pointers",
+      "label": "versão pinada + status='active'"
+    },
+    {
+      "id": "m16",
+      "from": "galeria",
+      "to": "agente",
+      "label": "a tela AVISA que falta armar no agente"
+    },
+    {
+      "id": "m17",
+      "from": "agente",
+      "to": "gate",
+      "label": "followup.flow_pointer_ids da versão publicada"
+    },
+    {
+      "id": "m18",
+      "from": "pointers",
+      "to": "gatilhos",
+      "label": "silence / stage_change / appointment_no_show"
+    },
+    {
+      "id": "m19",
+      "from": "gate",
+      "to": "gatilhos",
+      "label": "sem agente armando, o produtor sai por pointers_armados=0"
+    },
+    {
+      "id": "m20",
+      "from": "gatilhos",
+      "to": "enrollments",
+      "label": "cria a inscrição do paciente"
+    },
+    {
+      "id": "m21",
+      "from": "enrollments",
+      "to": "engine",
+      "label": "claim por next_eval_at"
+    },
+    {
+      "id": "m22",
+      "from": "engine",
+      "to": "enrollments",
+      "label": "anda um degrau e regrava o relógio"
+    },
+    {
+      "id": "m23",
+      "from": "reatividade",
+      "to": "enrollments",
+      "label": "resposta do paciente cancela (outcome='replied')"
+    },
+    {
+      "id": "m24",
+      "from": "pointers",
+      "to": "lista",
+      "label": "a lista lê os ponteiros — e o nome instalado vira o selo «Já instalado» na galeria"
+    },
+    {
+      "id": "m25",
+      "from": "stages",
+      "to": "etapas",
+      "label": "etapas ativas por funil (agent-mapping), nunca o quadro inteiro"
+    },
+    {
+      "id": "m26",
+      "from": "pointers",
+      "to": "reatividade",
+      "label": "cancel_on_reply mora no trigger_config do ponteiro"
+    },
+    {
+      "id": "m27",
+      "from": "pointers",
+      "to": "watcher",
+      "label": "fluxos `active` de gatilho que EXIGE agente (nunca manual/webhook)"
+    },
+    {
+      "id": "m28",
+      "from": "gate",
+      "to": "watcher",
+      "label": "a mesma pergunta do produtor: existe agente publicado armando?"
+    },
+    {
+      "id": "m29",
+      "from": "watcher",
+      "to": "central",
+      "label": "desarmado → abre o aviso, nomeando o fluxo e quando ele dispararia"
+    },
+    {
+      "id": "m30",
+      "from": "watcher",
+      "to": "central",
+      "label": "armado → FECHA o aviso aberto (o laço, invariante 7)"
+    },
+    {
+      "id": "m31",
+      "from": "central",
+      "to": "agente",
+      "label": "«Ver o fluxo parado» + o corpo com os três passos"
+    }
+  ],
+  "cards": [
+    {
+      "titulo": "Por que o fluxo nasce rascunho",
+      "texto": "Instalar grava texto que vai para paciente. Publicar sozinho trocaria um clique de curiosidade por mensagem enviada, e o produto não tem desfazer de WhatsApp. O construtor abre em seguida com o grafo pronto, então o custo do rascunho é um clique — e o benefício é alguém ter lido as mensagens."
+    },
+    {
+      "titulo": "Por que a galeria não arma o agente",
+      "texto": "Armar mexeria na versão publicada de um agente que já atende, sem ninguém pedir. A aresta m16 existe para que a omissão seja DITA na tela: sem ela, o dono instala, vê o fluxo na lista e espera mensagens que nunca saem — fluxo com cara de vivo."
+    },
+    {
+      "titulo": "O laço de retorno (invariante 7)",
+      "texto": "Quando um modelo erra, quem mostra é a Fila e o dossiê do enrollment, que já existem: cada degrau grava `followup_enrollment_events`, e o desfecho (`converted`, `replied`, `exhausted`) diz se o modelo reengaja ou só incomoda. Quando o modelo nem chega a rodar — publicado sem agente que o arme —, quem mostra é o cron `followup-sem-agente`: era o único estado do desenho em que o silêncio era total, e ele fechava o laço em lugar nenhum."
+    }
+  ]
+}

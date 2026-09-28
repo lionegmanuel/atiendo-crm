@@ -1,0 +1,85 @@
+{
+  "prompt_kind": "operador",
+  "cenario": "2-marcador-existente",
+  "mensagem": "Quero marcar este atendimento como urgente. Que marcadores a gente já usa? Não quero criar um repetido.",
+  "esperado": "crm_list_tags antes de qualquer crm_manage_tags",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Já existe o marcador oficial **`urgente`** — pode usar esse, sem criar outro.\n\nOutros marcadores disponíveis: `devolução`, `dúvida`, `elogio`, `orçamento`, `pós-venda`, `reclamação` e `troca`.",
+  "ferramentas": [
+    "crm_list_tags"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 1443,
+      "tokens_out": 47,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_tags",
+          "args": {
+            "limit": 60
+          },
+          "result": {
+            "marcadores": [
+              {
+                "marcador": "devolução",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "dúvida",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "elogio",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "orçamento",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "pós-venda",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "reclamação",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "troca",
+                "conversas": 0,
+                "oficial": true
+              },
+              {
+                "marcador": "urgente",
+                "conversas": 0,
+                "oficial": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Já existe o marcador oficial **`urgente`** — pode usar esse, sem criar outro.\n\nOutros marcadores disponíveis: `devolução`, `dúvida`, `elogio`, `orçamento`, `pós-venda`, `reclamação` e `troca`.",
+      "finish_reason": "stop",
+      "tokens_in": 1659,
+      "tokens_out": 65,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 4918,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "77b63cc2-7b50-4a17-87a8-ad49cae9795d",
+  "medido_em": "2026-08-06T16:32:18.023Z"
+}

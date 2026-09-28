@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "O teto de gasto com IA — o controle que passou a vincular quem gasta",
+    "subtitle": "a tela editava um campo e o gate lia outro; o que fecha o laço, e o que a parada NÃO desfaz sozinha",
+    "output": "teto-de-orcamento.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o humano vê" },
+    { "id": "borda", "label": "Borda HTTP (admin)" },
+    { "id": "regra", "label": "Decisão pura" },
+    { "id": "gasta", "label": "Quem gasta" },
+    { "id": "dados", "label": "Banco" },
+    { "id": "volta", "label": "O laço de retorno" }
+  ],
+  "mainPath": ["card", "patch", "budgets", "credentials", "decidir", "runmodel", "handoff"],
+  "nodes": [
+    { "id": "card", "lane": "humano", "col": 1, "type": "frontend", "label": "BudgetCard (/app/ai/usage)", "sublabel": "radio off → avisar → bloquear · faixa do kill switch · ressalva de medição" },
+    { "id": "hook", "lane": "humano", "col": 2, "type": "frontend", "label": "useAiBudget / useUpdateBudget", "sublabel": "GET + PATCH; sem action_at_100pct (o produto nunca o honrou)" },
+    { "id": "inbox", "lane": "humano", "col": 3, "type": "frontend", "label": "Central de avisos (/app/ai/inbox)", "sublabel": "budget_warning (warn) · budget_exceeded (critical) · handoff" },
+    { "id": "runs", "lane": "humano", "col": 4, "type": "frontend", "label": "Execuções de IA (/app/ai/runs)", "sublabel": "a recusa por orçamento aparece como linha, não como ausência" },
+    { "id": "retomar", "lane": "humano", "col": 5, "type": "frontend", "label": "\"Devolver ao automático\"", "sublabel": "ConversationHeader — POST /conversations/:id/reactivate-bot" },
+
+    { "id": "patch", "lane": "borda", "col": 2, "type": "api", "label": "PATCH /api/v1/ai/budget", "sublabel": "escada + carência 72h + piso US$ 1,00 + auditoria · service role" },
+    { "id": "get", "lane": "borda", "col": 1, "type": "api", "label": "GET /api/v1/ai/budget", "sublabel": "manager+ · devolve getBudgetStatus cru" },
+    { "id": "status", "lane": "borda", "col": 3, "type": "service", "label": "lib/ai/budget/check.ts", "sublabel": "getBudgetStatus — régua única + blocked_now + gasto_incompleto" },
+    { "id": "saude", "lane": "borda", "col": 4, "type": "api", "label": "GET /admin/tenants/[id]/health", "sublabel": "o único painel de admin que lê a régua real" },
+    { "id": "kpis", "lane": "borda", "col": 5, "type": "api", "label": "GET /admin/dashboard/kpis", "sublabel": "ainda na coluna acumulada — divergência declarada, nunca critical" },
+
+    { "id": "decidir", "lane": "regra", "col": 2, "type": "service", "label": "decidirOrcamento()", "sublabel": "6 condições conjuntivas · toda ambiguidade resolve para NÃO bloquear" },
+    { "id": "sqlorc", "lane": "regra", "col": 3, "type": "service", "label": "SQL_ORCAMENTO", "sublabel": "um round-trip: lê o estado, retrata alerta obsoleto, abre o aviso" },
+    { "id": "chave", "lane": "regra", "col": 1, "type": "service", "label": "AI_BUDGET_ENFORCEMENT", "sublabel": "kill switch da instalação — só sabe AFROUXAR" },
+
+    { "id": "credentials", "lane": "gasta", "col": 1, "type": "service", "label": "resolveOrgLlmConfig", "sublabel": "left join ai_budgets no MESMO round-trip · nunca lança" },
+    { "id": "runmodel", "lane": "gasta", "col": 2, "type": "service", "label": "aplicarOrcamento (run-model-call)", "sublabel": "recusa ANTES de sair byte · LlmBudgetExceededError.terminal = true" },
+    { "id": "turno", "lane": "gasta", "col": 3, "type": "service", "label": "runAgentTurn", "sublabel": "o turno INTEIRO dentro da escolta — inclui classifyStage e maybeCompact" },
+    { "id": "legado", "lane": "gasta", "col": 4, "type": "service", "label": "ai-response-worker", "sublabel": "caminho pré-engine (org sem versão publicada) · veto DEPOIS de G1/G4" },
+    { "id": "fila", "lane": "gasta", "col": 5, "type": "service", "label": "agent-worker/main.ts", "sublabel": "erro terminal → cancelJob, não failJob (não afoga a Central em job_dead)" },
+
+    { "id": "budgets", "lane": "dados", "col": 1, "type": "database", "label": "ai_budgets", "sublabel": "enforcement_mode (default off) · enforcement_effective_at · escrita só por service role (0160)" },
+    { "id": "regua", "lane": "dados", "col": 2, "type": "database", "label": "fn_gasto_de_ia_do_mes(uuid)", "sublabel": "a definição ÚNICA de gasto · security invoker, revogada de anon/authenticated" },
+    { "id": "llmcalls", "lane": "dados", "col": 3, "type": "database", "label": "llm_calls", "sublabel": "cost_cents em USD; NULL = preço desconhecido (o furo que a tela confessa)" },
+    { "id": "itens", "lane": "dados", "col": 4, "type": "database", "label": "agent_inbox_items", "sublabel": "ref_kind='ai_budget' — é o que permite FECHAR o item depois" },
+    { "id": "audit", "lane": "dados", "col": 5, "type": "database", "label": "api_audit_log", "sublabel": "ai.budget_limit_changed · _enforcement_armed · _enforcement_disarmed" },
+
+    { "id": "handoff", "lane": "volta", "col": 2, "type": "service", "label": "performHumanHandoff / triggerHandoff", "sublabel": "conversa → fila humana, razão orcamento_de_ia, zero token" },
+    { "id": "conversas", "lane": "volta", "col": 3, "type": "database", "label": "conversations / contacts", "sublabel": "status='pending' · bot_silenced_until='infinity' · force_human=true" },
+    { "id": "retrata", "lane": "volta", "col": 1, "type": "service", "label": "retratarAvisos + CTE retrata", "sublabel": "gasto abaixo do limiar, teto apagado ou afrouxamento pela tela" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "card", "to": "hook", "label": "escolher o degrau · digitar o teto · marcar \"começar agora\"" },
+    { "id": "e2", "from": "hook", "to": "patch", "label": "PATCH { enforcement_mode?, monthly_limit_cents?, alarm_threshold_pct?, confirmar_imediato? }" },
+    { "id": "e3", "from": "hook", "to": "get", "label": "GET a cada 30s (staleTime)" },
+    { "id": "e4", "from": "get", "to": "status", "label": "getBudgetStatus(orgId)" },
+    { "id": "e5", "from": "patch", "to": "budgets", "label": "update/insert — a ÚNICA porta com escada, carência, piso e auditoria" },
+    { "id": "e6", "from": "patch", "to": "audit", "label": "uma mutação = uma linha; a transição escolhe o código" },
+    { "id": "e7", "from": "patch", "to": "retrata", "label": "afrouxou? fecha os itens na hora — sem esperar tráfego que pode não vir" },
+    { "id": "e8", "from": "status", "to": "regua", "label": "RPC fn_gasto_de_ia_do_mes; falha degrada para a coluna e LOGA" },
+    { "id": "e9", "from": "status", "to": "budgets", "label": "select do modo, teto, limiar e carência" },
+    { "id": "e10", "from": "status", "to": "itens", "label": "count de budget_exceeded aberto → blocked_now" },
+    { "id": "e11", "from": "status", "to": "llmcalls", "label": "count de cost_cents NULL no mês → gasto_incompleto (a ressalva do card)" },
+    { "id": "e12", "from": "status", "to": "card", "label": "o número exibido é o número que decide" },
+    { "id": "e13", "from": "credentials", "to": "budgets", "label": "left join na PK — mesmo round-trip da config de LLM" },
+    { "id": "e14", "from": "credentials", "to": "runmodel", "label": "modo + teto + carência, já normalizados" },
+    { "id": "e15", "from": "runmodel", "to": "chave", "label": "normalizarChaveDeOrcamento(env) — o operador da VPS pode afrouxar às 2h" },
+    { "id": "e16", "from": "runmodel", "to": "sqlorc", "label": "um round-trip, só quando o modo NÃO é off" },
+    { "id": "e17", "from": "sqlorc", "to": "regua", "label": "select public.fn_gasto_de_ia_do_mes($1)" },
+    { "id": "e18", "from": "sqlorc", "to": "itens", "label": "CTE avisa (abre budget_warning) · CTE avisado_antes (o retrato do mês)" },
+    { "id": "e19", "from": "sqlorc", "to": "retrata", "label": "CTE retrata — gasto abaixo do limiar, ou teto abaixo do piso" },
+    { "id": "e20", "from": "runmodel", "to": "decidir", "label": "monta EntradaDeOrcamento e EXECUTA o veredito; nunca o recalcula" },
+    { "id": "e21", "from": "decidir", "to": "runmodel", "label": "seguir · avisar_e_seguir · bloquear" },
+    { "id": "e22", "from": "runmodel", "to": "llmcalls", "label": "a recusa vira linha status='erro' / error_code='orcamento_esgotado'" },
+    { "id": "e23", "from": "runmodel", "to": "itens", "label": "insert budget_exceeded (critical) com ref_kind='ai_budget'" },
+    { "id": "e24", "from": "turno", "to": "runmodel", "label": "toda chamada de modelo do turno — inclusive as indiretas" },
+    { "id": "e25", "from": "turno", "to": "handoff", "label": "comHandoffSeOrcamentoAcabar: captura, devolve a conversa, RELANÇA" },
+    { "id": "e26", "from": "turno", "to": "fila", "label": "o erro relançado sobe para o worker" },
+    { "id": "e27", "from": "fila", "to": "handoff", "label": "cancelJob só é seguro PORQUE outra pessoa assumiu" },
+    { "id": "e28", "from": "legado", "to": "status", "label": "getBudgetStatus — a mesma régua, sem segunda leitura" },
+    { "id": "e29", "from": "legado", "to": "decidir", "label": "a mesma função pura — reescrever as condições seria uma segunda decisão" },
+    { "id": "e30", "from": "legado", "to": "handoff", "label": "triggerHandoff com a MESMA razão que o engine grava" },
+    { "id": "e31", "from": "legado", "to": "itens", "label": "emite e retrata os dois itens (o engine nunca roda para esta org)" },
+    { "id": "e32", "from": "handoff", "to": "conversas", "label": "status='pending' · bot silenciado · follow-ups cancelados" },
+    { "id": "e33", "from": "handoff", "to": "itens", "label": "item kind='handoff' com o resumo do checkpoint durável" },
+    { "id": "e34", "from": "conversas", "to": "retomar", "label": "badge \"Automático pausado\" no cabeçalho da conversa" },
+    { "id": "e35", "from": "retomar", "to": "conversas", "label": "force_human=false — UMA conversa por clique, e é o ÚNICO caminho de volta" },
+    { "id": "e36", "from": "retrata", "to": "itens", "label": "status='resolved' nos dois kinds" },
+    { "id": "e37", "from": "runmodel", "to": "llmcalls", "label": "o sucesso também: cada chamada soma no gasto do mês seguinte" },
+    { "id": "e38", "from": "llmcalls", "to": "regua", "label": "sum(cost_cents) do mês corrente — o laço que realimenta a decisão" },
+    { "id": "e39", "from": "runs", "to": "llmcalls", "label": "a tela onde a recusa é lida" },
+    { "id": "e40", "from": "inbox", "to": "itens", "label": "os três itens, renderizados por AgentInboxList" },
+    { "id": "e41", "from": "saude", "to": "regua", "label": "gasto do mês pelo caminho canônico" },
+    { "id": "e42", "from": "kpis", "to": "budgets", "label": "current_month_consumed_cents — ACUMULADO, e o alerta diz isso" },
+    { "id": "e43", "from": "kpis", "to": "saude", "label": "o alerta leva para a tela que tem o número real" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "O defeito de origem, em uma frase",
+      "items": [
+        "a tela editava ai_budgets.monthly_limit_cents e o enforcement lia organizations.settings.llm.monthly_budget_cents — dois campos, duas fontes, nenhuma ligação",
+        "o segundo era escalar num jsonb livre lido por Zod com .catch() em dois níveis: forma errada virava null, e null é ilimitado. O campo que protegia falhava ABERTO por construção",
+        "resultado: nenhuma instalação estava protegida, e o card afirmava o contrário para todas",
+        "a saída não foi ligar um no outro (o DEFAULT 5000 torna \"escolhi US$ 50\" indistinguível de \"nunca abri a tela\"): foi tornar o valor INERTE até enforcement_mode sair de 'off'"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "O laço de retorno (invariante 7) — o que muda quando o orçamento ERRA",
+      "items": [
+        "erra para MENOS (bloqueia quem não devia): a conversa vai para a fila humana (e32) e o badge aparece no cabeçalho (e34). Quem afrouxa pela tela fecha os itens no mesmo request (e7) — sem esperar tráfego que, com a IA parada, não vem",
+        "erra para MAIS (não bloqueia quem devia): o gasto continua somando em llm_calls (e37), a régua o relê (e38) e a decisão seguinte enxerga o número maior. O laço é a própria realimentação do gasto",
+        "erra porque NÃO SABE MEDIR (modelo sem preço em pricing.ts): cost_cents nasce NULL, e11 conta essas linhas e o card confessa a incompletude ANTES de a pessoa armar a parada",
+        "erra porque a instalação afrouxou: a faixa do kill switch nomeia AI_BUDGET_ENFORCEMENT na tela — controle que o processo ignora em silêncio é pior que controle nenhum"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Não-ligações deliberadas",
+      "items": [
+        "o card NÃO recalcula as condições de decidirOrcamento: blocked_now vem de um budget_exceeded aberto (e10). Uma segunda decisão sempre diverge da que age",
+        "o dashboard de plataforma (e42) NÃO usa a régua: seria N round-trips, e a alternativa inline seria uma segunda régua. A divergência está escrita no arquivo, o alerta nunca é critical e ele leva para a tela que tem o número certo (e43)",
+        "o handoff NÃO gera resumo por LLM: o motivo do desvio é não haver orçamento. É texto fixo + o checkpoint durável, zero token",
+        "o kit NÃO tem cron de orçamento: a verificação roda no caminho que gasta. Se a org gastou, o código rodou — é a única forma de anti-morte que não apodrece"
+      ]
+    }
+  ]
+}

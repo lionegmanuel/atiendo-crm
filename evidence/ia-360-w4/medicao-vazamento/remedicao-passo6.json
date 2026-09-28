@@ -1,0 +1,287 @@
+{
+  "modelo": "gpt-5.6-terra",
+  "linhas": [
+    {
+      "config": "A",
+      "cenario": "1-ler-o-funil",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar a configuração atual do funil para listar as etapas com segurança."
+    },
+    {
+      "config": "A",
+      "cenario": "10-mandar-resposta-pronta",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo acessar as respostas prontas nem os dados do paciente para preencher a confirmação. Se você me enviar o nome e o texto do modelo, eu monto a mensagem para você."
+    },
+    {
+      "config": "A",
+      "cenario": "2-marcador-existente",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar a lista de marcadores já existentes. Para evitar duplicidade, recomendo verificar os marcadores ativos no CRM antes de criar ou aplicar um novo."
+    },
+    {
+      "config": "A",
+      "cenario": "3-diagnostico-de-entrada",
+      "vazou": true,
+      "termos": [
+        "endpoint"
+      ],
+      "categorias": [
+        "arquitetura"
+      ],
+      "erro": null,
+      "final_text": "No momento não consigo acessar os registros de integrações e recebimentos para diagnosticar a causa com segurança.\n\nPara verificar rapidamente, eu olharia:\n1. Se o formulário ainda está enviando dados (teste de preenchimento).\n2. Se houve alteração recente no site, domínio, formulário ou credenciais da integração.\n3. Se o endpoint de recebimento está retornando erro.\n4. Os últimos eventos recebidos e possíveis falhas nas automações que criam os contatos.\n\nSe você me enviar uma captura ou o erro exibido no formulário/integrador, posso ajudar a interpretar."
+    },
+    {
+      "config": "A",
+      "cenario": "4-capacidade-apenas-humana",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo criar etapas no funil. Quando o acesso estiver disponível, posso adicionar “Pós-venda” como a última etapa."
+    },
+    {
+      "config": "A",
+      "cenario": "5-barreira-de-verdade",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo criar etapas diretamente no funil. Quando o acesso estiver disponível, posso adicionar “Retorno pos-cirurgico” ao final do pipeline."
+    },
+    {
+      "config": "A",
+      "cenario": "6-respostas-prontas",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar o cadastro de respostas prontas. Se você quiser, posso ajudar a organizar uma lista assim que o acesso estiver disponível."
+    },
+    {
+      "config": "A",
+      "cenario": "7-automacoes-e-falhas",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar o status das automações nem o histórico de execuções para confirmar falhas nas últimas horas. Quando o acesso estiver disponível, posso verificar quais regras estão ativas e apontar eventuais erros recentes."
+    },
+    {
+      "config": "A",
+      "cenario": "8-desligar-automacao",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo acessar os controles da automação para desligá-la. Recomendo que alguém com acesso à operação pause imediatamente a regra de boas-vindas até revisarem o gatilho e o horário de disparo."
+    },
+    {
+      "config": "A",
+      "cenario": "9-quem-pode-mexer",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar a lista atual do time nem as permissões de acesso ao funil. Para pedir uma alteração, procure o administrador da organização ou alguém com perfil de gestão do CRM; essa pessoa normalmente consegue editar etapas, automações e configurações do funil."
+    },
+    {
+      "config": "B",
+      "cenario": "1-ler-o-funil",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar a configuração atual do funil para listar as etapas com segurança. Se você puder me dar acesso à visualização do CRM ou compartilhar uma captura/lista, organizo tudo na ordem para você."
+    },
+    {
+      "config": "B",
+      "cenario": "10-mandar-resposta-pronta",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo acessar as respostas prontas nem os dados do paciente para preencher a confirmação. Se você me enviar o nome do paciente e o texto/modelo da mensagem, eu monto a versão final para você revisar."
+    },
+    {
+      "config": "B",
+      "cenario": "2-marcador-existente",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar a lista de marcadores já cadastrados. Para evitar duplicidade, prefiro confirmar antes de sugerir ou criar um marcador de urgência."
+    },
+    {
+      "config": "B",
+      "cenario": "3-diagnostico-de-entrada",
+      "vazou": true,
+      "termos": [
+        "endpoint"
+      ],
+      "categorias": [
+        "arquitetura"
+      ],
+      "erro": null,
+      "final_text": "No momento não consigo acessar os registros das integrações para investigar diretamente. Vale checar se houve alteração no formulário/site, nas credenciais ou no endpoint de recebimento, e se existem erros no console ou no provedor do formulário.\n\nAssim que o acesso estiver disponível, eu verifico a origem de entrada, os últimos recebimentos e as automações relacionadas para identificar exatamente onde parou."
+    },
+    {
+      "config": "B",
+      "cenario": "4-capacidade-apenas-humana",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo criar etapas diretamente no funil. Quando o acesso estiver disponível, posso adicionar **Pós-venda** como a última etapa."
+    },
+    {
+      "config": "B",
+      "cenario": "5-barreira-de-verdade",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo criar etapas diretamente. Quando o acesso estiver disponível, posso adicionar “Retorno pos-cirurgico” como última etapa do funil."
+    },
+    {
+      "config": "B",
+      "cenario": "6-respostas-prontas",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar as respostas prontas cadastradas. Se quiser, posso ajudar a organizar uma lista assim que o acesso estiver disponível."
+    },
+    {
+      "config": "B",
+      "cenario": "7-automacoes-e-falhas",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar o status das automações nem o histórico de execuções para confirmar falhas recentes. Se puder acessar o painel, verifique as regras ativas e os últimos registros de execução/erro; assim dá para identificar rapidamente quais automações estão ligadas e se alguma falhou."
+    },
+    {
+      "config": "B",
+      "cenario": "8-desligar-automacao",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo acessar os controles da automação para desligá-la. Peça para alguém com acesso ao painel desativar imediatamente a regra de boas-vindas, para interromper os disparos."
+    },
+    {
+      "config": "B",
+      "cenario": "9-quem-pode-mexer",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar a lista atual do time nem as permissões de acesso ao funil. Para pedir uma alteração, procure o administrador da organização ou alguém com permissão de gestão do CRM; eles conseguem ajustar etapas, regras e configurações do funil."
+    },
+    {
+      "config": "C",
+      "cenario": "1-ler-o-funil",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento, não consigo consultar o funil para listar as etapas com segurança. Se você puder me dar acesso à visualização do quadro ou enviar uma captura, organizo a lista na ordem para você."
+    },
+    {
+      "config": "C",
+      "cenario": "10-mandar-resposta-pronta",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo acessar as respostas prontas nem os dados do paciente para preencher a mensagem. Se você me enviar o texto do modelo e o nome do paciente, eu monto a prévia para você."
+    },
+    {
+      "config": "C",
+      "cenario": "2-marcador-existente",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo consultar a lista atual de marcadores para confirmar se já existe um de urgência. Quando eu tiver acesso novamente, verifico antes de criar qualquer marcador duplicado."
+    },
+    {
+      "config": "C",
+      "cenario": "3-diagnostico-de-entrada",
+      "vazou": true,
+      "termos": [
+        "webhook"
+      ],
+      "categorias": [
+        "arquitetura"
+      ],
+      "erro": null,
+      "final_text": "No momento não consigo acessar os registros de entradas automáticas nem as regras de integração para verificar a causa com segurança.\n\nVale checar, nesta ordem:\n1. Se o formulário recebeu envios hoje (teste preenchendo um contato).\n2. Se a integração/webhook do site está ativa e sem erros de autenticação.\n3. Se houve alteração recente no formulário, domínio, campos obrigatórios ou publicação do site.\n4. Se existe alguma regra automática que esteja bloqueando, arquivando ou direcionando os contatos para outro funil/etapa.\n5. Os logs do provedor do formulário ou do site, procurando erros a partir do horário em que os contatos deixaram de entrar.\n\nSe você me enviar um print ou os erros/logs da integração, eu ajudo a interpretar."
+    },
+    {
+      "config": "C",
+      "cenario": "4-capacidade-apenas-humana",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo alterar o funil diretamente. Posso orientar como criar a etapa “Pós-venda” ao final do quadro quando o acesso estiver disponível."
+    },
+    {
+      "config": "C",
+      "cenario": "5-barreira-de-verdade",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo criar etapas no funil por aqui. Assim que o acesso estiver disponível, posso verificar o funil correto e adicionar **“Retorno pos-cirurgico”** ao final."
+    },
+    {
+      "config": "C",
+      "cenario": "6-respostas-prontas",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento não consigo acessar a lista de respostas prontas cadastradas. Se quiser, posso ajudar a organizar uma relação quando o acesso estiver disponível."
+    },
+    {
+      "config": "C",
+      "cenario": "7-automacoes-e-falhas",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento, não consigo consultar o painel de automações nem os registros de execução para confirmar quais estão ativas ou se houve falhas nas últimas horas. Se você me enviar uma captura ou os nomes das automações, posso ajudar a interpretar os erros e priorizar a correção."
+    },
+    {
+      "config": "C",
+      "cenario": "8-desligar-automacao",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "Não consigo desativar a automação diretamente neste momento, pois não tenho acesso aos controles de regras automáticas agora. Recomendo pausá-la imediatamente no painel de automações para interromper novos disparos."
+    },
+    {
+      "config": "C",
+      "cenario": "9-quem-pode-mexer",
+      "vazou": false,
+      "termos": [],
+      "categorias": [],
+      "erro": null,
+      "final_text": "No momento, não tenho acesso à lista atual do time nem às permissões de edição do funil. Para garantir que você fale com a pessoa certa, recomendo verificar nas configurações de usuários/permissões da conta ou pedir ao administrador da clínica para identificar quem tem acesso de gestão ao funil."
+    }
+  ]
+}

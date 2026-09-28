@@ -1,0 +1,183 @@
+# Dependencies
+node_modules/
+# Sem a barra tambem: `node_modules/` casa so com diretorio, e um SYMLINK
+# chamado node_modules (worktree apontando para a instalacao principal) passa
+# batido e vai parar no commit. Aconteceu no PR #83.
+node_modules
+.pnp
+.pnp.js
+
+# Build artifacts
+.next/
+out/
+dist/
+build/
+.turbo/
+.vercel/
+
+# Env — ignora todo .env*, exceto os templates de exemplo
+.env*
+!.env.example
+!.env.hostgator.example
+!.env.voip.example
+
+# Asterisk — credenciais reais do trunk SIP/ARI (módulo VoIP, migration 0231),
+# nunca comitar. Templates ficam em asterisk/*.conf.example.
+asterisk/pjsip.conf
+asterisk/ari.conf
+
+# Testing & coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+e2e-artifacts/
+
+# IDE / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.recommended.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Epic executor (skill artifacts)
+.epic-executor/
+
+# Candidatos a golden set (F3-09/F3-11): os DOIS caminhos que os gravam em runtime — o
+# near-miss do matcher de skills e a divergência do classificador de etapa — escrevem o
+# TEXTO do lead no arquivo, para curadoria humana. É registro de dado do titular, não
+# artefato do produto: versionado, um `git add -A` publica conversa de cliente no repo, e no
+# clone de todo mundo, de onde ela não sai mais. A curadoria é local.
+# Ignora os dois prefixos que o engine grava, e não a pasta: a spec 15 (§11.1) reserva este
+# diretório para os goldens, que são curados à mão e não carregam texto de cliente.
+lib/agent-engine/golden-candidates/skill-miss_*.json
+lib/agent-engine/golden-candidates/stage-divergence_*.json
+
+# Claude Code harness artifacts (scheduled tasks lock, etc)
+# gov-loop: agents/ e commands/ são maquinaria versionada do loop e PRECISAM
+# viajar com o repo (merge de gov/setup → main); o resto de .claude/ segue local.
+# skills/: mesma razão — a doutrina (sistema-vivo) é maquinaria de arquitetura.
+# Skill fora do git não alcança quem clona nem o próximo sistema; seria uma
+# "tela sem porta" no vocabulário da própria doutrina que ela carrega.
+.claude/
+!.claude/
+.claude/*
+!.claude/agents/
+!.claude/commands/
+# settings.json: só o hook de início de sessão dos guias (fala apenas em clone de contribuidor)
+!.claude/settings.json
+# skills/: allowlist por PREFIXO — só as deste repo. Liberar a pasta inteira
+# arrastaria skills locais de outros apps (Lina etc.) para o versionamento.
+# `.claude/skills/` é ESPELHO gerado de `.agents/skills/` (fonte única, lida
+# por Codex/Cursor/OpenCode/Antigravity); `pnpm skills:sync` regrava e
+# `tests/unit/skills-embutidas.test.ts` reprova divergência — inclusive uma
+# skill nova que este arquivo esconda do `git add`.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/sistema-vivo/
+!.claude/skills/deskcomm-*/
+
+# Local docker volumes (WAHA)
+.waha-data/
+.epic-executor/
+.playwright-mcp/
+
+# Sentry Config File
+.env.sentry-build-plugin
+inbox-with-real-msgs.png
+.e2e-creds.json
+.e2e-agente-mcp.json
+test-results/
+playwright-report/
+.vercel
+deskcommcrm-setup-kit.zip
+
+# gov-loop — estado operacional fica FORA do git (a resposta do humano na inbox
+# e a linha 'started' do sessions.log não podem sujar o working tree; a guarda de
+# chão limpo do LOOP.md os stasharia). loop/checkpoints/evidence/ NÃO é ignorado:
+# screenshot de checkpoint é evidência versionada.
+loop/inbox.items.md
+loop/sessions.log
+loop/logs/
+loop/locks/
+loop/STOP
+loop/run-session.sh
+.superpowers/
+
+# graphify (análise local de knowledge graph)
+graphify-out/
+
+# Lockfiles de OUTRO gerenciador. O `pnpm-lock.yaml` é o único versionado, e
+# não é preferência de estilo: os pisos de segurança do projeto vivem em
+# `pnpm.overrides` do package.json, que o npm e o bun NÃO leem. Um `bun install`
+# aqui move `overrides` para o topo do package.json (formato bun/npm), o pnpm
+# deixa de enxergá-lo, e o `pnpm-lock.yaml` perde o bloco `overrides` inteiro —
+# `path-to-regexp@6.1.0` volta para a árvore com `pnpm audit` ainda verde.
+# Aconteceu em 2026-08-26. Ignorar o lock não impede o estrago; impede que ele
+# viaje no commit sem ninguém notar.
+package-lock.json
+bun.lock
+bun.lockb
+yarn.lock
+.e2e-invite.json
+.e2e-owner.json
+.e2e-invite-url.json
+.superpowers/evidence/
+evidence/.sonda-score-residuo.json
+
+# sessão reusada pelas jornadas (contém tokens)
+.auth/
+
+# QA em VPS: guarda segredo TOTP da conta de teste (repo e publico)
+.qa-vps/
+
+# Backups do install/update: env-*.bak é uma CÓPIA INTEIRA do .env — service
+# role key, secrets de webhook e a chave de cifra dos tokens. O padrão `.env*`
+# acima não os alcança porque eles vivem num diretório, com outro prefixo.
+backups/
+
+# Marcas de execução do kit (agent.sh / update.sh)
+.update.lock
+.deskcomm-site-url-avisado
+# Marcador que o install.sh grava quando a instalação termina com o app no ar,
+# e que a guarda de arquitetura (#1042/#1266) lê para distinguir instalação NOVA
+# de instalação existente numa VPS ARM (#1778). É estado da máquina de quem
+# instalou, nunca entra no repositório — igual ao `.env` que mora ao lado dele.
+.deskcomm-instalado
+
+# Dump de banco de QA. A doutrina já estava escrita duas linhas acima e só o
+# PADRÃO faltava: `backups/` não casa com `.qa-backups/`, e um dump de 1,1 MB de
+# um Supabase local chegou a um PR de contribuidor por causa disso (#600). O
+# conteúdo daquele era sintético, mas um dump carrega hash de senha, refresh
+# token e o jwt_secret da instância — e história de git público é PERMANENTE:
+# commit posterior de remoção não tira o blob.
+.qa-backups/
+*.dump
+docker-compose.override.yml
+.prova/
+
+# Marca do kit: a senha das rotinas que vazou no log já foi trocada (#1054)
+.deskcomm-segredo-do-cron-trocado
+
+# Bytecode do Python: a suíte roda scripts em experiments/ e regrava o .pyc a cada
+# rodada. Versionado, ele sujava a árvore de quem rodava os testes.
+__pycache__/
+*.pyc
+
+# Runtime do instalador single-server: Supabase self-hosted, credenciais e dados.
+.runtime/

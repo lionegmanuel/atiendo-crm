@@ -1,0 +1,28 @@
+{
+  // O `pnpm typecheck` do repo — cobre TUDO, inclusive os testes.
+  //
+  // Por que existe um segundo tsconfig: desde o next 16.3 o `next build`
+  // typecheca os `*.test.ts` COLOCADOS (os que moram em app/, components/,
+  // lib/ ao lado do código que testam). Isso amarra o build de produção ao
+  // toolchain de teste — e o `.dockerignore` deixa `tests/` fora da imagem,
+  // então a imagem do self-host passou a falhar com TS2307/TS2339 enquanto
+  // `verify`, `build-and-size`, `invariants` e `e2e` seguiam verdes.
+  //
+  // Medido, mesma árvore, sem `tests/`: next 16.2.12 constrói (exit 0);
+  // next 16.3.0 não (exit 1). Excluir teste do tsconfig do BUILD resolve na
+  // raiz — o build de produção não tem por que compilar teste.
+  //
+  // A cobertura de tipos NÃO cai: é este arquivo que o `pnpm typecheck` usa,
+  // e ele reinclui o que o outro exclui.
+  "extends": "./tsconfig.json",
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
+  ],
+  "exclude": ["node_modules", ".next", "dist", "scripts/**"]
+}

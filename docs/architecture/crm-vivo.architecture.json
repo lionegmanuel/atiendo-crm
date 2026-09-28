@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "CRM Vivo — o sistema nervoso entre a IA e o funil",
+    "subtitle": "as peças das 8 waves e as arestas que ninguém reconstrói lendo o código",
+    "output": "crm-vivo.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o humano vê" },
+    { "id": "barramento", "label": "Barramento — a vida do lead" },
+    { "id": "negocio", "label": "O negócio (CRM)" },
+    { "id": "agente", "label": "Motor do agente" },
+    { "id": "fila", "label": "Fila, workers e réguas" },
+    { "id": "fora", "label": "Fora do Kanban" }
+  ],
+  "mainPath": ["leadstate", "atividades", "slot", "decisao", "fila", "leads"],
+  "nodes": [
+    { "id": "card", "lane": "humano", "col": 3, "type": "frontend", "label": "Card do Kanban", "sublabel": "5 elementos · altura constante" },
+    { "id": "slot", "lane": "humano", "col": 2, "type": "frontend", "label": "O slot (faixa ③)", "sublabel": "aguardando > esfriando > normal" },
+    { "id": "dossie", "lane": "humano", "col": 4, "type": "frontend", "label": "Dossiê (Sheet)", "sublabel": "cabeçalho > timeline > campos" },
+    { "id": "filtro", "lane": "humano", "col": 3, "type": "frontend", "label": "Filtro Responsável", "sublabel": "user: e agent: no mesmo eixo" },
+    { "id": "chat", "lane": "humano", "col": 5, "type": "frontend", "label": "ChatThread ?msg=", "sublabel": "o destino da âncora" },
+    { "id": "decisao", "lane": "humano", "col": 3, "type": "frontend", "label": "Aprovar · Editar · Ignorar", "sublabel": "a recusa é sinal" },
+
+    { "id": "atividades", "lane": "barramento", "col": 2, "type": "database", "label": "crm_lead_activities", "sublabel": "actor_kind · reason · evidence" },
+    { "id": "emissor", "lane": "barramento", "col": 1, "type": "service", "label": "emitLeadActivity", "sublabel": "estado e obrigação, não trabalho de máquina" },
+    { "id": "vocab", "lane": "barramento", "col": 3, "type": "service", "label": "activity-vocabulary", "sublabel": "forma = gente/agente/máquina · texto = o resto" },
+    { "id": "timelineapi", "lane": "barramento", "col": 3, "type": "api", "label": "GET /leads/:id/timeline", "sublabel": "por NEGÓCIO — lead sem contato existe" },
+    { "id": "resolver", "lane": "barramento", "col": 1, "type": "service", "label": "resolveActiveLeadForContact", "sublabel": "ambíguo ⇒ não adivinha" },
+
+    { "id": "leads", "lane": "negocio", "col": 4, "type": "database", "label": "crm_leads", "sublabel": "owner_kind · stage_id · last_activity_at" },
+    { "id": "stages", "lane": "negocio", "col": 5, "type": "database", "label": "crm_stages", "sublabel": "expected_duration_hours · agent_stage_hint" },
+    { "id": "scores", "lane": "negocio", "col": 3, "type": "database", "label": "crm_lead_scores", "sublabel": "tabela à parte, FORA do realtime" },
+
+    { "id": "leadstate", "lane": "agente", "col": 0, "type": "database", "label": "lead_state", "sublabel": "estágio cognitivo · next_action · crm_lead_id" },
+    { "id": "checkpoints", "lane": "agente", "col": 0, "type": "database", "label": "lead_checkpoints", "sublabel": "objeções e compromissos (por DIFF)" },
+    { "id": "traces", "lane": "agente", "col": 0, "type": "database", "label": "before_send_traces", "sublabel": "os portões — e os vetos" },
+    { "id": "ritual", "lane": "agente", "col": 1, "type": "service", "label": "inbound-turn (ritual)", "sublabel": "abre lendo checkpoint + lead_state" },
+    { "id": "espelho", "lane": "agente", "col": 5, "type": "service", "label": "mirrorLeadStageToCrm", "sublabel": "propõe quando há conflito" },
+    { "id": "promocaocliente", "lane": "negocio", "col": 2, "type": "trigger", "label": "trg_agendamento_marca_cliente", "sublabel": "agendamento inserido/alterado/apagado (regra ligada) → first_service_at + etiqueta com dono" },
+    { "id": "interruptorcliente", "lane": "humano", "col": 1, "type": "frontend", "label": "Clientes pela agenda", "sublabel": "Tipos de agendamento › fn_definir_cliente_pela_agenda (admin)" },
+
+    { "id": "eventlog", "lane": "fila", "col": 2, "type": "database", "label": "event_log", "sublabel": "marca d'água: só evento novo" },
+    { "id": "workerscore", "lane": "fila", "col": 2, "type": "service", "label": "worker do score", "sublabel": "fórmula determinística, nunca modelo" },
+    { "id": "fila", "lane": "fila", "col": 4, "type": "service", "label": "job_queue · followup_turn", "sublabel": "o envio passa pelos portões" },
+    { "id": "risco", "lane": "fila", "col": 5, "type": "service", "label": "classifyRisk + resolveStageWindow", "sublabel": "fonte ÚNICA de esfriamento" },
+
+    { "id": "inbox", "lane": "fora", "col": 4, "type": "frontend", "label": "agent_inbox_items", "sublabel": "demanda sem dono não mora no Kanban" },
+    { "id": "auditoria", "lane": "fora", "col": 2, "type": "database", "label": "api_audit_log", "sublabel": "quem mudou a regra, e o que ela mudou" },
+    { "id": "telaauditoria", "lane": "humano", "col": 0, "type": "frontend", "label": "/app/audit", "sublabel": "action + metadata na tela — onde o laço se fecha" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "ritual", "to": "leadstate", "label": "escreve estágio e next_action" },
+    { "id": "e2", "from": "ritual", "to": "checkpoints", "label": "grava o turno" },
+    { "id": "e3", "from": "ritual", "to": "traces", "label": "registra portões e veto" },
+    { "id": "e4", "from": "checkpoints", "to": "emissor", "label": "objeção NOVA (diff, não retrato)" },
+    { "id": "e5", "from": "traces", "to": "emissor", "label": "o não-envio também é evento" },
+    { "id": "e6", "from": "resolver", "to": "emissor", "label": "contato → negócio corrente" },
+    { "id": "e7", "from": "resolver", "to": "eventlog", "label": "não resolveu ⇒ activity_unrouted", "route": "drop" },
+    { "id": "e8", "from": "emissor", "to": "atividades", "label": "toda mutação deixa rastro" },
+    { "id": "e9", "from": "atividades", "to": "leads", "label": "trigger toca last_activity_at" },
+    { "id": "e10", "from": "atividades", "to": "timelineapi", "label": "TIMELINE_COLS explícito" },
+    { "id": "e11", "from": "timelineapi", "to": "dossie", "label": "realtime lead_id=eq.<id>" },
+    { "id": "e12", "from": "vocab", "to": "dossie", "label": "marcador e rótulo do ator" },
+    { "id": "e13", "from": "vocab", "to": "card", "label": "mesmo alfabeto nas duas telas" },
+    { "id": "e14", "from": "leadstate", "to": "slot", "label": "next_action vira proposta" },
+    { "id": "e15", "from": "slot", "to": "decisao", "label": "um slot, três estados" },
+    { "id": "e16", "from": "decisao", "to": "atividades", "label": "aprovar E ignorar viram linha" },
+    { "id": "e17", "from": "decisao", "to": "fila", "label": "aprovar = autorizar e agendar" },
+    { "id": "e18", "from": "decisao", "to": "leadstate", "label": "grava status + identidade da proposta" },
+    { "id": "e19", "from": "leadstate", "to": "ritual", "label": "A DECISÃO HUMANA VOLTA AO CONTEXTO", "route": "highlight" },
+    { "id": "e20", "from": "fila", "to": "ritual", "label": "followup_turn executa" },
+    { "id": "e21", "from": "eventlog", "to": "workerscore", "label": "recalcula com debounce" },
+    { "id": "e22", "from": "checkpoints", "to": "workerscore", "label": "compromissos × objeções" },
+    { "id": "e23", "from": "leadstate", "to": "workerscore", "label": "BANT por presença" },
+    { "id": "e24", "from": "risco", "to": "workerscore", "label": "vitalidade — sem janela própria" },
+    { "id": "e25", "from": "workerscore", "to": "scores", "label": "score + reason derivado + evidência" },
+    { "id": "e26", "from": "scores", "to": "card", "label": "medidor e número" },
+    { "id": "e27", "from": "scores", "to": "dossie", "label": "as 3 evidências abertas" },
+    { "id": "e28", "from": "scores", "to": "atividades", "label": "só na travessia de faixa" },
+    { "id": "e29", "from": "stages", "to": "risco", "label": "expected_duration_hours" },
+    { "id": "e30", "from": "risco", "to": "slot", "label": "esfriando" },
+    { "id": "e31", "from": "risco", "to": "leadstate", "label": "esfriou ⇒ propõe reativação" },
+    { "id": "e32", "from": "leadstate", "to": "inbox", "label": "proposta vencida", "route": "drop" },
+    { "id": "e33", "from": "resolver", "to": "inbox", "label": "ambiguidade não some em silêncio", "route": "drop" },
+    { "id": "e34", "from": "leadstate", "to": "espelho", "label": "crm_lead_id — atalho, não identidade" },
+    { "id": "e35", "from": "stages", "to": "espelho", "label": "agent_stage_hint por pipeline" },
+    { "id": "e36", "from": "atividades", "to": "espelho", "label": "CONFLITO: humano moveu depois da IA?", "route": "highlight" },
+    { "id": "e37", "from": "espelho", "to": "leads", "label": "move — só sem conflito" },
+    { "id": "e38", "from": "espelho", "to": "slot", "label": "com conflito, propõe" },
+    { "id": "e39", "from": "leads", "to": "card", "label": "realtime por pipeline_id" },
+    { "id": "e40", "from": "leads", "to": "filtro", "label": "owner_kind: humano e agente são pares" },
+    { "id": "e41", "from": "atividades", "to": "chat", "label": "âncora {conversation_id, message_id}" },
+    { "id": "e42", "from": "dossie", "to": "chat", "label": "clique leva ao momento" },
+    { "id": "e43", "from": "dossie", "to": "atividades", "label": "editar campo deixa rastro humano" },
+    { "id": "e44", "from": "filtro", "to": "card", "label": "applyFilters decide o que aparece" },
+    { "id": "e45", "from": "promocaocliente", "to": "leads", "label": "define o funil onde o lead nasce" },
+    { "id": "e46", "from": "promocaocliente", "to": "resolver", "label": "cliente reconhecido na próxima mensagem" },
+    { "id": "e47", "from": "promocaocliente", "to": "eventlog", "label": "contact.tag_added uma vez por contato — nunca na junção nem ao ligar" },
+    { "id": "e48", "from": "interruptorcliente", "to": "promocaocliente", "label": "liga/desliga o trigger e classifica o histórico sem evento" },
+    { "id": "e49", "from": "interruptorcliente", "to": "auditoria", "label": "crm.cliente_pela_agenda_alterado com ganharam/perderam" },
+    { "id": "e50", "from": "interruptorcliente", "to": "leads", "label": "lerClientePelaAgenda decide se o funil de clientes vale" },
+    { "id": "e51", "from": "auditoria", "to": "telaauditoria", "label": "a linha vira texto legível (action + metadata)" },
+    { "id": "e52", "from": "telaauditoria", "to": "interruptorcliente", "label": "LAÇO DE RETORNO: quem vê o que a regra fez desliga se estiver errado" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "As quatro arestas que ninguém reconstrói lendo o código",
+      "items": [
+        "e19 — a decisão humana volta ao PROMPT do turno seguinte",
+        "e36 — o barramento é a fonte da detecção de conflito da ponte",
+        "scores fora do realtime: recálculo não pode pulsar nem invalidar arrasto",
+        "e32/e33 — o que o Kanban não resolve vai para a caixa, não some"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Invariantes que a forma não mostra",
+      "items": [
+        "Timeline registra mudança de ESTADO e de OBRIGAÇÃO, não trabalho de máquina",
+        "Checkpoint entra por DIFF, nunca por retrato",
+        "Emissores leem só evento NOVO — histórico é decisão de produto",
+        "Nenhum número sem o porquê a ≤1 clique; âncora inventada é pior que ausente"
+      ]
+    },
+    {
+      "dot": "sky",
+      "title": "Fronteiras deliberadas",
+      "items": [
+        "lead_state = estado cognitivo · crm_leads = o negócio. Ponte, não fusão",
+        "crm_lead_id é ATALHO (SET NULL); owner_agent_id é IDENTIDADE (RESTRICT)",
+        "O board NUNCA assina atividade — quem assina é o dossiê, por lead_id",
+        "Quando há conflito ou ambiguidade, a máquina PROPÕE — não sobrescreve"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,460 @@
+import { perfilDoPais, type DocumentoDoTitular } from "@/lib/legal/perfil-do-pais";
+import { normalizePhoneBR } from "@/lib/webhooks/inbound";
+import { normalizarTags } from "@/lib/contacts/tag-normalizada";
+/**
+ * Parser de CSV para importação de contatos — RFC 4180, zero dependências.
+ *
+ * Por que não `papaparse`/`xlsx`: o repo não tinha NENhuma lib de planilha e a
+ * importação é de CSV mesmo (XLSX exigiria SheetJS inteiro por um recurso que
+ * todo Excel exporta como CSV). Parser próprio, pequeno e testado, evita
+ * dependência transitiva nova numa instalação self-host.
+ *
+ * Escopo deliberado: só CSV. XLSX é recusado na borda (rota) com mensagem que
+ * ensina a exportar como CSV — recusa abata melhor que meia-parse.
+ */
+
+/** Máximo defensivo: arquivo maior que isso é recusado antes do parse. */
+/**
+ * Os BYTES do upload viram texto — e o arquivo que não é texto é RECUSADO.
+ *
+ * `File.text()` decodifica sempre como UTF-8. O Excel em português exporta
+ * cp1252 por padrão, e o desfecho dependia de onde estava o acento (issue #483):
+ *
+ *   acento nos DADOS      -> IMPORTAVA, com `nome = "A��o C�nica �"`
+ *   acento no CABEÇALHO   -> 422 "Encontrei: C�digo, Produto, Pre�o, Marca."
+ *
+ * O segundo falha fechado e até é didático. O primeiro falha ABERTO: entra lixo
+ * no catálogo sem um erro sequer, e é esse nome que o agente lê para o cliente.
+ *
+ * O desempate não é detecção de charset, é uma prova: `TextDecoder("utf-8")` só
+ * produz U+FFFD quando o byte-stream NÃO é UTF-8 válido. Ausência de U+FFFD é
+ * prova de que UTF-8 é a leitura certa.
+ *
+ * ⚠️ MAS A PRESENÇA NÃO É PROVA DO CONTRÁRIO, e a primeira versão disto tratava
+ * como se fosse — a decisão era por ARQUIVO sobre um sinal por BYTE, sem
+ * proporção. Um único byte inválido no meio de um arquivo perfeitamente UTF-8
+ * (a aspa curva do Word, 0x92, sobra comum de copiar-colar) jogava as 500 linhas
+ * boas para o `windows-1252`. Medido, com as funções deste arquivo:
+ *
+ *   arquivo limpo          → utf-8         "Ação" corretos=500  mojibake=  0
+ *   + 1 byte 0x92 no meio  → windows-1252  "Ação" corretos=  0  mojibake=500
+ *   antes deste arquivo    → "Ação" corretos=500, com U+FFFD=1
+ *
+ * Ou seja: no caminho do byte solto, a versão anterior a `file.text()` era
+ * MELHOR — ela corrompia um caractere, não o arquivo. E o `upsert` por
+ * `(organization_id, codigo)` sobrescreve os nomes bons que já estavam no
+ * catálogo, com `erros: []` e 200 OK.
+ *
+ * A prova certa é a DENSIDADE, porque as duas causas ficam a três ordens de
+ * grandeza de distância. Medido no mesmo texto de 500 linhas:
+ *
+ *   latin-1 de verdade (o que este arquivo conserta) → 1 U+FFFD a cada     5 bytes
+ *   UTF-8 com 1 byte inválido                        → 1 U+FFFD a cada 11.392
+ *   misto: 499 linhas UTF-8 + 1 linha latin-1        → 1 U+FFFD a cada  5.692
+ *
+ * `MAX_BYTES_POR_SUBSTITUICAO` fica no meio dessa distância, e é generoso de
+ * propósito: errar para o lado do UTF-8 corrompe um caractere; errar para o
+ * outro corrompe o arquivo inteiro. Os dois erros não custam o mesmo.
+ *
+ * O `windows-1252` "consegue" ler qualquer byte, então cair nele sem olhar o
+ * resultado transformaria um .xlsx renomeado em 300 produtos de nome ilegível.
+ * Por isso a segunda leitura é CONFERIDA: byte de controle (fora de TAB, CR e
+ * LF) não aparece em CSV de verdade, e aí o arquivo é recusado com a mesma
+ * instrução que a tela já dá.
+ *
+ * O que isto NÃO alcança, e está escrito para ninguém supor: o mojibake da
+ * ORIGEM — "AÃ§Ã£o", UTF-8 já gravado como latin-1 pelo sistema que gerou a
+ * planilha — é UTF-8 VÁLIDO, não tem U+FFFD nenhum, e passa limpo. É outro
+ * defeito, com outra evidência.
+ */
+/**
+ * A partir de quantos bytes por substituição o arquivo deixa de ser "latin-1" e
+ * passa a ser "UTF-8 com um byte ruim".
+ *
+ * 100 fica entre as duas causas medidas (5 e 5.692 bytes por U+FFFD) com folga
+ * de mais de uma ordem de grandeza para cada lado — não é um número escolhido
+ * para caber num caso, é o meio de um vale largo.
+ */
+const MAX_BYTES_POR_SUBSTITUICAO = 100;
+
+/** Ou o texto saiu legível, ou o arquivo não é texto. Não existe terceiro estado. */
+export type BytesDecodificados = { texto: string } | { binario: true };
+
+/**
+ * A decisão de codificação deste repo, sobre os BYTES — uma só, para todo
+ * arquivo que chega de fora.
+ *
+ * Quem chama: `decodificarCsv` (as três rotas de importação de planilha, #483)
+ * e o extrator de Markdown do acervo de conhecimento
+ * (`lib/ai/rag/extractors/markdown.ts`, #531). O segundo fazia
+ * `buffer.toString("utf8")` e o `.txt` que o Bloco de Notas salva em cp1252 —
+ * padrão de quem monta base de conhecimento no Windows — entrava com mojibake
+ * na base que o agente lê para o cliente. Duas regras de charset aqui seriam
+ * duas respostas para a mesma pergunta, e a que ninguém lembrar de atualizar é
+ * a que envelhece.
+ *
+ * Devolve `{ binario: true }` — o `.xlsx` renomeado, o UTF-16 com acento — em
+ * vez de texto de aparência plausível: quem traduz isso na frase da tela é o
+ * chamador, que sabe o que a pessoa pediu.
+ *
+ * ⚠️ O que isto NÃO alcança, e vale para os dois chamadores: UTF-16 só de ASCII
+ * (sem acento, com um NUL entre cada letra) é UTF-8 VÁLIDO, não produz U+FFFD
+ * nenhum e passa como texto — a recusa só pega o UTF-16 que tem byte alto. O
+ * mojibake da ORIGEM ("AÃ§Ã£o" já gravado por quem gerou o arquivo) também
+ * passa, porque também é UTF-8 válido. São outros defeitos, com outra prova.
+ */
+export function decodificarBytesDeTexto(bytes: ArrayBuffer | Uint8Array): BytesDecodificados {
+  const buf = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+  const utf8 = new TextDecoder("utf-8").decode(buf);
+  const substituicoes = (utf8.match(/\uFFFD/g) ?? []).length;
+  // Sem nenhuma: UTF-8 válido, e a prova é completa.
+  if (substituicoes === 0) return { texto: semBom(utf8) };
+  // Com poucas: é UTF-8 com sujeira pontual, não outro charset. Trocar de
+  // decoder aqui estragaria o arquivo inteiro para consertar um caractere.
+  if (buf.byteLength / substituicoes > MAX_BYTES_POR_SUBSTITUICAO) {
+    return { texto: semBom(utf8) };
+  }
+
+  const latin = new TextDecoder("windows-1252").decode(buf);
+  // eslint-disable-next-line no-control-regex -- é exatamente o que se procura
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(latin)) return { binario: true };
+  return { texto: semBom(latin) };
+}
+
+/**
+ * O mesmo, com a frase da tela de importação de planilha.
+ *
+ * A decisão não mora aqui: este é o CSV sobre a regra acima — a leitura que as
+ * rotas de contatos, leads e produtos chamam. Ele continua sendo o nome público
+ * que o #483 deixou; a regra é que passou a ter nome de gente.
+ */
+export function decodificarCsv(bytes: ArrayBuffer | Uint8Array): { texto: string } | { erro: string } {
+  const decodificado = decodificarBytesDeTexto(bytes);
+  if ("binario" in decodificado) {
+    return {
+      erro:
+        "Este arquivo não parece ser um CSV de texto. No Excel use “Salvar como” → “CSV UTF-8 (delimitado por vírgulas)”.",
+    };
+  }
+  return decodificado;
+}
+
+/** O BOM vira caractere invisível no primeiro cabeçalho e cria coluna fantasma. */
+function semBom(texto: string): string {
+  return texto.charCodeAt(0) === 0xfeff ? texto.slice(1) : texto;
+}
+
+export const CSV_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Teto de linhas de dados por importação (protege o round-trip do handler). */
+export const CSV_MAX_DATA_ROWS = 500;
+
+const DELIMITERS = [",", ";", "\t"] as const;
+
+/**
+ * Parseia CSV RFC 4180: campos entre aspas com vírgula/quebra dentro, aspas
+ * escapadas como "", separadores CRLF, CR ou LF. BOM UTF-8 é removido.
+ * Delimitador detectado na primeira linha (fora de aspas) entre vírgula,
+ * ponto-e-vírgula e tabulação — Excel pt-BR exporta com ";".
+ */
+export function parseCsv(raw: string): string[][] {
+  const text = raw.replace(/^\uFEFF/, "");
+  const delimiter = detectDelimiter(text);
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  let i = 0;
+
+  while (i < text.length) {
+    const ch = text[i]!;
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = false;
+        i += 1;
+        continue;
+      }
+      field += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' && field === "") {
+      inQuotes = true;
+      i += 1;
+      continue;
+    }
+    if (ch === delimiter) {
+      row.push(field);
+      field = "";
+      i += 1;
+      continue;
+    }
+    if (ch === "\r" || ch === "\n") {
+      if (ch === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+      i += 1;
+      continue;
+    }
+    field += ch;
+    i += 1;
+  }
+  // Última linha sem quebra final ainda precisa entrar.
+  if (field !== "" || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => !(r.length === 1 && r[0] === ""));
+}
+
+function detectDelimiter(text: string): string {
+  const firstLine = text.split(/\r\n|\r|\n/, 1)[0] ?? "";
+  let best: string = DELIMITERS[0];
+  let bestCount = -1;
+  for (const d of DELIMITERS) {
+    // Conta apenas fora de aspas — vírgula dentro de "Silva, Maria" não é delimitador.
+    let count = 0;
+    let inQuotes = false;
+    for (const ch of firstLine) {
+      if (ch === '"') inQuotes = !inQuotes;
+      else if (ch === d && !inQuotes) count += 1;
+    }
+    if (count > bestCount) {
+      best = d;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
+// Cabeçalho → campo canônico
+// ---------------------------------------------------------------------------
+
+/**
+ * Aceita apelidos pt-BR/en/es porque a planilha é feita por humano: quem importa
+ * tem "Telefone" (ou "Teléfono") no Excel, não "phone_number". Acento/caixa/
+ * separador são normalizados ("Data de Nascimento" → data_de_nascimento,
+ * "Fecha de nacimiento" → fecha_de_nacimiento). Os de espanhol cumprem o que a
+ * tela de importação promete a quem a usa nesse idioma.
+ */
+const HEADER_ALIASES: Record<string, readonly string[]> = {
+  name: ["name", "nome", "cliente", "nombre"],
+  display_name: ["display_name", "apelido", "nome_de_exibicao", "apodo", "nombre_para_mostrar"],
+  email: ["email", "e_mail", "correo", "correo_electronico"],
+  phone_number: ["phone_number", "telefone", "whatsapp", "celular", "fone", "telefono", "movil"],
+  cpf: ["cpf"],
+  birthdate: [
+    "birthdate",
+    "nascimento",
+    "data_de_nascimento",
+    "aniversario",
+    "nacimiento",
+    "fecha_de_nacimiento",
+    "cumpleanos",
+  ],
+  tags: ["tags", "etiquetas", "grupos"],
+};
+
+function normalizaHeader(h: string): string {
+  return h
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+/**
+ * Mapeia a linha de cabeçalho para os índices dos campos canônicos.
+ * Retorna null com o motivo quando o cabeçalho não traz NENHUM identificador
+ * (telefone/e-mail) — sem isso nada importável existe, e falhar aberto é
+ * melhor que criar 300 contatos vazios.
+ *
+ * `documento` é o documento do TITULAR no país da organização
+ * (`lib/legal/perfil-do-pais.ts`): quem importa no Brasil tem "CPF" no Excel, e
+ * no país do perfil tem o nome local ("Bilhete de Identidade", "Documento"). A
+ * coluna do banco continua `cpf` em todos os casos — o vocabulário de TELA
+ * muda, o schema não. Ausente, vale o perfil brasileiro (o de antes).
+ */
+export function mapHeader(
+  header: string[],
+  t?: (text: string) => string,
+  documento?: DocumentoDoTitular,
+): { indices: Record<string, number>; motivo: string | null } {
+  const _t = t || ((x) => x);
+  const doc = documento ?? perfilDoPais(null).documento;
+  const aliases: Record<string, readonly string[]> = {
+    ...HEADER_ALIASES,
+    cpf: [...(HEADER_ALIASES.cpf ?? []), ...doc.apelidosDoCabecalho],
+  };
+  const indices: Record<string, number> = {};
+  header.forEach((rawCell, idx) => {
+    const cell = normalizaHeader(rawCell);
+    for (const [campo, lista] of Object.entries(aliases)) {
+      if (lista.includes(cell) && indices[campo] === undefined) {
+        indices[campo] = idx;
+        break;
+      }
+    }
+  });
+  const temIdentificador = indices.phone_number !== undefined || indices.email !== undefined;
+  return {
+    indices,
+    motivo: temIdentificador ? null : _t("cabeçalho sem coluna de telefone nem e-mail"),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Normalização de valor por campo
+// ---------------------------------------------------------------------------
+
+export interface LinhaNormalizada {
+  name?: string;
+  display_name?: string;
+  email?: string;
+  phone_number?: string;
+  cpf?: string;
+  birthdate?: string;
+  tags?: string[];
+}
+
+/**
+ * Telephone → E.164 **assumindo Brasil quando não há DDI**.
+ *
+ * A regra NÃO mora aqui: é `normalizePhoneBR` (`lib/webhooks/inbound.ts`), a
+ * mesma que a ingestão de webhook usa desde sempre. Reusar em vez de reescrever
+ * é o ponto — a versão anterior deste arquivo tinha uma TERCEIRA regra, e ela
+ * produzia número quebrado: `"(11) 99999-8888"` virava `+11999998888`, em que o
+ * `11` (que é DDD) ocupava o lugar do DDI. Um `+11` é os Estados Unidos, e o
+ * resto do número não existe lá — mensagem para pessoa errada, ou para ninguém.
+ *
+ * O que a regra da casa faz: 10 ou 11 dígitos sem `+` são DDD + número e ganham
+ * `+55`; 12 ou 13 dígitos precisam começar com `55`; quem já vem com `+` é
+ * respeitado como está (internacional continua possível, é só escrever o DDI).
+ *
+ * Decisão do dono do produto, 2026-08-24: o público é brasileiro, então assumir
+ * `+55` é a leitura certa de uma planilha sem DDI — e é o que a ingestão já fazia.
+ */
+export function normalizaTelefone(raw: string): string | null {
+  return normalizePhoneBR(raw);
+}
+
+/**
+ * Data → ISO `YYYY-MM-DD`. Aceita ISO nativo e BR `DD/MM/YYYY` (o do Excel).
+ *
+ * A data é VALIDADA de verdade, não só casada por formato: `31/02/1990` tem a
+ * forma certa e o dia não existe. Sem a conferência ele virava `1990-02-31` e
+ * chegava ao Postgres, que recusa a linha inteira com erro cru — a planilha
+ * falhava com uma mensagem de banco em vez de "dia inválido nesta linha", que é
+ * o que a tela promete ao dizer "desfecho por linha".
+ */
+function ehDataReal(ano: number, mes: number, dia: number): boolean {
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
+export function normalizaData(raw: string): string | null {
+  const t = raw.trim();
+  if (t === "") return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (iso) return ehDataReal(+iso[1]!, +iso[2]!, +iso[3]!) ? t : null;
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(t);
+  if (br) {
+    return ehDataReal(+br[3]!, +br[2]!, +br[1]!) ? `${br[3]}-${br[2]}-${br[1]}` : null;
+  }
+  return null;
+}
+
+/**
+ * Converte UMA linha de dados (já mapeada pelo mapHeader) nos campos de contato.
+ * Campos ausentes ficam undefined; valores inválidos geram erro nominal — a linha
+ * é pulada, as demais seguem. `linha` é 1-based já contando o cabeçalho, para
+ * bater com o que o usuário vê no editor.
+ */
+export function mapLinha(
+  cells: string[],
+  indices: Record<string, number>,
+  t?: (text: string) => string,
+  documento?: DocumentoDoTitular,
+): { contato: LinhaNormalizada; motivo: string | null } {
+  const _t = t || ((x) => x);
+  const doc = documento ?? perfilDoPais(null).documento;
+  const get = (campo: string): string => {
+    const idx = indices[campo];
+    return idx === undefined ? "" : (cells[idx] ?? "").trim();
+  };
+
+  const contato: LinhaNormalizada = {};
+
+  const name = get("name");
+  if (name !== "") contato.name = name.slice(0, 200);
+  const displayName = get("display_name");
+  if (displayName !== "") contato.display_name = displayName.slice(0, 200);
+
+  const email = get("email");
+  if (email !== "") {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { contato: {}, motivo: _t("e-mail inválido: ") + `"${email}"` };
+    }
+    contato.email = email;
+  }
+
+  const phoneRaw = get("phone_number");
+  if (phoneRaw !== "") {
+    const phone = normalizaTelefone(phoneRaw);
+    if (phone === null) {
+      return {
+        contato: {},
+        motivo:
+          _t("telefone inválido: ") +
+          `"${phoneRaw}"` +
+          _t(" (use DDI+DDD+número, ex.: +5511999998888)"),
+      };
+    }
+    contato.phone_number = phone;
+  }
+
+  if (contato.phone_number === undefined && contato.email === undefined) {
+    return { contato: {}, motivo: _t("linha sem telefone nem e-mail") };
+  }
+
+  // O documento é normalizado pelo PERFIL do país, e não por `replace(/\D/g,"")`:
+  // no Brasil a regra é manter os 11 dígitos (o mod-11 confere depois), mas o
+  // documento de outro país pode ter LETRA no meio — o `\D` apagava a letra e
+  // gravava um valor que não é o documento de ninguém (medido na issue #1033:
+  // `003862011LA042` virava `003862011042`). O perfil sabe o que preservar.
+  const cpf = doc.normaliza(get("cpf"));
+  if (cpf !== "") contato.cpf = cpf;
+
+  const birthdateRaw = get("birthdate");
+  if (birthdateRaw !== "") {
+    const birthdate = normalizaData(birthdateRaw);
+    if (birthdate === null) {
+      return {
+        contato: {},
+        motivo: `data de nascimento inválida: "${birthdateRaw}" (use AAAA-MM-DD ou DD/MM/AAAA)`,
+      };
+    }
+    contato.birthdate = birthdate;
+  }
+
+  const tagsRaw = get("tags");
+  if (tagsRaw !== "") {
+    // Caixa baixa e sem repetição pela MESMA regra da ficha e da API, para o
+    // filtro casar; o teto de 20 marcadores segue aqui (issue #1224).
+    const tags = normalizarTags(tagsRaw.split(/[;|]/)).slice(0, 20);
+    if (tags.length > 0) contato.tags = tags;
+  }
+
+  return { contato, motivo: null };
+}

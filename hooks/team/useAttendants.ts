@@ -1,0 +1,97 @@
+"use client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { apiClient } from "@/lib/api/client";
+import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { useT } from "@/hooks/i18n/useT";
+import type { AvailabilitySchedule, RoutingConfig } from "@/lib/schemas/routing";
+
+export interface AttendantAvailability {
+  user_id: string;
+  role: string | null;
+  name: string | null;
+  email: string | null;
+  is_available: boolean;
+  /** null = atendente ainda sem linha de availability (nunca configurado). */
+  capacity: number | null;
+  schedule: AvailabilitySchedule;
+  updated_at: string | null;
+  /** Conversas abertas atribuídas (G5-04): a mesma carga que o router usa. */
+  current_load: number;
+  /**
+   * Carimbo do último sinal de presença do navegador (issue #996). `null` =
+   * nunca abriu nenhuma tela logado. Vem do emissor
+   * (`hooks/atendimento/useSinalDePresenca`), NÃO do botão de plantão.
+   */
+  last_heartbeat_at: string | null;
+  /**
+   * Tem sinal de presença válido agora. Derivado no SERVIDOR com o prazo de
+   * `lib/atendimento/presenca.ts` — a tela lê, não recalcula.
+   *
+   * Presença é informação, nunca permissão: quem está de plantão continua sendo
+   * `is_available` + jornada (`estaDePlantao`), e nada aqui desliga a chave.
+   */
+  present: boolean;
+}
+
+const ATTENDANTS_KEY = ["team", "attendants"] as const;
+const ROUTING_KEY = ["settings", "routing"] as const;
+
+/** Disponibilidade + carga da equipe (org-wide, agent+). */
+export function useAttendants() {
+  return useQuery({
+    queryKey: ATTENDANTS_KEY,
+    queryFn: async () =>
+      apiClient.get<{ data: AttendantAvailability[] }>("/api/v1/attendants/availability"),
+    staleTime: 15_000,
+  });
+}
+
+export interface AvailabilityUpdate {
+  is_available?: boolean;
+  capacity?: number;
+  schedule?: AvailabilitySchedule;
+}
+
+/** PATCH disponibilidade de um atendente (próprio OU manager+; a API enforça). */
+export function useUpdateAvailability() {
+  const qc = useQueryClient();
+  const t = useT();
+  return useMutation({
+    mutationFn: async ({ userId, patch }: { userId: string; patch: AvailabilityUpdate }) =>
+      apiClient.patch<{ data: AttendantAvailability }>(
+        `/api/v1/attendants/availability/${userId}`,
+        patch,
+      ),
+    onError: (err) => showApiError(err),
+    onSuccess: () => {
+      toast.success(t("Atendente atualizado."));
+      qc.invalidateQueries({ queryKey: ATTENDANTS_KEY });
+    },
+  });
+}
+
+/** Config de roteamento da org (manager+). */
+export function useRoutingConfig() {
+  return useQuery({
+    queryKey: ROUTING_KEY,
+    queryFn: async () => apiClient.get<{ data: RoutingConfig }>("/api/v1/settings/routing"),
+    staleTime: 30_000,
+  });
+}
+
+/** PATCH do modo/knobs de roteamento (manager+; a API enforça). */
+export function useUpdateRouting() {
+  const qc = useQueryClient();
+  const t = useT();
+  return useMutation({
+    mutationFn: async (config: RoutingConfig) =>
+      apiClient.patch<{ data: RoutingConfig }>("/api/v1/settings/routing", config),
+    onError: (err) => showApiError(err),
+    onSuccess: () => {
+      toast.success(t("Roteamento atualizado."));
+      qc.invalidateQueries({ queryKey: ROUTING_KEY });
+    },
+  });
+}

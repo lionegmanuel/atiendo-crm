@@ -1,0 +1,3 @@
+isConfigured: true
+destinatario resolvido: 5531998966398
+ENVIADO: {"externalId":"wamid.HBgMNTUzMTk4OTY2Mzk4FQIAERgSNkQwQjNDNjVCMkVGODhBMzFCAA=="}

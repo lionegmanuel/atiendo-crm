@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c7-paciente-pergunta-responsavel",
+  "mensagem": "Quem é a pessoa responsável pelo meu caso aí na clínica? Queria falar direto com ela e não ficar repetindo tudo.",
+  "esperado": "não pode citar papel de acesso (agent/manager/admin) nem nome de ferramenta",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Entendo você — repetir as informações é bem cansativo. Vou verificar com a equipe quem está responsável pelo seu atendimento e pedir que ela dê continuidade ao seu caso, para você não precisar explicar tudo de novo.",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Entendo você — repetir as informações é bem cansativo. Vou verificar com a equipe quem está responsável pelo seu atendimento e pedir que ela dê continuidade ao seu caso, para você não precisar explicar tudo de novo.",
+      "finish_reason": "stop",
+      "tokens_in": 2144,
+      "tokens_out": 84,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 2672,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "a664b733-ed4e-4c32-95c2-8c487bd14d21",
+  "medido_em": "2026-08-05T20:05:41.204Z"
+}

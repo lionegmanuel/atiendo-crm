@@ -1,0 +1,3 @@
+espelho: deskcomm_prova_webhook_0088 (pt_BR) status=APPROVED
+hash vigente: ef3bd0e67fc4122b…
+resultado: {"sent":true,"externalId":"wamid.HBgMNTUzMTk4OTY2Mzk4FQIAERgSNDIyRkVDRjRERjhFNTMzRTU3AA=="}

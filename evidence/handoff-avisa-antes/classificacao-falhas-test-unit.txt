@@ -1,0 +1,18 @@
+CLASSIFICAÇÃO DAS FALHAS DE test:unit (mesma régua nos dois lados)
+SHA da minha branch: 39da60e1  |  base: main @ 7c63e05a
+
+MINHAS (consertadas neste commit):
+  tests/unit/orcamento-caminho-legado.test.ts     — 2 falhas: a régua filtrava agent_inbox_items por TABELA,
+                                                     não por assunto; o item kind='handoff' novo entrava na conta
+  tests/unit/ai-response-worker-sent-via.test.ts  — 1 falha: passaram a existir 2 linhas outbound (aviso + rascunho);
+                                                     o aviso agora nasce marcado em metadata e a régua o exclui
+
+AMBIENTE (idênticas na main, medido):
+  lib/ai/dispatcher/rate-limit.test.ts            — 5 falhas, 15s cada. Aponta para localhost:8079
+                                                     (serverless-redis-http local, contêiner Exited há semanas)
+     prova: rodado no worktree da main COM o mesmo .env.local -> mesmas 5 falhas, mesmos tempos
+
+MINHA, mas de AMBIENTE (já revertida):
+  tests/unit/canal-zernio-vocabulario.test.ts     — 1 falha: eu apaguei supabase/migrations nos experimentos
+                                                     com o supabase CLI. git checkout restaurou os 162 arquivos.
+                                                     Foi o próprio gate que pegou.

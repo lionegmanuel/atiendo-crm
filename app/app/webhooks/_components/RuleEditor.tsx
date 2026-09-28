@@ -1,0 +1,629 @@
+"use client";
+import * as React from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Trash, CaretUp, CaretDown } from "@/lib/ui/icons";
+import { createAutomationRuleSchema, TRIGGER_EVENTS } from "@/lib/schemas/webhooks";
+import {
+  DIAS_MAX,
+  DIAS_MIN,
+  GATILHO_DE_DATA_DO_FUNIL,
+  configDoGatilhoDeData,
+} from "@/lib/automation/gatilho-de-data-do-funil";
+import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import {
+  useCreateAutomationRule,
+  useUpdateAutomationRule,
+  type AutomationRuleRow,
+} from "@/hooks/webhooks/useAutomationRules";
+import { usePipelines, usePipelineStages } from "@/hooks/webhooks/useWebhookSources";
+import { TRIGGER_LABELS, ACTION_LABELS, type TriggerEvent, type ActionType } from "./labels";
+import { ActionConfigForm, defaultActionConfig, type ActionItem } from "./ActionConfigForm";
+import { useT } from "@/hooks/i18n/useT";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  rule: AutomationRuleRow | null;
+}
+
+type Op = "eq" | "neq" | "contains";
+
+interface ConditionRow {
+  field: string;
+  op: Op;
+  value: string;
+}
+
+interface CuratedField {
+  value: string;
+  label: string;
+  op: Op;
+  kind?: "stage";
+  /**
+   * O campo guarda uma LISTA (tags). Em lista, `contains` é pertinência — a tag
+   * inteira, sem diferenciar caixa (decisão do dono, #956) —, e chamar isso de
+   * "contém" na tela promete o que o motor não faz: quem lê "contém Google"
+   * espera pegar `Google Ads`. O rótulo vira "tem a tag" só nesses campos.
+   */
+  lista?: true;
+}
+
+const LEAD_FIELDS: CuratedField[] = [
+  { value: "lead.title", label: "Nome do lead", op: "eq" },
+  { value: "lead.tags", label: "Tags do lead", op: "contains", lista: true },
+  // utm_* entram pelo webhook em source_metadata (decisão da rota inbound),
+  // não em custom_fields — o path aqui tem que apontar pra onde o dado mora.
+  { value: "lead.source_metadata.utm_source", label: "Origem (utm_source)", op: "eq" },
+  // Os quatro níveis que a ficha do contato mostra, com as MESMAS palavras —
+  // dois vocabulários para o mesmo dado fariam o operador montar a regra sobre
+  // um campo e ler o resultado em outro.
+  { value: "lead.source_metadata.utm_campaign", label: "Campanha (utm_campaign)", op: "eq" },
+  { value: "lead.source_metadata.utm_adset", label: "Conjunto (utm_adset)", op: "eq" },
+  { value: "lead.source_metadata.utm_ad", label: "Anúncio (utm_ad)", op: "eq" },
+  {
+    value: "lead.source_metadata.utm_placement",
+    label: "Posicionamento (utm_placement)",
+    op: "eq",
+  },
+];
+const STAGE_FIELD: CuratedField = {
+  value: "event.to_stage_id",
+  label: "Etapa de destino",
+  op: "eq",
+  kind: "stage",
+};
+const MESSAGE_FIELDS: CuratedField[] = [
+  { value: "event.body_preview", label: "Texto da mensagem", op: "contains" },
+  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+];
+const CONTACT_FIELDS: CuratedField[] = [
+  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+  { value: "contact.name", label: "Nome do contato", op: "contains" },
+];
+const TAG_ADDED_FIELD: CuratedField = {
+  value: "event.added_tags",
+  label: "Tag adicionada",
+  op: "contains",
+  lista: true,
+};
+
+/**
+ * O tipo vem do PAYLOAD, não da linha do compromisso, e é de propósito: a linha
+ * guarda `event_type_id`, um uuid que ninguém digita numa condição. O nome
+ * viajou no evento justamente para caber aqui, e `contém` resolve o caso real
+ * ("Manutenção" pega as três).
+ */
+const AGENDAMENTO_FIELDS: CuratedField[] = [
+  { value: "event.event_type_name", label: "Tipo de atendimento", op: "contains" },
+  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+];
+
+// ponytail: etapa de destino usa o funil default (cobre o caso comum de 1
+// funil); se o produto ganhar múltiplos funis relevantes aqui, trocar por um
+// seletor de funil antes do de etapa.
+const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
+  "lead.created": LEAD_FIELDS,
+  "lead.stage_changed": [...LEAD_FIELDS, STAGE_FIELD],
+  "message.received": MESSAGE_FIELDS,
+  // O que a regra quer filtrar numa falha é o MOTIVO (só o 131047, só o
+  // timeout) e de QUEM é o contato — `event.erro.codigo` é o mesmo valor que a
+  // coluna `messages.error_code` grava, então quem compara com o webhook da
+  // Meta compara com o mesmo texto aqui.
+  "message.failed": [
+    { value: "event.erro.codigo", label: "Código do erro", op: "eq" },
+    { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+  ],
+  "lead.tag_added": [...LEAD_FIELDS, TAG_ADDED_FIELD],
+  "contact.tag_added": [TAG_ADDED_FIELD],
+  "appointment.created": AGENDAMENTO_FIELDS,
+  "appointment.confirmed": AGENDAMENTO_FIELDS,
+  "appointment.rescheduled": AGENDAMENTO_FIELDS,
+  "appointment.cancelled": AGENDAMENTO_FIELDS,
+  // Mesmos campos dos irmãos (#1612): quem filtra o desfecho quer filtrar por
+  // QUEM é o contato e de QUEM é o atendimento — "só a Limpeza, e só quem tem
+  // a tag cliente". A situação em si NÃO vira condição: ela é o gatilho. Um
+  // gatilho "compareceu" com a condição "situação = compareceu" é uma regra
+  // que só pode ser verdadeira, e que parece filtro sem filtrar nada.
+  "appointment.completed": AGENDAMENTO_FIELDS,
+  "appointment.no_show": AGENDAMENTO_FIELDS,
+  // O aniversário não tem campo próprio para filtrar: o que a organização quer
+  // decidir é sobre QUEM faz aniversário, e não sobre a data. Por isso os campos
+  // são os do contato — "só quem tem a tag cliente", tipicamente.
+  "contact.birthday": CONTACT_FIELDS,
+  // A data do funil dispara sobre o NEGÓCIO, então as condições são as do lead:
+  // "só os que estão com a etiqueta vip", "só o que veio do Instagram". O
+  // campo de data em si NÃO entra como condição — quem o escolhe é a
+  // configuração do gatilho, logo acima.
+  "lead.date_field_due": LEAD_FIELDS,
+};
+
+const OP_LABELS: Record<Op, string> = { eq: "é", neq: "não é", contains: "contém" };
+
+function emptyCondition(): ConditionRow {
+  return { field: "", op: "eq", value: "" };
+}
+
+/**
+ * O que a regra de data precisa guardar além do gatilho (#989). Os campos do
+ * funil são a CHAVE (`pipelines.settings.fields[].key`), não o rótulo: é a
+ * chave que endereça o valor em `crm_leads.custom_fields`, e é por ela que a
+ * varredura procura.
+ */
+interface ConfigDaData {
+  pipeline_id: string;
+  campo: string;
+  dias: string;
+}
+
+const DIAS_PADRAO = "7";
+
+export function RuleEditor({ open, onOpenChange, rule }: Props) {
+  const t = useT();
+  const isEdit = !!rule;
+  const [name, setName] = React.useState("");
+  const [triggerEvent, setTriggerEvent] = React.useState<TriggerEvent | "">("");
+  const [conditions, setConditions] = React.useState<ConditionRow[]>([]);
+  const [advancedRows, setAdvancedRows] = React.useState<Record<number, boolean>>({});
+  const [actions, setActions] = React.useState<ActionItem[]>([]);
+  const [configDaData, setConfigDaData] = React.useState<ConfigDaData>({
+    pipeline_id: "",
+    campo: "",
+    dias: DIAS_PADRAO,
+  });
+
+  const create = useCreateAutomationRule();
+  const update = useUpdateAutomationRule();
+  const saving = create.isPending || update.isPending;
+
+  const { data: pipelinesRes } = usePipelines();
+  const defaultPipeline =
+    pipelinesRes?.data?.find((p) => p.is_default) ?? pipelinesRes?.data?.[0] ?? null;
+  const { data: boardRes } = usePipelineStages(defaultPipeline?.id ?? null);
+  const stages = boardRes?.data?.stages ?? [];
+
+  React.useEffect(() => {
+    if (!open) return;
+    setName(rule?.name ?? "");
+    setTriggerEvent((rule?.trigger_event as TriggerEvent) ?? "");
+    setConditions(
+      rule?.conditions.map((c) => ({ field: c.field, op: c.op, value: c.value })) ?? [],
+    );
+    setAdvancedRows({});
+    setActions((rule?.actions as ActionItem[] | undefined) ?? []);
+    // A configuração salva volta pelo MESMO leitor que a varredura usa: se ela
+    // não reconhece o que está guardado, a tela não inventa nada e o operador
+    // reescolhe — em vez de a tela mostrar um funil que o cron ignora.
+    const guardada = configDoGatilhoDeData(rule?.trigger_config);
+    setConfigDaData(
+      guardada
+        ? {
+            pipeline_id: guardada.pipeline_id,
+            campo: guardada.campo,
+            dias: String(guardada.dias),
+          }
+        : { pipeline_id: "", campo: "", dias: DIAS_PADRAO },
+    );
+  }, [open, rule]);
+
+  const curatedFields = triggerEvent ? CURATED_FIELDS[triggerEvent] : [];
+  const ehGatilhoDeData = triggerEvent === GATILHO_DE_DATA_DO_FUNIL;
+  const camposDeData = camposDoFunil(
+    (pipelinesRes?.data ?? []).find((p) => p.id === configDaData.pipeline_id)?.settings ?? null,
+  ).filter((campo) => campo.type === "date");
+
+  const updateCondition = (idx: number, patch: Partial<ConditionRow>) => {
+    setConditions((prev) => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  };
+
+  const removeCondition = (idx: number) => {
+    setConditions((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addCondition = () => {
+    setConditions((prev) => [...prev, emptyCondition()]);
+  };
+
+  const addAction = (type: ActionType) => {
+    setActions((prev) => [...prev, defaultActionConfig(type)]);
+  };
+
+  const removeAction = (idx: number) => {
+    setActions((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const moveAction = (idx: number, dir: -1 | 1) => {
+    setActions((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      const a = next[idx];
+      const b = next[target];
+      if (!a || !b) return prev;
+      next[idx] = b;
+      next[target] = a;
+      return next;
+    });
+  };
+
+  const onSubmit = async () => {
+    const payload = {
+      name,
+      trigger_event: triggerEvent,
+      conditions: conditions
+        .filter((c) => c.field.trim() && c.value.trim())
+        .map((c) => ({ field: c.field.trim(), op: c.op, value: c.value.trim() })),
+      actions,
+      // `Number("")` é 0 — o que gravaria "avisar no dia" para quem não
+      // digitou nada. O campo vazio vira `NaN`, que o schema recusa com a
+      // mensagem certa em vez de aceitar um zero silencioso.
+      trigger_config: ehGatilhoDeData
+        ? {
+            pipeline_id: configDaData.pipeline_id,
+            campo: configDaData.campo,
+            dias: configDaData.dias.trim() === "" ? Number.NaN : Number(configDaData.dias),
+          }
+        : undefined,
+    };
+    const parsed = createAutomationRuleSchema.safeParse(payload);
+    if (!parsed.success) {
+      toast.error(t(parsed.error.issues[0]?.message ?? "Revise os campos da automação."));
+      return;
+    }
+    try {
+      if (rule) {
+        await update.mutateAsync({ id: rule.id, ...parsed.data });
+        toast.success(t("Automação atualizada."));
+      } else {
+        await create.mutateAsync(parsed.data);
+        toast.success(t("Automação criada — ligue quando estiver pronta."));
+      }
+      onOpenChange(false);
+    } catch {
+      /* showApiError já mostrou o toast */
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+        <SheetHeader>
+          <SheetTitle>{isEdit ? t("Editar automação") : t("Nova automação")}</SheetTitle>
+          <SheetDescription>
+            {t(
+              "Monte a regra em três passos: quando algo acontece, opcionalmente confira uma condição, e então dispare uma ou mais ações.",
+            )}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-6 space-y-8">
+          <div className="space-y-2">
+            <Label htmlFor="rule-name">{t("Nome da automação")}</Label>
+            <Input
+              id="rule-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("Boas-vindas a contato novo")}
+              maxLength={120}
+            />
+          </div>
+
+          <section className="space-y-2">
+            <h3 className="text-lg font-semibold text-text">{t("QUANDO")}</h3>
+            <Select
+              value={triggerEvent}
+              onValueChange={(v) => {
+                setTriggerEvent(v as TriggerEvent);
+                setConditions([]);
+                setAdvancedRows({});
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t("Escolha o gatilho")} />
+              </SelectTrigger>
+              <SelectContent>
+                {TRIGGER_EVENTS.map((ev) => (
+                  <SelectItem key={ev} value={ev}>
+                    {t(TRIGGER_LABELS[ev])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* O gatilho de DATA só sabe onde olhar se a regra disser o funil e o
+                campo: o campo de data pertence a UM funil. Sem esta escolha a
+                regra é salva e nunca dispara — por isso o schema da API também
+                a recusa. */}
+            {ehGatilhoDeData ? (
+              <div className="space-y-3 rounded-sm border border-border p-3">
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    "O aviso sai no dia em que faltarem N dias para a data, uma vez por negócio. Para avisar DEPOIS da data, use N negativo — -60 confirma a entrega 60 dias após o casamento.",
+                  )}
+                </p>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex-1 basis-52 space-y-1">
+                    <Label>{t("Funil do campo")}</Label>
+                    <Select
+                      value={configDaData.pipeline_id}
+                      onValueChange={(v) =>
+                        // Trocar de funil zera o campo: a chave de um funil não
+                        // existe no outro, e manter a antiga seria gravar uma
+                        // regra que não acha o valor.
+                        setConfigDaData((prev) => ({ ...prev, pipeline_id: v, campo: "" }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("Escolha o funil")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(pipelinesRes?.data ?? []).map((pipeline) => (
+                          <SelectItem key={pipeline.id} value={pipeline.id}>
+                            {pipeline.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex-1 basis-52 space-y-1">
+                    <Label>{t("Campo de data")}</Label>
+                    <Select
+                      value={configDaData.campo}
+                      onValueChange={(v) => setConfigDaData((prev) => ({ ...prev, campo: v }))}
+                      disabled={camposDeData.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("Escolha o campo")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {camposDeData.map((campo) => (
+                          <SelectItem key={campo.key} value={campo.key}>
+                            {campo.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="w-40 space-y-1">
+                    <Label htmlFor="dias-da-data">{t("Faltam N dias")}</Label>
+                    <Input
+                      id="dias-da-data"
+                      type="number"
+                      inputMode="numeric"
+                      value={configDaData.dias}
+                      min={DIAS_MIN}
+                      max={DIAS_MAX}
+                      onChange={(e) =>
+                        setConfigDaData((prev) => ({ ...prev, dias: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                {configDaData.pipeline_id && camposDeData.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t(
+                      "Este funil ainda não tem campo de data. Cadastre um em Funis → Campos personalizados para poder escolhê-lo aqui.",
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold text-text">{t("SE (opcional)")}</h3>
+            {conditions.map((cond, idx) => {
+              // Linha nova (campo vazio) começa no modo curado — o avançado é
+              // escape p/ quem sabe o path; só cai nele sozinho ao EDITAR uma
+              // regra cujo campo salvo não está na lista curada.
+              const isAdvanced =
+                advancedRows[idx] ??
+                (cond.field !== "" && !curatedFields.some((f) => f.value === cond.field));
+              const curated = curatedFields.find((f) => f.value === cond.field);
+              return (
+                <div key={idx} className="space-y-1 rounded-sm border border-border p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isAdvanced ? (
+                      <Input
+                        className="flex-1 basis-40"
+                        value={cond.field}
+                        onChange={(e) => updateCondition(idx, { field: e.target.value })}
+                        placeholder={t("ex: lead.custom_fields.minha_chave")}
+                      />
+                    ) : (
+                      <Select
+                        value={cond.field}
+                        onValueChange={(v) => {
+                          const f = curatedFields.find((cf) => cf.value === v);
+                          updateCondition(idx, { field: v, op: f?.op ?? "eq" });
+                        }}
+                      >
+                        <SelectTrigger className="flex-1 basis-40">
+                          <SelectValue placeholder={t("Campo")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {curatedFields.map((f) => (
+                            <SelectItem key={f.value} value={f.value}>
+                              {t(f.label)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Select
+                      value={cond.op}
+                      onValueChange={(v) => updateCondition(idx, { op: v as Op })}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(OP_LABELS) as Op[]).map((op) => (
+                          <SelectItem key={op} value={op}>
+                            {/* Em campo de lista, `contains` é pertinência: o
+                                rótulo diz o que o motor faz. No modo avançado
+                                (path digitado à mão) não há campo curado, então
+                                o rótulo genérico continua. */}
+                            {t(curated?.lista && op === "contains" ? "tem a tag" : OP_LABELS[op])}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {curated?.kind === "stage" ? (
+                      <Select
+                        value={cond.value}
+                        onValueChange={(v) => updateCondition(idx, { value: v })}
+                      >
+                        <SelectTrigger className="flex-1 basis-40">
+                          <SelectValue placeholder={t("Etapa")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stages.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        className="flex-1 basis-40"
+                        value={cond.value}
+                        onChange={(e) => updateCondition(idx, { value: e.target.value })}
+                        placeholder={t("Valor")}
+                      />
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeCondition(idx)}
+                      aria-label={t("Remover condição")}
+                    >
+                      <Trash />
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline underline-offset-4"
+                    onClick={() =>
+                      setAdvancedRows((prev) => ({ ...prev, [idx]: !isAdvanced }))
+                    }
+                  >
+                    {isAdvanced ? t("usar campo da lista") : t("usar campo avançado")}
+                  </button>
+                </div>
+              );
+            })}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addCondition}
+              disabled={!triggerEvent || conditions.length >= 10}
+            >
+              <Plus /> {t("Adicionar condição")}
+            </Button>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold text-text">{t("ENTÃO")}</h3>
+            {actions.map((action, idx) => (
+              <div key={idx} className="space-y-3 rounded-sm border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium text-text">{t(ACTION_LABELS[action.type])}</p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={idx === 0}
+                      onClick={() => moveAction(idx, -1)}
+                      aria-label={t("Mover ação para cima")}
+                    >
+                      <CaretUp />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={idx === actions.length - 1}
+                      onClick={() => moveAction(idx, 1)}
+                      aria-label={t("Mover ação para baixo")}
+                    >
+                      <CaretDown />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeAction(idx)}
+                      aria-label={t("Remover ação")}
+                    >
+                      <Trash />
+                    </Button>
+                  </div>
+                </div>
+                <ActionConfigForm
+                  action={action}
+                  onChange={(next) =>
+                    setActions((prev) => prev.map((a, i) => (i === idx ? next : a)))
+                  }
+                />
+              </div>
+            ))}
+            <Select
+              value=""
+              onValueChange={(v) => addAction(v as ActionType)}
+              disabled={actions.length >= 10}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t("Adicionar ação")} />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(ACTION_LABELS) as ActionType[]).map((actionType) => (
+                  <SelectItem key={actionType} value={actionType}>
+                    {t(ACTION_LABELS[actionType])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </section>
+
+          {!isEdit ? (
+            <p className="rounded-sm border border-border bg-muted p-3 text-sm text-muted-foreground">
+              {t("A automação nasce pausada. Revise e ligue quando estiver pronta.")}
+            </p>
+          ) : null}
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              {t("Cancelar")}
+            </Button>
+            <Button type="button" onClick={onSubmit} disabled={saving}>
+              {saving ? t("Salvando…") : isEdit ? t("Salvar alterações") : t("Criar automação")}
+            </Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}

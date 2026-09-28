@@ -1,0 +1,28 @@
+<!--
+  MODELO — os `__PLACEHOLDER__` são substituídos por hostgator-setup-kit/marca-emails.sh.
+  Ver o cabeçalho de confirmation.html para o par de cores, para o caminho do
+  GoTrue self-hosted (`--render-em`) e para quem faz a substituição.
+
+  `&`, nunca `?`: `.RedirectTo` já chega com `?type=recovery` embutido
+  (app/actions/auth/requestPasswordReset.ts) — é o que sobrevive ao hop pelo
+  GoTrue quando o link chega via PKCE (`code`) em vez de token_hash.
+  Usar `?` aqui duplica o separador (`...?type=recovery?token_hash=...`),
+  o parser de URL do browser para de reconhecer `token_hash` como
+  parâmetro (vira parte do valor de `type`), e /auth/confirm redireciona
+  pra `/login?error=link_invalido` mesmo com o link correto — medido nas
+  specs password-recovery.spec.ts e signup-journey.spec.ts.
+-->
+<html>
+  <body style="font-family: sans-serif; color: #1c1a16; background: #faf9f6; max-width: 480px; margin: 0 auto; padding: 24px;">
+    <h2 style="font-size: 18px;">Redefinir senha</h2>
+    <p>Recebemos um pedido para redefinir a senha da sua conta no __APP_NAME__. Clique no botão abaixo para escolher uma nova senha:</p>
+    <p style="margin: 24px 0;">
+      <a
+        href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}"
+        style="background: #506d48; background: __ACCENT__; color: #ffffff; color: __ACCENT_FG__; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block;"
+        >Redefinir senha</a
+      >
+    </p>
+    <p style="font-size: 12px; color: #7d786c;">Se você não pediu a redefinição, ignore este e-mail — sua senha atual continua valendo.</p>
+  </body>
+</html>

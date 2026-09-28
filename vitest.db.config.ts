@@ -1,0 +1,42 @@
+import { defineConfig } from "vitest/config";
+import path from "node:path";
+
+// Config dedicada da suíte de invariantes de banco (tests/invariants/**).
+// Roda SÓ via `pnpm test:db` (scripts/test-db.sh), que sobe o Postgres efêmero
+// e exporta TEST_DB_CONTAINER. Não faz parte do `pnpm test:unit`.
+export default defineConfig({
+  test: {
+    environment: "node",
+    include: ["tests/invariants/**/*.test.ts"],
+    globals: false,
+    // Seed + queries via docker exec são lentos o suficiente pro default de 5s.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
+    // Todos os arquivos batem no MESMO container Postgres efêmero, com estado
+    // GLOBAL compartilhado entre arquivos: helpers de contagem não-escopada
+    // (ex.: automation-engine.test.ts's runsCount() sobre automation_rule_runs)
+    // E o ponteiro platform do playbook (playbook-seed deleta/recria;
+    // agent-no-credential depende dele). Rodar os arquivos em paralelo cria
+    // interferência cross-file (flakiness real observada nos dois casos).
+    fileParallelism: false,
+    // Banco NOVO por arquivo, copiado do molde que scripts/test-db.sh preparou.
+    // É o que tira a ordem de execução de dentro do veredito (issue #207): sem
+    // isto os arquivos dividem estado global, colidem em UUID de fixture e
+    // `--sequence.shuffle.files` fica vermelho em 3 de 4 seeds — por colisão de
+    // fixture, não por defeito do produto. Guardado por
+    // tests/invariants/harness-isola-por-arquivo.test.ts.
+    setupFiles: ["./tests/db/banco-limpo-por-arquivo.ts"],
+    // webhooks-trigger-events.test.ts chama os handlers REST diretamente (não
+    // só SQL cru), e eles importam lib/env transitivamente (via lib/audit) —
+    // sem isso o import falha (env obrigatória ausente) e derruba a suíte
+    // inteira. audit()/emit_event reais nunca são alcançados (fetch falha
+    // rápido contra porta fechada, engolido pelo try/catch de audit()).
+    env: {
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:1",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+      SUPABASE_SERVICE_ROLE_KEY:
+        "test-service-role-key-not-a-placeholder-1234567890-1234567890",
+    },
+  },
+  resolve: { alias: { "@": path.resolve(__dirname, ".") } },
+});

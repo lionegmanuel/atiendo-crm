@@ -1,0 +1,441 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "IA 360 W4 — organizar a operação: o agente ajusta a casa, e a tela conta quem foi",
+    "subtitle": "uma regra por operação, servindo a rota REST e a capacidade do agente; a autoria mora ao lado do estado",
+    "output": "ia-360-organizar.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "humano",
+      "label": "O que o humano vê"
+    },
+    {
+      "id": "borda",
+      "label": "Bordas (REST manager+ · MCP)"
+    },
+    {
+      "id": "regra",
+      "label": "Regra única (lib/operacao)"
+    },
+    {
+      "id": "dados",
+      "label": "Banco"
+    },
+    {
+      "id": "mundo",
+      "label": "Efeito fora da empresa"
+    }
+  ],
+  "mainPath": [
+    "agente",
+    "mcp",
+    "operacao",
+    "config",
+    "telas"
+  ],
+  "nodes": [
+    {
+      "id": "telas",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "/app/webhooks · /app/settings/tenant/pipelines",
+      "sublabel": "entradas automáticas · regras · etapas do funil"
+    },
+    {
+      "id": "selo",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "SeloDeAutoria",
+      "sublabel": "'alterado pelo assistente' em destaque; 'você/time' discreto"
+    },
+    {
+      "id": "painel",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "painel de capacidades (W1)",
+      "sublabel": "lê rotulo/explicacao/risco/pacotes do catálogo"
+    },
+    {
+      "id": "rest",
+      "lane": "borda",
+      "col": 1,
+      "type": "api",
+      "label": "rotas REST de configuração",
+      "sublabel": "webhook-sources · automation-rules · pipelines/[id]/stages"
+    },
+    {
+      "id": "mcp",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "lib/mcp/tools/operacao.ts",
+      "sublabel": "15 capacidades — fachada fina, zero SQL próprio"
+    },
+    {
+      "id": "catalogo",
+      "lane": "borda",
+      "col": 3,
+      "type": "service",
+      "label": "catalogo/operacao.ts",
+      "sublabel": "pacote 'organizar' · 5 critico · 6 escritas apenasHumano"
+    },
+    {
+      "id": "agente",
+      "lane": "borda",
+      "col": 4,
+      "type": "service",
+      "label": "agente de IA",
+      "sublabel": "runtime nativo · harness · cliente MCP externo"
+    },
+    {
+      "id": "operacao",
+      "lane": "regra",
+      "col": 2,
+      "type": "service",
+      "label": "lib/operacao/*",
+      "sublabel": "entradas-automaticas · regras-automaticas · modelos · marcadores-e-time"
+    },
+    {
+      "id": "etapas",
+      "lane": "regra",
+      "col": 1,
+      "type": "service",
+      "label": "lib/leads/stage-operations.ts",
+      "sublabel": "criar · atualizar · arquivar — a ORDEM das escritas mora aqui"
+    },
+    {
+      "id": "autoria",
+      "lane": "regra",
+      "col": 3,
+      "type": "service",
+      "label": "lib/operacao/autoria.ts",
+      "sublabel": "espécie do ator; nunca o id do agente — ver o card"
+    },
+    {
+      "id": "recusa",
+      "lane": "regra",
+      "col": 4,
+      "type": "service",
+      "label": "lib/api/recusa.ts",
+      "sublabel": "ApiError do domínio → Response; o que não é ApiError sobe"
+    },
+    {
+      "id": "config",
+      "lane": "dados",
+      "col": 2,
+      "type": "database",
+      "label": "crm_stages · webhook_sources · automation_rules",
+      "sublabel": "+ last_change_actor_kind, last_change_at (migration 0101)"
+    },
+    {
+      "id": "audit",
+      "lane": "dados",
+      "col": 3,
+      "type": "database",
+      "label": "api_audit_log",
+      "sublabel": "webhook.source_* · automation.rule_* · pipeline.stage_*"
+    },
+    {
+      "id": "atividades",
+      "lane": "dados",
+      "col": 1,
+      "type": "database",
+      "label": "crm_lead_activities",
+      "sublabel": "stage_changed de cada card movido ao arquivar etapa"
+    },
+    {
+      "id": "runs",
+      "lane": "dados",
+      "col": 4,
+      "type": "database",
+      "label": "automation_rule_runs",
+      "sublabel": "o que disparou sozinho e o que falhou"
+    },
+    {
+      "id": "engine",
+      "lane": "mundo",
+      "col": 2,
+      "type": "service",
+      "label": "lib/automation/engine.ts",
+      "sublabel": "consome event_log; só roda regra ATIVA"
+    },
+    {
+      "id": "guard",
+      "lane": "mundo",
+      "col": 3,
+      "type": "service",
+      "label": "assertSafeOutboundUrl",
+      "sublabel": "anti-SSRF antes do fetch — https em prod, sem host privado"
+    },
+    {
+      "id": "fora",
+      "lane": "mundo",
+      "col": 4,
+      "type": "external",
+      "label": "sistema do cliente",
+      "sublabel": "call_webhook · send_whatsapp_message"
+    },
+    {
+      "id": "captura",
+      "lane": "borda",
+      "col": 5,
+      "type": "api",
+      "label": "POST /api/v1/webhooks/in/[token]",
+      "sublabel": "o formulário do cliente entrando — tenant pelo path_token, nunca pelo body"
+    },
+    {
+      "id": "historico",
+      "lane": "dados",
+      "col": 5,
+      "type": "database",
+      "label": "webhook_lead_captures (0174)",
+      "sublabel": "histórico DURÁVEL: dados, hora, IP, página, desfecho. Distinto do arquivo forense, que é podado em D+7/D+90"
+    },
+    {
+      "id": "telaCapturas",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "aba 'Leads recebidos'",
+      "sublabel": "quem chegou, com que dados e de onde — inclusive quem NÃO entrou, com o motivo"
+    },
+    {
+      "id": "abordagem",
+      "lane": "regra",
+      "col": 5,
+      "type": "service",
+      "label": "send_ai_message → abordagem-de-formulario.ts",
+      "sublabel": "agente PUBLICADO lê o formulário + a instrução do dono; purpose automation_ai_message"
+    },
+    {
+      "id": "desfecho",
+      "lane": "regra",
+      "col": 6,
+      "type": "service",
+      "label": "desfecho-do-envio.ts",
+      "sublabel": "o run conta o ESTADO REAL da mensagem — sendMessageHandler não lança quando falha"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "agente",
+      "to": "mcp",
+      "label": "tools/call — org SEMPRE do ctx, nunca do input"
+    },
+    {
+      "id": "e2",
+      "from": "mcp",
+      "to": "catalogo",
+      "label": "1:1 — handler sem entrada no catálogo estoura em dev"
+    },
+    {
+      "id": "e3",
+      "from": "catalogo",
+      "to": "painel",
+      "label": "rotulo · explicacao · oQueToca · risco · pacotes"
+    },
+    {
+      "id": "e4",
+      "from": "mcp",
+      "to": "operacao",
+      "label": "chama a MESMA função que a rota REST chama"
+    },
+    {
+      "id": "e5",
+      "from": "mcp",
+      "to": "etapas",
+      "label": "criar/atualizar/arquivar etapa"
+    },
+    {
+      "id": "e6",
+      "from": "rest",
+      "to": "operacao",
+      "label": "POST /webhook-sources → criarEntradaAutomatica"
+    },
+    {
+      "id": "e7",
+      "from": "rest",
+      "to": "etapas",
+      "label": "POST/PATCH/DELETE de etapa — a rota virou transporte"
+    },
+    {
+      "id": "e8",
+      "from": "operacao",
+      "to": "autoria",
+      "label": "espécie do ator em toda escrita de configuração"
+    },
+    {
+      "id": "e9",
+      "from": "etapas",
+      "to": "autoria",
+      "label": "idem — um só helper, duas superfícies"
+    },
+    {
+      "id": "e10",
+      "from": "rest",
+      "to": "autoria",
+      "label": "PATCH genérico também grava quem mexeu"
+    },
+    {
+      "id": "e11",
+      "from": "operacao",
+      "to": "config",
+      "label": "insert/update com last_change_*"
+    },
+    {
+      "id": "e12",
+      "from": "etapas",
+      "to": "config",
+      "label": "ordem das escritas: liberar ganho antigo antes do novo"
+    },
+    {
+      "id": "e13",
+      "from": "operacao",
+      "to": "audit",
+      "label": "audit() por mutação — fire-and-forget"
+    },
+    {
+      "id": "e14",
+      "from": "etapas",
+      "to": "atividades",
+      "label": "arquivar etapa → stage_changed em cada card movido"
+    },
+    {
+      "id": "e15",
+      "from": "config",
+      "to": "telas",
+      "label": "estado E autoria na MESMA consulta"
+    },
+    {
+      "id": "e16",
+      "from": "telas",
+      "to": "selo",
+      "label": "kind + quando → 'alterado pelo assistente'"
+    },
+    {
+      "id": "e17",
+      "from": "config",
+      "to": "engine",
+      "label": "só regra is_active dispara"
+    },
+    {
+      "id": "e18",
+      "from": "engine",
+      "to": "guard",
+      "label": "call_webhook passa pelo guard ANTES do fetch"
+    },
+    {
+      "id": "e19",
+      "from": "guard",
+      "to": "fora",
+      "label": "entrega só o que sobreviveu ao anti-SSRF"
+    },
+    {
+      "id": "e20",
+      "from": "engine",
+      "to": "runs",
+      "label": "status + actions_result por execução"
+    },
+    {
+      "id": "e21",
+      "from": "runs",
+      "to": "mcp",
+      "label": "crm_list_automation_runs — só o detalhe das falhas"
+    },
+    {
+      "id": "e22",
+      "from": "operacao",
+      "to": "recusa",
+      "label": "ApiError com a frase escrita para leigo"
+    },
+    {
+      "id": "e23",
+      "from": "recusa",
+      "to": "rest",
+      "label": "status + code + details (o número de negócios)"
+    },
+    {
+      "id": "e24",
+      "from": "runs",
+      "to": "telas",
+      "label": "aba Atividade — a tentativa barrada também aparece"
+    },
+    {
+      "id": "e25",
+      "from": "captura",
+      "to": "historico",
+      "label": "registra TODO desfecho: criado · duplicado · RECUSADO (com o motivo)"
+    },
+    {
+      "id": "e26",
+      "from": "historico",
+      "to": "telaCapturas",
+      "label": "GET /api/v1/lead-captures — cursor keyset, RLS exige manager (é PII)"
+    },
+    {
+      "id": "e27",
+      "from": "captura",
+      "to": "engine",
+      "label": "lead.created no event_log → o motor de regras acorda no drain"
+    },
+    {
+      "id": "e28",
+      "from": "engine",
+      "to": "abordagem",
+      "label": "a regra pede a mensagem; a janela e o opt-out ficam com a AÇÃO, não com o modelo"
+    },
+    {
+      "id": "e29",
+      "from": "historico",
+      "to": "abordagem",
+      "label": "os campos do formulário, como a pessoa preencheu — a entrada da IA"
+    },
+    {
+      "id": "e30",
+      "from": "abordagem",
+      "to": "desfecho",
+      "label": "sendMessageHandler devolve a mensagem; quem traduz o estado dela é este"
+    },
+    {
+      "id": "e31",
+      "from": "desfecho",
+      "to": "runs",
+      "label": "success · failed · postponed — e o aviso na Central quando morre"
+    },
+    {
+      "id": "e32",
+      "from": "telaCapturas",
+      "to": "telas",
+      "label": "'Ver no funil' — /app/leads/[id] resolve o funil do lead e redireciona para o card"
+    }
+  ],
+  "cards": [
+    {
+      "title": "Por que a autoria é COLUNA e não um feed do audit log",
+      "body": "O api_audit_log já registra toda mudança de configuração — e nenhuma tela de configuração o lê. Log que não aparece é log morto (doutrina §3). Com last_change_actor_kind na própria linha, o estado e a autoria do estado saem na MESMA consulta que a tela já fazia: zero round-trip novo, zero caminho para os dois divergirem."
+    },
+    {
+      "title": "NÃO-LIGAÇÃO DELIBERADA: autoria não aponta para ai_agents",
+      "body": "O BUG-01 (runtime nativo mandando o id do RUN) foi corrigido em bddeeb6, mas a irmã dele não: lib/mcp/auth.ts deriveActor() ainda devolve o id do run — ou o do token — no caminho do cliente MCP externo. Actor.id só é chave estável de agente em dois dos três caminhos, e uma FK para ai_agents(id) recusaria a escrita com 23503 no terceiro. A coluna guarda a ESPÉCIE do ator; o identificador cru continua no audit log."
+    },
+    {
+      "title": "NÃO-LIGAÇÃO DELIBERADA: o agente não escreve regra automática",
+      "body": "Ele liga e desliga o que um humano escreveu; criar, editar ação e apagar ficam de fora. Deixá-lo escrever a ação seria deixá-lo escolher para qual endereço externo a empresa manda dados — e aí o gate humano do risco 'critico' viraria decoração. Mesma razão para não criar resposta pronta (o texto sai em nome da marca) e não mexer em papel de ninguém."
+    },
+    {
+      "title": "NÃO-LIGAÇÃO DELIBERADA: não há escritor do vocabulário canônico de marcadores",
+      "body": "organizations.settings.canonical_conversation_tags tem rota de leitura e NENHUMA tela para ver ou mudar. Um escritor novo ali criaria configuração alterável só por quem lê o banco — invariante 6 da doutrina ('toda configuração tem superfície'). O que o agente ganhou foi crm_list_tags, que resolve o defeito real: ele inventar 'cliente-vip' quando já existe 'vip'."
+    },
+    {
+      "title": "NÃO-LIGAÇÃO DELIBERADA: no pacote organizar, o agente lê tudo e muda nada",
+      "body": "As seis escritas são apenasHumano, e isso é PARIDADE, não timidez. A régua do épico é o papel que a rota HTTP equivalente exige: onde a rota pedia agent e a tool pedia manager havia divergência, corrigida em bddeeb6 (BUG-02); aqui as três rotas espelhadas — pipelines/[id]/stages, webhook-sources e automation-rules — exigem manager, todas. Nem um atendente humano configura a operação pela tela, então baixar para agent daria à IA um poder que o produto não dá a uma pessoa com o mesmo papel. O que o agente ganhou de fato são as dez leituras."
+    }
+  ]
+}

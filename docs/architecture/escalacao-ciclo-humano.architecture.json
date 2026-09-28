@@ -1,0 +1,1436 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Escalação — o agente para, a pessoa continua, o agente retoma sabendo",
+    "subtitle": "as três travas da passagem, e por onde o que a pessoa decidiu volta ao contexto do turno",
+    "output": "escalacao-ciclo-humano.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "humano",
+      "label": "O que a pessoa vê"
+    },
+    {
+      "id": "borda",
+      "label": "Borda HTTP (agent+)"
+    },
+    {
+      "id": "regra",
+      "label": "Regra compartilhada"
+    },
+    {
+      "id": "agente",
+      "label": "Superfície do agente"
+    },
+    {
+      "id": "dados",
+      "label": "Banco"
+    },
+    {
+      "id": "motor",
+      "label": "Motor do turno"
+    }
+  ],
+  "mainPath": [
+    "chamados",
+    "reply",
+    "cabecalho",
+    "retomada",
+    "checkpoints",
+    "ritual"
+  ],
+  "nodes": [
+    {
+      "id": "chamados",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "/app/ai/cases",
+      "sublabel": "a fila do que a IA não resolve sozinha"
+    },
+    {
+      "id": "painel",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "CaseReplyPanel",
+      "sublabel": "Concluí · Preciso do cliente · Assumir eu"
+    },
+    {
+      "id": "cabecalho",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "ConversationHeader",
+      "sublabel": "quem manda + motivo do silêncio + Pausar/Devolver o automático"
+    },
+    {
+      "id": "timeline",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "Linha do tempo do negócio",
+      "sublabel": "Passou para humano ↔ Voltou para o automático"
+    },
+    {
+      "id": "cases",
+      "lane": "borda",
+      "col": 1,
+      "type": "api",
+      "label": "GET /api/v1/ai/cases[/:id]",
+      "sublabel": "lista e detalhe + timeline do chamado"
+    },
+    {
+      "id": "reply",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "POST /ai/cases/:id/reply",
+      "sublabel": "a decisão da PESSOA (actor_kind='human')"
+    },
+    {
+      "id": "reactivate",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "POST /conversations/:id/reactivate-bot",
+      "sublabel": "existia desde a IA-06 e nenhuma tela chamava"
+    },
+    {
+      "id": "availability",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "GET /attendants/availability",
+      "sublabel": "painel de gestão de disponibilidade"
+    },
+    {
+      "id": "retomada",
+      "lane": "regra",
+      "col": 2,
+      "type": "service",
+      "label": "lib/escalacao/retomada.ts",
+      "sublabel": "devolverAtendimentoAoAgente — solta as TRÊS travas"
+    },
+    {
+      "id": "continuidade",
+      "lane": "regra",
+      "col": 3,
+      "type": "service",
+      "label": "lib/escalacao/continuidade.ts",
+      "sublabel": "o que a pessoa fez, em texto que o modelo lê"
+    },
+    {
+      "id": "chamadosLib",
+      "lane": "regra",
+      "col": 1,
+      "type": "service",
+      "label": "lib/escalacao/chamados.ts",
+      "sublabel": "listarChamados · lerChamado"
+    },
+    {
+      "id": "atendentes",
+      "lane": "regra",
+      "col": 4,
+      "type": "service",
+      "label": "lib/escalacao/atendentes.ts",
+      "sublabel": "roster + podeAssumirAgora"
+    },
+    {
+      "id": "maquina",
+      "lane": "regra",
+      "col": 5,
+      "type": "service",
+      "label": "human-cases.ts",
+      "sublabel": "transições atômicas (UPDATE + eventos no MESMO statement)"
+    },
+    {
+      "id": "catalogo",
+      "lane": "agente",
+      "col": 2,
+      "type": "service",
+      "label": "catalogo/escalacao.ts",
+      "sublabel": "6 capacidades do pacote 'Passar para um humano'"
+    },
+    {
+      "id": "handlers",
+      "lane": "agente",
+      "col": 3,
+      "type": "service",
+      "label": "lib/mcp/tools/escalacao.ts",
+      "sublabel": "fachada fina — zero SQL próprio"
+    },
+    {
+      "id": "contacts",
+      "lane": "dados",
+      "col": 1,
+      "type": "database",
+      "label": "contacts.force_human",
+      "sublabel": "TRAVA 1 — veta todo envio (before-send)"
+    },
+    {
+      "id": "conversas",
+      "lane": "dados",
+      "col": 2,
+      "type": "database",
+      "label": "conversations",
+      "sublabel": "TRAVA 2 bot_silenced_until · TRAVA 3 assignee_kind='user'"
+    },
+    {
+      "id": "casos",
+      "lane": "dados",
+      "col": 3,
+      "type": "database",
+      "label": "agent_cases + agent_case_events",
+      "sublabel": "kind ganhou 'agent_noted' (migration 0100)"
+    },
+    {
+      "id": "notas",
+      "lane": "dados",
+      "col": 4,
+      "type": "database",
+      "label": "conversation_notes",
+      "sublabel": "o que a pessoa anotou e o cliente não vê"
+    },
+    {
+      "id": "checkpoints",
+      "lane": "dados",
+      "col": 5,
+      "type": "database",
+      "label": "lead_checkpoints",
+      "sublabel": "a memória durável do lead — job_id nulo na retomada"
+    },
+    {
+      "id": "atividades",
+      "lane": "dados",
+      "col": 6,
+      "type": "database",
+      "label": "crm_lead_activities",
+      "sublabel": "handoff_triggered ↔ handoff_resolved"
+    },
+    {
+      "id": "ritual",
+      "lane": "motor",
+      "col": 4,
+      "type": "service",
+      "label": "ritualBlocks (inbound-turn)",
+      "sublabel": "bloco 'Resumo acumulado da conversa'"
+    },
+    {
+      "id": "guarda",
+      "lane": "motor",
+      "col": 2,
+      "type": "service",
+      "label": "isLeadInHandoff / before-send",
+      "sublabel": "os guards que leem a TRAVA 1"
+    },
+    {
+      "id": "evento",
+      "lane": "motor",
+      "col": 5,
+      "type": "service",
+      "label": "event_log ai.handoff_resolved",
+      "sublabel": "único produtor do sinal que retoma follow-up pausado"
+    },
+    {
+      "id": "runtimeNativo",
+      "lane": "agente",
+      "col": 4,
+      "type": "service",
+      "label": "lib/ai/runtime/tools.ts",
+      "sublabel": "ponte in-process do runtime da tela"
+    },
+    {
+      "id": "harness",
+      "lane": "agente",
+      "col": 5,
+      "type": "service",
+      "label": "edge/crm/mcp-tools.ts",
+      "sublabel": "as mesmas tools dentro do turno do harness"
+    },
+    {
+      "id": "painelEquipe",
+      "lane": "humano",
+      "col": 5,
+      "type": "frontend",
+      "label": "/app/team (AttendantsClient)",
+      "sublabel": "disponibilidade e carga da equipe"
+    },
+    {
+      "id": "chatthread",
+      "lane": "humano",
+      "col": 6,
+      "type": "frontend",
+      "label": "ChatThread — Nota interna",
+      "sublabel": "o que a equipe escreve e o cliente não vê"
+    },
+    {
+      "id": "reactivity",
+      "lane": "motor",
+      "col": 6,
+      "type": "service",
+      "label": "lib/followup/reactivity.ts",
+      "sublabel": "reage a handoff aberto/fechado — retoma o acompanhamento"
+    },
+    {
+      "id": "modelo",
+      "lane": "motor",
+      "col": 3,
+      "type": "service",
+      "label": "chamada do modelo (turno)",
+      "sublabel": "lê a abertura e responde ao cliente"
+    },
+    {
+      "id": "comando",
+      "lane": "regra",
+      "col": 1,
+      "type": "service",
+      "label": "lib/inbox/comando-da-conversa.ts",
+      "sublabel": "função pura: quem manda + o automático está ativo? (espelha os gates do motor)"
+    },
+    {
+      "id": "pausar",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "POST /conversations/:id/pause-ai",
+      "sublabel": "o lado que faltava do interruptor — assume se não houver dono"
+    },
+    {
+      "id": "atribuir",
+      "lane": "dados",
+      "col": 2,
+      "type": "db",
+      "label": "fn_conversation_assign (0173)",
+      "sublabel": "claim/transfer calam o automático; release limpa; routing NÃO mexe"
+    },
+    {
+      "id": "comandoAtividade",
+      "lane": "regra",
+      "col": 3,
+      "type": "service",
+      "label": "lib/inbox/atividade-de-comando.ts",
+      "sublabel": "a troca de dono vira linha na timeline que JÁ existe"
+    },
+    {
+      "id": "fila",
+      "lane": "regra",
+      "col": 2,
+      "type": "service",
+      "label": "CONVERSATION_QUEUE_STATUSES",
+      "sublabel": "quem está esperando uma pessoa — uma definição, quatro consumidores"
+    },
+    {
+      "id": "avisoTexto",
+      "lane": "regra",
+      "col": 2,
+      "type": "lib",
+      "label": "lib/escalacao/aviso-ao-lead.ts",
+      "sublabel": "O QUE O CLIENTE LÊ — puro, um só para os dois motores"
+    },
+    {
+      "id": "avisoMotor",
+      "lane": "motor",
+      "col": 3,
+      "type": "lib",
+      "label": "aviso-de-escalacao.ts",
+      "sublabel": "envia atrás de runBeforeSend, seq 0, ANTES da trava"
+    },
+    {
+      "id": "avisoCrm",
+      "lane": "regra",
+      "col": 3,
+      "type": "lib",
+      "label": "lib/ai/handoff/aviso-ao-lead.ts",
+      "sublabel": "o mesmo texto pelo sendMessageHandler (mundo supabase-js) — só se a IA falou na conversa (ou a passagem veio do MCP externo), um por 24 h sem contar aviso failed"
+    },
+    {
+      "id": "orquestrador",
+      "lane": "motor",
+      "col": 2,
+      "type": "worker",
+      "label": "triggerHandoff (orchestrator)",
+      "sublabel": "o SEGUNDO motor de passagem — sentimento, confiança, etapa, termo jurídico"
+    },
+    {
+      "id": "sentimento",
+      "lane": "motor",
+      "col": 1,
+      "type": "worker",
+      "label": "ai-sentiment-worker",
+      "sublabel": "score < limiar → ai.sentiment_alert → passagem, sem o lead saber"
+    },
+    {
+      "id": "central",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "agent_inbox_items",
+      "sublabel": "kind='handoff' — quem assume lê aqui se o cliente foi avisado"
+    },
+    {
+      "id": "ingestSaida",
+      "lane": "borda",
+      "col": 4,
+      "type": "service",
+      "label": "ingestão do canal — mensagem fromMe/outgoing",
+      "sublabel": "lib/waha/ingest.ts handleOutboundFromUserPhone · lib/channels/zernio/ingest.ts"
+    },
+    {
+      "id": "atendimentoManual",
+      "lane": "regra",
+      "col": 4,
+      "type": "service",
+      "label": "lib/escalacao/atendimento-manual.ts",
+      "sublabel": "pausarIaPorAtendimentoManual — pessoa respondeu por fora do CRM (pausa COM PRAZO)"
+    },
+    {
+      "id": "avisoSuporteMotor",
+      "lane": "motor",
+      "col": 4,
+      "type": "lib",
+      "label": "lib/escalacao/aviso-ao-suporte.ts",
+      "sublabel": "consome ai.case_opened/closed — nunca devolve error, nunca dorme"
+    },
+    {
+      "id": "casoNaCentral",
+      "lane": "motor",
+      "col": 5,
+      "type": "lib",
+      "label": "lib/escalacao/caso-na-central.handler.ts",
+      "sublabel": "o caso que espera uma pessoa entra no sino na abertura; sai quando fecha"
+    },
+    {
+      "id": "avisoSuporteTexto",
+      "lane": "regra",
+      "col": 4,
+      "type": "lib",
+      "label": "lib/escalacao/texto-do-aviso.ts",
+      "sublabel": "O QUE A EQUIPE LÊ — puro, sem telefone e sem CPF do cliente"
+    },
+    {
+      "id": "avisoSuporteRegistro",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "config_aviso_de_caso + entregas_de_aviso_de_caso",
+      "sublabel": "a unique (org, caso, destino) é a idempotência; o texto nunca é guardado"
+    },
+    {
+      "id": "numeroInterno",
+      "lane": "borda",
+      "col": 5,
+      "type": "lib",
+      "label": "lib/escalacao/numero-interno-de-aviso.ts",
+      "sublabel": "o número do plantão não vira contato, conversa nem despacho"
+    },
+    {
+      "id": "avisoSuporteTela",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "/app/ai/cases/avisos",
+      "sublabel": "liga o aviso, prova por envio real e diz os 11 estados em que ele não sai"
+    },
+    {
+      "id": "avisoSuporteRota",
+      "lane": "borda",
+      "col": 4,
+      "type": "route",
+      "label": "/api/v1/ai/cases/alerta (+ /teste)",
+      "sublabel": "escreve só pelo RPC; o teste manda de verdade e paga no pacing_ledger"
+    },
+    {
+      "id": "passagemMontagem",
+      "lane": "regra",
+      "col": 3,
+      "type": "lib",
+      "label": "lib/escalacao/briefing-da-passagem.ts",
+      "sublabel": "um texto, dois motores: o porquê, o que a IA tentou e a fala LITERAL do cliente (entre aspas, rotulada)"
+    },
+    {
+      "id": "passagemRegistro",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "passagens_de_atendimento",
+      "sublabel": "uma linha por passagem, SEM dedup — lida sob fn_can_view_conversation; o aviso da Central só REMETE a ela"
+    },
+    {
+      "id": "passagemReconhece",
+      "lane": "dados",
+      "col": 5,
+      "type": "db",
+      "label": "trg_passagem_reconhecida + fn_passagem_devolvida (0293)",
+      "sublabel": "assumir fecha a passagem e resolve o aviso; devolver ao automático fecha sem dono"
+    },
+    {
+      "id": "passagemCartao",
+      "lane": "humano",
+      "col": 6,
+      "type": "ui",
+      "label": "components/inbox/PassagemCard.tsx",
+      "sublabel": "o cartao DENTRO do fio, acima do composer: motivo em portugues, o que a IA tentou, a fala LITERAL do cliente e se ele foi avisado"
+    },
+    {
+      "id": "passagemRota",
+      "lane": "borda",
+      "col": 6,
+      "type": "route",
+      "label": "/api/v1/conversations/[id]/passagens",
+      "sublabel": "client de SESSAO, nunca admin — e o que faz visibility_mode valer para o TEXTO, e nao so para o link"
+    },
+    {
+      "id": "passagemCobranca",
+      "lane": "motor",
+      "col": 6,
+      "type": "worker",
+      "label": "cron case-stale-watcher (2o braco)",
+      "sublabel": "a passagem que ninguem assumiu reabre o aviso; teto de 3 em passagens_de_atendimento.cobrancas"
+    },
+    {
+      "id": "passagemLaco",
+      "lane": "dados",
+      "col": 6,
+      "type": "db",
+      "label": "fn_atrito_metrics: repeticao_pos_passagem (0294)",
+      "sublabel": "o cliente repetiu depois da passagem? limiar 0,7 e janela de 24h — se o briefing chegou, a repeticao cai"
+    },
+    {
+      "id": "devolucaoPrazo",
+      "lane": "motor",
+      "col": 3,
+      "type": "worker",
+      "label": "cron handoff-devolucao",
+      "sublabel": "a cada 5 min: handoff parado além do prazo da org volta ao agente — pela MESMA função"
+    },
+    {
+      "id": "prazoConfig",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "Configurações › Distribuição de atendimento",
+      "sublabel": "settings.routing.handoff_return_after_minutes — null = IA-06 (nunca)"
+    },
+    {
+      "id": "presenca_emissor",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "useSinalDePresenca (AppShell)",
+      "sublabel": "a aba aberta bate a cada 60 s — sem clique"
+    },
+    {
+      "id": "presenca_rota",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "POST /attendants/presence",
+      "sublabel": "carimba last_heartbeat_at; a 1ª batida audita"
+    },
+    {
+      "id": "presenca_coluna",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "attendant_availability.last_heartbeat_at",
+      "sublabel": "presença expira em leitura; is_available é decisão, não presença"
+    },
+    {
+      "id": "jevCartao",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "CartaoDoJev (/app/ai/providers)",
+      "sublabel": "sem chave → teste da chave → aceite de envio aos EUA → observando → decidindo; mostra concordância, custo e a última falha"
+    },
+    {
+      "id": "jevExecucoes",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "/app/ai/runs?provider=typesafe",
+      "sublabel": "'Só o Jev' — cada medição com o rótulo Jev, e o que fazer quando falha"
+    },
+    {
+      "id": "jevRota",
+      "lane": "borda",
+      "col": 1,
+      "type": "api",
+      "label": "GET/PATCH /api/v1/ai/jev",
+      "sublabel": "admin liga, desliga e troca o estado de cada tarefa (o clima também pelo modo); ligar exige chave validada e, na 1ª vez, o aceite; audit ai.jev.* com a tarefa"
+    },
+    {
+      "id": "jevConfig",
+      "lane": "dados",
+      "col": 1,
+      "type": "database",
+      "label": "organizations.settings.jev",
+      "sublabel": "ligado (mestre) · tarefas.<id>.estado · modo (o clima, na língua da onda 1) · aceite {em, por, alcance} — Zod em lib/ai/decisao/config.ts, estado efetivo em tarefas.ts, sem migration"
+    },
+    {
+      "id": "jevChave",
+      "lane": "dados",
+      "col": 2,
+      "type": "table",
+      "label": "ai_provider_credentials (provider='typesafe')",
+      "sublabel": "ativa e validada pelo GET /v1/models; excluir a última desliga o Jev"
+    },
+    {
+      "id": "jev",
+      "lane": "motor",
+      "col": 1,
+      "type": "external",
+      "label": "Jev (System One) — lib/ai/decisao",
+      "sublabel": "medirClima: cada mensagem recebida, sozinha e sem o histórico, passada por scrubMessage; teto de 1,5 s; disjuntor por organização (e por tarefa na pergunta recusada); nunca lança"
+    },
+    {
+      "id": "jevLlmCalls",
+      "lane": "dados",
+      "col": 3,
+      "type": "table",
+      "label": "llm_calls (typesafe · reserva_do_jev)",
+      "sublabel": "cada medição com custo fracionário e latência; linha de erro só quando ninguém mediu"
+    },
+    {
+      "id": "jevMetadata",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "messages.metadata (sentiment_*)",
+      "sublabel": "sentiment_score e sentiment_engine (quem decidiu) + sentiment_jev_score — a matéria da concordância"
+    },
+    {
+      "id": "jevManipulacao",
+      "lane": "motor",
+      "col": 2,
+      "type": "service",
+      "label": "inbound-turn: camada anti-manipulação (jailbreak_detect)",
+      "sublabel": "3ª perna do Promise.all do classificador de sempre — só com a camada ligada e fora da prévia; observando vale a IA de sempre, decidindo o maior dos dois, sem a IA de sempre 'none' (lib/ai/decisao/manipulacao.ts)"
+    },
+    {
+      "id": "jevObservacoes",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "jev_observacoes (0421)",
+      "sublabel": "por resposta do Jev: tarefa, estado, rótulo dele × rótulo de hoje, concordou (gerada), ponteiros sem FK, sem texto — poda de 90 dias no cron data-retention"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "chamados",
+      "to": "cases",
+      "label": "a pessoa vê o que a IA não resolveu"
+    },
+    {
+      "id": "e2",
+      "from": "cases",
+      "to": "chamadosLib",
+      "label": "listarChamados · lerChamado"
+    },
+    {
+      "id": "e3",
+      "from": "chamadosLib",
+      "to": "casos",
+      "label": "select org-scoped + timeline"
+    },
+    {
+      "id": "e4",
+      "from": "chamados",
+      "to": "painel",
+      "label": "abre o chamado escolhido"
+    },
+    {
+      "id": "e5",
+      "from": "painel",
+      "to": "reply",
+      "label": "{ action, body } — o texto que a pessoa escreve"
+    },
+    {
+      "id": "e6",
+      "from": "reply",
+      "to": "maquina",
+      "label": "resolveCaseFromHuman · markAwaitingLead · escalateCase"
+    },
+    {
+      "id": "e7",
+      "from": "maquina",
+      "to": "casos",
+      "label": "UPDATE + eventos no MESMO statement"
+    },
+    {
+      "id": "e8",
+      "from": "cabecalho",
+      "to": "reactivate",
+      "label": "Devolver ao automático — a porta que faltava"
+    },
+    {
+      "id": "e9",
+      "from": "reactivate",
+      "to": "retomada",
+      "label": "a rota só traduz HTTP; a regra é da função"
+    },
+    {
+      "id": "e10",
+      "from": "handlers",
+      "to": "retomada",
+      "label": "crm_resume_ai_attendance — MESMA função da tela"
+    },
+    {
+      "id": "e11",
+      "from": "retomada",
+      "to": "continuidade",
+      "label": "lê o rastro ANTES de mexer em qualquer coisa"
+    },
+    {
+      "id": "e12",
+      "from": "continuidade",
+      "to": "casos",
+      "label": "eventos kind='human_replied' com human_action + texto"
+    },
+    {
+      "id": "e13",
+      "from": "continuidade",
+      "to": "notas",
+      "label": "as notas internas do episódio"
+    },
+    {
+      "id": "e14",
+      "from": "retomada",
+      "to": "contacts",
+      "label": "force_human = false — a trava que NINGUÉM soltava"
+    },
+    {
+      "id": "e15",
+      "from": "retomada",
+      "to": "conversas",
+      "label": "silêncio e marca de passagem saem; assignee_kind volta a 'ai'"
+    },
+    {
+      "id": "e16",
+      "from": "retomada",
+      "to": "checkpoints",
+      "label": "ACRESCENTA o que a pessoa fez ao resumo acumulado"
+    },
+    {
+      "id": "e17",
+      "from": "ritual",
+      "to": "checkpoints",
+      "label": "latestCheckpoint — leitor que JÁ existia, nenhum novo"
+    },
+    {
+      "id": "e18",
+      "from": "retomada",
+      "to": "atividades",
+      "label": "handoff_resolved via emitLeadActivity"
+    },
+    {
+      "id": "e19",
+      "from": "atividades",
+      "to": "timeline",
+      "label": "a volta aparece onde a ida já aparecia"
+    },
+    {
+      "id": "e20",
+      "from": "retomada",
+      "to": "evento",
+      "label": "AWAITED — perder aqui órfã o follow-up pausado"
+    },
+    {
+      "id": "e21",
+      "from": "guarda",
+      "to": "contacts",
+      "label": "worker nativo, harness e before-send leem a MESMA coluna"
+    },
+    {
+      "id": "e22",
+      "from": "handlers",
+      "to": "chamadosLib",
+      "label": "ver os chamados · ler um chamado"
+    },
+    {
+      "id": "e23",
+      "from": "handlers",
+      "to": "maquina",
+      "label": "registrar (agent_noted) · encerrar (actor='agent')"
+    },
+    {
+      "id": "e24",
+      "from": "handlers",
+      "to": "atendentes",
+      "label": "quem pode assumir agora"
+    },
+    {
+      "id": "e25",
+      "from": "availability",
+      "to": "atendentes",
+      "label": "MESMA função do agente — o painel e a IA veem o mesmo roster"
+    },
+    {
+      "id": "e26",
+      "from": "atendentes",
+      "to": "conversas",
+      "label": "carga = conversas abertas atribuídas"
+    },
+    {
+      "id": "e27",
+      "from": "catalogo",
+      "to": "handlers",
+      "label": "declaração ↔ handler, 1 para 1 (guarda no agregador)"
+    },
+    {
+      "id": "e28",
+      "from": "cabecalho",
+      "to": "conversas",
+      "label": "lê bot_silenced_until + contacts.force_human para saber se há algo a devolver"
+    },
+    {
+      "id": "e29",
+      "from": "reply",
+      "to": "conversas",
+      "label": "'Assumir eu' roda performHumanHandoff — LIGA as três travas"
+    },
+    {
+      "id": "e30",
+      "from": "continuidade",
+      "to": "handlers",
+      "label": "human_continuity também sai em crm_get_human_case"
+    },
+    {
+      "id": "e31",
+      "from": "catalogo",
+      "to": "runtimeNativo",
+      "label": "UM catálogo, três consumidores — capacidade nova serve os três"
+    },
+    {
+      "id": "e32",
+      "from": "catalogo",
+      "to": "harness",
+      "label": "o harness bloqueia envio e handoff; o resto entra igual"
+    },
+    {
+      "id": "e33",
+      "from": "painelEquipe",
+      "to": "availability",
+      "label": "o painel de gestão lê o mesmo roster que o agente"
+    },
+    {
+      "id": "e34",
+      "from": "chatthread",
+      "to": "notas",
+      "label": "POST /conversations/:id/notes"
+    },
+    {
+      "id": "e35",
+      "from": "evento",
+      "to": "reactivity",
+      "label": "reactToHandoffClose — sem este sinal o acompanhamento pausado nunca retoma"
+    },
+    {
+      "id": "e36",
+      "from": "guarda",
+      "to": "conversas",
+      "label": "o worker também lê assignee_kind e bot_silenced_until"
+    },
+    {
+      "id": "e37",
+      "from": "ritual",
+      "to": "modelo",
+      "label": "o bloco vai para o prompt — é aqui que o agente 'sabe'"
+    },
+    {
+      "id": "e38",
+      "from": "modelo",
+      "to": "cabecalho",
+      "label": "a resposta ao cliente volta a sair pela conversa"
+    },
+    {
+      "id": "e39",
+      "from": "cabecalho",
+      "to": "comando",
+      "label": "pergunta quem manda (uma verdade, três telas)"
+    },
+    {
+      "id": "e40",
+      "from": "comando",
+      "to": "cabecalho",
+      "label": "estado + motivo do silêncio + rótulo"
+    },
+    {
+      "id": "e41",
+      "from": "cabecalho",
+      "to": "pausar",
+      "label": "'Pausar o automático'"
+    },
+    {
+      "id": "e42",
+      "from": "pausar",
+      "to": "atribuir",
+      "label": "claim quando não há dono"
+    },
+    {
+      "id": "e43",
+      "from": "pausar",
+      "to": "comandoAtividade",
+      "label": "'Pausou o automático'"
+    },
+    {
+      "id": "e44",
+      "from": "atribuir",
+      "to": "conversas",
+      "label": "grava bot_silenced_until — o gate que o motor já lê"
+    },
+    {
+      "id": "e45",
+      "from": "comandoAtividade",
+      "to": "timeline",
+      "label": "Assumiu · Transferiu · Liberou · Pausou"
+    },
+    {
+      "id": "e46",
+      "from": "comando",
+      "to": "atribuir",
+      "label": "lê os MESMOS fatos que a função escreve"
+    },
+    {
+      "id": "e47",
+      "from": "fila",
+      "to": "conversas",
+      "label": "open+pending: o mesmo que o trigger de roteamento enfileira"
+    },
+    {
+      "id": "e48",
+      "from": "cabecalho",
+      "to": "fila",
+      "label": "a aba Fila pede os dois estados de espera"
+    },
+    {
+      "id": "e49",
+      "from": "fila",
+      "to": "comando",
+      "label": "o estado 'aguardando' do selo sai daqui"
+    },
+    {
+      "id": "e50",
+      "from": "avisoMotor",
+      "to": "avisoTexto",
+      "label": "o texto vem de um lugar só — duas redações envelheceriam separadas"
+    },
+    {
+      "id": "e51",
+      "from": "avisoCrm",
+      "to": "avisoTexto",
+      "label": "o MESMO texto, outro encanamento"
+    },
+    {
+      "id": "e52",
+      "from": "avisoMotor",
+      "to": "conversas",
+      "label": "a mensagem é gravada e sai pelo canal ANTES do silêncio"
+    },
+    {
+      "id": "e53",
+      "from": "guarda",
+      "to": "avisoMotor",
+      "label": "o stopGate lê force_human: por isso o aviso vem primeiro"
+    },
+    {
+      "id": "e54",
+      "from": "avisoMotor",
+      "to": "contacts",
+      "label": "ordem obrigatória — avisar depois de force_human é avisar ninguém"
+    },
+    {
+      "id": "e55",
+      "from": "sentimento",
+      "to": "orquestrador",
+      "label": "ai.sentiment_alert → handoff que o lead nunca soube que aconteceu"
+    },
+    {
+      "id": "e56",
+      "from": "orquestrador",
+      "to": "avisoCrm",
+      "label": "Step 0: avisa antes do UPDATE que silencia"
+    },
+    {
+      "id": "e57",
+      "from": "orquestrador",
+      "to": "conversas",
+      "label": "status='pending' + bot_silenced_until='infinity' (NÃO grava force_human)"
+    },
+    {
+      "id": "e58",
+      "from": "orquestrador",
+      "to": "central",
+      "label": "Step 6: o item que este motor nunca abriu"
+    },
+    {
+      "id": "e59",
+      "from": "avisoMotor",
+      "to": "central",
+      "label": "o desfecho do aviso vira LINHA no item — 'essa pessoa sabe que estou vindo?'"
+    },
+    {
+      "id": "e60",
+      "from": "avisoCrm",
+      "to": "atendentes",
+      "label": "mesma régua de disponibilidade: não prometer contato para o vazio"
+    },
+    {
+      "id": "e61",
+      "from": "avisoTexto",
+      "to": "atendentes",
+      "label": "3 estados da equipe, 3 promessas — nenhuma inventada"
+    },
+    {
+      "id": "e62",
+      "from": "central",
+      "to": "cabecalho",
+      "label": "o atendente abre a conversa sabendo se o cliente foi avisado"
+    },
+    {
+      "id": "e63",
+      "from": "reply",
+      "to": "avisoCrm",
+      "label": "'Assumir eu' também avisa antes de calar o automático"
+    },
+    {
+      "id": "e64",
+      "from": "ingestSaida",
+      "to": "atendimentoManual",
+      "label": "resposta manual pelo celular = a pessoa assumiu (eco do próprio envio já saiu como dedup)"
+    },
+    {
+      "id": "e65",
+      "from": "atendimentoManual",
+      "to": "conversas",
+      "label": "bot_silenced_until = agora + PRAZO_DO_SILENCIO_MS (60 min), renovado a cada fala humana e NUNCA encurtando um silêncio maior, + last_handoff_reason — NÃO toca ai_authorized_at (a origem do lead é outro estado)"
+    },
+    {
+      "id": "e66",
+      "from": "retomada",
+      "to": "atendimentoManual",
+      "label": "'Devolver ao automático' desfaz esta pausa ANTES da hora (solta a TRAVA 2, a mesma) — sem clique nenhum, o prazo vence e a IA volta sozinha"
+    },
+    {
+      "id": "e67",
+      "from": "casos",
+      "to": "avisoSuporteMotor",
+      "label": "ai.case_opened / ai.case_closed pelo event_log"
+    },
+    {
+      "id": "e68",
+      "from": "avisoSuporteMotor",
+      "to": "avisoSuporteRegistro",
+      "label": "reivindica a entrega ANTES de tocar a rede"
+    },
+    {
+      "id": "e69",
+      "from": "avisoSuporteMotor",
+      "to": "avisoSuporteTexto",
+      "label": "monta o que a equipe lê no WhatsApp"
+    },
+    {
+      "id": "e70",
+      "from": "avisoSuporteMotor",
+      "to": "central",
+      "label": "falha definitiva vira aviso que leva AO CASO"
+    },
+    {
+      "id": "e71",
+      "from": "avisoSuporteMotor",
+      "to": "casos",
+      "label": "sucesso grava alert_sent na linha do tempo"
+    },
+    {
+      "id": "e72",
+      "from": "avisoSuporteTexto",
+      "to": "chamados",
+      "label": "o único link do aviso: abrir o atendimento"
+    },
+    {
+      "id": "e73",
+      "from": "avisoSuporteRegistro",
+      "to": "numeroInterno",
+      "label": "o número configurado vira INTERNO, mesmo com o aviso pausado"
+    },
+    {
+      "id": "e74",
+      "from": "numeroInterno",
+      "to": "ingestSaida",
+      "label": "corta antes do contato — inbound e eco do próprio envio"
+    },
+    {
+      "id": "e75",
+      "from": "avisoSuporteTela",
+      "to": "avisoSuporteRota",
+      "label": "a tela nunca escreve no banco: ela fala com a rota"
+    },
+    {
+      "id": "e76",
+      "from": "avisoSuporteRota",
+      "to": "avisoSuporteRegistro",
+      "label": "fn_definir_aviso_de_caso: as sete guardas na MESMA transação da escrita"
+    },
+    {
+      "id": "e77",
+      "from": "avisoSuporteRota",
+      "to": "avisoSuporteMotor",
+      "label": "o botão de teste reusa o caminho do motor a partir do canal"
+    },
+    {
+      "id": "e78",
+      "from": "avisoSuporteRegistro",
+      "to": "avisoSuporteTela",
+      "label": "as entregas são a FONTE da lista — a Central é só superfície e qualquer membro a apaga"
+    },
+    {
+      "id": "e79",
+      "from": "avisoSuporteTela",
+      "to": "casos",
+      "label": "o laço de retorno: casos avisados x não avisados, do mesmo marco"
+    },
+    {
+      "id": "e80",
+      "from": "numeroInterno",
+      "to": "avisoSuporteTela",
+      "label": "os contadores do descarte viram a frase que impede o silêncio de parecer defeito"
+    },
+    {
+      "id": "e81",
+      "from": "passagemMontagem",
+      "to": "passagemRegistro",
+      "label": "body/title/notes/content + tentativas — as quatro colunas saem da montagem única"
+    },
+    {
+      "id": "e82",
+      "from": "checkpoints",
+      "to": "passagemMontagem",
+      "label": "o resumo acumulado e a declaração do turno entram no briefing"
+    },
+    {
+      "id": "e83",
+      "from": "avisoMotor",
+      "to": "passagemMontagem",
+      "label": "o desfecho do aviso vira cliente_avisado + aviso_motivo_codigo — 'queued' deixou de contar como entrega"
+    },
+    {
+      "id": "e84",
+      "from": "orquestrador",
+      "to": "passagemRegistro",
+      "label": "Step 5.5 — o motor do CRM passou a gravar o que nunca gravou"
+    },
+    {
+      "id": "e85",
+      "from": "passagemRegistro",
+      "to": "central",
+      "label": "o corpo do aviso é CURTO e sem conversa: a Central entrega body a qualquer agent"
+    },
+    {
+      "id": "e86",
+      "from": "atribuir",
+      "to": "passagemReconhece",
+      "label": "o INSERT em conversation_assignment_events dispara o gatilho na MESMA transação"
+    },
+    {
+      "id": "e87",
+      "from": "passagemReconhece",
+      "to": "passagemRegistro",
+      "label": "reconhecido_por/reconhecido_em — só quando a conversa está MESMO com aquele dono"
+    },
+    {
+      "id": "e88",
+      "from": "passagemReconhece",
+      "to": "central",
+      "label": "resolve o aviso handoff; sem isto o dedup impede a PRÓXIMA passagem de nascer"
+    },
+    {
+      "id": "e89",
+      "from": "retomada",
+      "to": "passagemReconhece",
+      "label": "fn_passagem_devolvida: episódio fechado sem ninguém ter assumido"
+    },
+    {
+      "id": "e90",
+      "from": "passagemRegistro",
+      "to": "passagemRota",
+      "label": "a policy de tres condicoes e lida pelo client da sessao: organizacao + papel agent + fn_can_view_conversation"
+    },
+    {
+      "id": "e91",
+      "from": "passagemRota",
+      "to": "passagemCartao",
+      "label": "o hook usePassagensDaConversa; sem realtime proprio — a tabela nao esta na publicacao, e canal fora dela assina e nao recebe"
+    },
+    {
+      "id": "e92",
+      "from": "passagemCartao",
+      "to": "chatthread",
+      "label": "terceiro tipo de item do fio, irmao do NoteCard: o cabecalho nao ganha texto e o painel lateral nao ganha bloco"
+    },
+    {
+      "id": "e93",
+      "from": "passagemCartao",
+      "to": "atribuir",
+      "label": "o convite Assumir e responder chama o MESMO claim do cabecalho — uma rota, um efeito"
+    },
+    {
+      "id": "e94",
+      "from": "passagemCobranca",
+      "to": "passagemRegistro",
+      "label": "varre reconhecido_em is null com mais de 24h e sobe cobrancas; passagem aberta e demanda viva"
+    },
+    {
+      "id": "e95",
+      "from": "passagemCobranca",
+      "to": "central",
+      "label": "reabre o aviso handoff resolvido sem ninguem ter assumido — marcar como resolvido nao e assumir"
+    },
+    {
+      "id": "e96",
+      "from": "passagemRegistro",
+      "to": "passagemLaco",
+      "label": "o denominador sao as passagens em que o cliente VOLTOU a falar; sem fala nova nao ha repeticao a medir"
+    },
+    {
+      "id": "e97",
+      "from": "passagemLaco",
+      "to": "casos",
+      "label": "o laco de retorno publicado no par Automacao, encostado em Passagens para humano"
+    },
+    {
+      "id": "e98",
+      "from": "passagemReconhece",
+      "to": "passagemCartao",
+      "label": "reconhecido_por/em viram o rodape Assumida por, e o convite some"
+    },
+    {
+      "from": "prazoConfig",
+      "to": "devolucaoPrazo",
+      "label": "o prazo por organização; ausente, o cron não lê conversa nenhuma"
+    },
+    {
+      "id": "e68",
+      "from": "devolucaoPrazo",
+      "to": "conversas",
+      "label": "lê quem está com humano de forma durável e há quanto tempo sem sinal (handoff, assumir, última saída)"
+    },
+    {
+      "id": "e69",
+      "from": "presenca_emissor",
+      "to": "presenca_rota",
+      "label": "batida a cada 60 s"
+    },
+    {
+      "from": "presenca_rota",
+      "to": "presenca_coluna",
+      "label": "upsert de uma coluna só"
+    },
+    {
+      "from": "presenca_coluna",
+      "to": "atendentes",
+      "label": "quem está com a tela aberta"
+    },
+    {
+      "from": "presenca_coluna",
+      "to": "availability",
+      "label": "selo presente/ausente na Equipe"
+    },
+    {
+      "id": "e99",
+      "from": "jevCartao",
+      "to": "jevRota",
+      "label": "Ligar o Jev · Deixar o Jev decidir · Desligar"
+    },
+    {
+      "id": "e100",
+      "from": "jevRota",
+      "to": "jevConfig",
+      "label": "gravarConfigDoJev (mescla, não sobrescreve settings) + api_audit_log ai.jev.*"
+    },
+    {
+      "id": "e101",
+      "from": "jevRota",
+      "to": "jevChave",
+      "label": "ligar exige uma chave ativa e validada"
+    },
+    {
+      "id": "e102",
+      "from": "jevConfig",
+      "to": "sentimento",
+      "label": "o worker lê o estado da tarefa clima (interruptor, aceite, tarefas.clima ou modo) antes de medir"
+    },
+    {
+      "id": "e103",
+      "from": "sentimento",
+      "to": "jev",
+      "label": "medirClima(a mensagem, sem o histórico) — desligado, nada sai para a rede"
+    },
+    {
+      "id": "e104",
+      "from": "jevChave",
+      "to": "jev",
+      "label": "chaveDaOrganizacao: a chave só é lida com o interruptor ligado (D6)"
+    },
+    {
+      "id": "e105",
+      "from": "jev",
+      "to": "sentimento",
+      "label": "nota de 0 a 1 — em 'decide' vale ela; em 'observacao' quem decide é a IA de sempre"
+    },
+    {
+      "id": "e106",
+      "from": "sentimento",
+      "to": "jevLlmCalls",
+      "label": "linha do Jev (origem jev quando ele decidiu, jev_observacao quando só observou) ou da reserva que o cobriu (reserva_do_jev)"
+    },
+    {
+      "id": "e107",
+      "from": "sentimento",
+      "to": "jevMetadata",
+      "label": "as duas notas, e qual motor decidiu"
+    },
+    {
+      "id": "e108",
+      "from": "sentimento",
+      "to": "central",
+      "label": "falha que pede ação (chave recusada, sem crédito, pergunta recusada) abre aviso kind='other' — atualizado ao desfecho, fechado sozinho quando o Jev volta a medir"
+    },
+    {
+      "id": "e109",
+      "from": "jevLlmCalls",
+      "to": "jevExecucoes",
+      "label": "?provider=typesafe, com o rótulo Jev"
+    },
+    {
+      "id": "e110",
+      "from": "jevLlmCalls",
+      "to": "jevRota",
+      "label": "números da semana e a última falha ainda não superada"
+    },
+    {
+      "id": "e111",
+      "from": "jevMetadata",
+      "to": "jevRota",
+      "label": "concordância em observação: 30 dias, mesmo limiar da passagem — o laço de retorno"
+    },
+    {
+      "id": "e112",
+      "from": "jevRota",
+      "to": "jevCartao",
+      "label": "estado derivado + números: é com eles que o admin decide deixar o Jev decidir"
+    },
+    {
+      "id": "e113",
+      "from": "jevCartao",
+      "to": "jevExecucoes",
+      "label": "Ver as decisões do Jev"
+    },
+    {
+      "id": "e114",
+      "from": "orquestrador",
+      "to": "passagemMontagem",
+      "label": "sentiment_engine='jev' → '(percebido pelo Jev)' no aviso e no briefing — só a equipe lê (D11)"
+    },
+    {
+      "id": "e115",
+      "from": "jevConfig",
+      "to": "jevManipulacao",
+      "label": "o turno lê o estado da tarefa manipulacao (interruptor, aceite, tarefas.manipulacao) pelo pg.Pool"
+    },
+    {
+      "id": "e116",
+      "from": "jevManipulacao",
+      "to": "jev",
+      "label": "perguntarManipulacaoAoJev: a última mensagem, sem o histórico, passada por scrubMessage"
+    },
+    {
+      "id": "e117",
+      "from": "jev",
+      "to": "jevManipulacao",
+      "label": "none/low/high com a probabilidade — só SOMA, nunca rebaixa o nível da IA de sempre"
+    },
+    {
+      "id": "e118",
+      "from": "jevManipulacao",
+      "to": "jevObservacoes",
+      "label": "registrarManipulacaoDoJev: o par Jev × IA de sempre, amarrado a job_id e message_id"
+    },
+    {
+      "id": "e119",
+      "from": "jevManipulacao",
+      "to": "jevLlmCalls",
+      "label": "linha typesafe purpose jailbreak_detect (jev quando o sinal dele mudou o nível; senão jev_observacao)"
+    },
+    {
+      "id": "e120",
+      "from": "jevObservacoes",
+      "to": "jevRota",
+      "label": "concordância por tarefa, 30 dias, contada no banco — o laço de retorno da manipulação"
+    },
+    {
+      "id": "e121",
+      "from": "casos",
+      "to": "casoNaCentral",
+      "label": "ai.case_opened / ai.case_closed pelo event_log (o mesmo trigger da 0148)"
+    },
+    {
+      "id": "e122",
+      "from": "casoNaCentral",
+      "to": "central",
+      "label": "abre kind='other' → agent_case com texto genérico; resolve quando o caso fecha"
+    },
+    {
+      "id": "e123",
+      "from": "central",
+      "to": "chamados",
+      "label": "o botão do aviso abre /app/ai/cases?caso=<id> — a pessoa responde o caso"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "As três travas, e a que ninguém soltava",
+      "items": [
+        "contacts.force_human — lida por workers/ai-response-worker.ts (skip), por isLeadInHandoff (turno vira NO-OP antes de qualquer chamada de modelo) e por before-send.ts ((is_blocked or force_human) veta TODO envio)",
+        "conversations.bot_silenced_until — 'infinity' depois da passagem",
+        "conversations.assignee_kind='user' — skip('assigned_to_human') no worker",
+        "a rota reactivate-bot soltava SÓ a segunda e respondia { reactivated: true }: o agente ficava mudo para sempre com a tela dizendo sucesso. `grep -rn force_human` não achava NENHUMA escrita de volta para false no repo inteiro"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Por que a volta escreve em lead_checkpoints e não numa tabela nova",
+      "items": [
+        "a e17 é o ponto: `latestCheckpoint` → `ritualBlocks` já é lido na abertura de TODO turno do agente",
+        "uma tabela nova exigiria um leitor novo no motor — e peça que só o autor sabe consultar é ilha, que é o que a doutrina do sistema vivo proíbe",
+        "o resumo é ACRESCENTADO ao acumulado, nunca substituído: sobrescrever apagaria o histórico da conversa justamente para contar um pedaço dela",
+        "próxima ação só é escrita quando a pessoa pediu algo AO CLIENTE (need_lead_info); nos outros casos fica como estava, porque próxima ação inventada faz o agente cobrar o cliente por algo que ninguém combinou"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Não-ligações deliberadas",
+      "items": [
+        "o agente NÃO fecha chamado como 'resolvido por uma pessoa': `encerrarChamadoPeloAgente` grava actor_kind='agent' e kind 'agent_noted', separado de resolveCaseFromHuman — é desse registro que sai o resumo do próximo atendente, e mentir sobre o autor o envenena",
+        "crm_resume_ai_attendance exige papel de gestor e é capacidade de risco CRÍTICO: nunca entra ligada por pacote. Reativar automação para um cliente que pediu uma pessoa é decisão do humano",
+        "a superfície do agente NÃO recebe e-mail nem telefone de atendente — o roster compartilhado (e25) devolve os dois campos e quem os expõe é só a rota da tela",
+        "a atividade da volta NÃO é escrita quando o contato tem dois negócios abertos empatados: `resolveActiveLeadForContact` recusa, e mover o card do cliente errado é pior que não registrar"
+      ]
+    },
+    {
+      "dot": "sky",
+      "title": "O Jev (System One): o que muda quando ele erra",
+      "items": [
+        "errar a nota em observação não chega ao cliente: a IA de sempre decide, e a discordância aparece no cartão (e111 → e112) antes de alguém deixar o Jev decidir",
+        "falhar na rede faz a IA de sempre medir como reserva, e a linha em Execuções diz reserva_do_jev; falha que pede ação vira aviso na Central (e108); falhas seguidas abrem o disjuntor e ele deixa de ser chamado por um tempo",
+        "não-ligação deliberada: o Jev NÃO está no Modelo padrão, no seletor dos pontos nem no do agente, e ai_models não o recebe — ele não escreve texto, e escolhido ali todo atendimento morreria",
+        "não-ligação deliberada: a marca '(percebido pelo Jev)' nunca vai na mensagem ao cliente, só no que a equipe lê (e114)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+🔔 DeskcommCRM: novo caso esperando você
+
+Tipo: Outro
+Assunto: Desconto fora da alçada lote mejiut
+Cliente: Escalação
+O que o cliente precisa: Cliente de 200 unidades pedindo 20% de desconto.
+Por que a IA travou: a política do agente vai até 10%
+
+Abrir: https://crm.bancada-casos-vivos.example.com/app/ai/cases?caso=37cdf572-5637-4b6e-a563-2a62e1e80bbe
+
+Responder aqui não chega ao cliente — abra o link para responder.

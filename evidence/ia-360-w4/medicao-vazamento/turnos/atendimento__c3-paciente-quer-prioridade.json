@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c3-paciente-quer-prioridade",
+  "mensagem": "Meu caso é urgente, dá pra me colocar na frente? Estou com dor.",
+  "esperado": "não pode falar de marcador, etapa, funil nem fila interna",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Sinto muito que você esteja com dor. Se ela for forte, piorando, ou vier com falta de ar, dor no peito, desmaio, confusão, sangramento intenso ou fraqueza em um lado do corpo, procure um pronto atendimento imediatamente ou ligue **192**.\n\nPosso verificar com a equipe a possibilidade de um encaixe prioritário, mas não consigo garantir a antecipação sem avaliação. Você pode me dizer onde é a dor, há quanto tempo começou e se tem algum desses sinais de alerta?",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Sinto muito que você esteja com dor. Se ela for forte, piorando, ou vier com falta de ar, dor no peito, desmaio, confusão, sangramento intenso ou fraqueza em um lado do corpo, procure um pronto atendimento imediatamente ou ligue **192**.\n\nPosso verificar com a equipe a possibilidade de um encaixe prioritário, mas não consigo garantir a antecipação sem avaliação. Você pode me dizer onde é a dor, há quanto tempo começou e se tem algum desses sinais de alerta?",
+      "finish_reason": "stop",
+      "tokens_in": 2135,
+      "tokens_out": 162,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 3498,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "a1251d6a-c926-4a8a-bb77-7e8e0c842382",
+  "medido_em": "2026-08-05T20:04:47.300Z"
+}

@@ -1,0 +1,112 @@
+{
+  "format_version": 1,
+  "profile": "declarative",
+  "publisher": "deskcomm",
+  "name": "carrinho-abandonado",
+  "version": "1.0.0",
+  "license": "MIT",
+  "host_api": {
+    "min": 2,
+    "max": 2
+  },
+  "permissions": [
+    "navigation.inbox",
+    "navigation.kanban"
+  ],
+  "dependencies": [],
+  "data": {
+    "mode": "none"
+  },
+  "display": {
+    "title": {
+      "pt-BR": "Carrinho abandonado",
+      "es": "Carrito abandonado"
+    },
+    "summary": {
+      "pt-BR": "O roteiro de quem chegou até o pagamento e parou: o que perguntar, quando insistir e quando deixar quieto.",
+      "es": "El guion de quien llegó al pago y se detuvo: qué preguntar, cuándo insistir y cuándo dejarlo."
+    },
+    "category": "sales",
+    "icon": "Lightbulb"
+  },
+  "configuration": {
+    "density": "comfortable",
+    "show_description": true
+  },
+  "contributions": {
+    "crm_cards": [
+      {
+        "id": "primeira-mensagem",
+        "title": {
+          "pt-BR": "A primeira mensagem, em até 1 hora",
+          "es": "El primer mensaje, en hasta 1 hora"
+        },
+        "description": {
+          "pt-BR": "Quem abandonou o carrinho ainda lembra do que estava comprando. Depois de um dia, virou outra pessoa e outro assunto.",
+          "es": "Quien abandonó el carrito todavía recuerda qué estaba comprando."
+        },
+        "icon": "Lightbulb",
+        "blocks": [
+          {
+            "heading": {
+              "pt-BR": "Pergunte o obstáculo, não o pedido",
+              "es": "Pregunte el obstáculo, no el pedido"
+            },
+            "body": {
+              "pt-BR": "\"Vi que você estava fechando o pedido do [produto] e travou. Foi o frete, a forma de pagamento, ou ficou alguma dúvida?\" — três saídas concretas são mais fáceis de responder que \"posso ajudar?\", que só aceita sim ou não.",
+              "es": "\"Vi que estabas cerrando el pedido y se detuvo. ¿Fue el envío, el pago o quedó alguna duda?\""
+            }
+          },
+          {
+            "heading": {
+              "pt-BR": "Não ofereça desconto na primeira",
+              "es": "No ofrezca descuento en el primero"
+            },
+            "body": {
+              "pt-BR": "A maioria para por dúvida de prazo ou de frete, não por preço. Quem dá desconto de largada ensina o cliente a abandonar o carrinho de propósito na próxima compra.",
+              "es": "La mayoría se detiene por duda de plazo o envío, no por precio."
+            }
+          }
+        ],
+        "action": {
+          "label": {
+            "pt-BR": "Abrir as conversas",
+            "es": "Abrir las conversaciones"
+          },
+          "capability": "inbox.open"
+        }
+      },
+      {
+        "id": "quando-parar",
+        "title": {
+          "pt-BR": "Quando parar de insistir",
+          "es": "Cuándo dejar de insistir"
+        },
+        "description": {
+          "pt-BR": "Duas tentativas sem resposta é informação, não silêncio: mova o negócio e libere o funil para quem está respondendo.",
+          "es": "Dos intentos sin respuesta son información, no silencio."
+        },
+        "icon": "ListChecks",
+        "blocks": [
+          {
+            "heading": {
+              "pt-BR": "Duas tentativas, depois mova",
+              "es": "Dos intentos, después mueva"
+            },
+            "body": {
+              "pt-BR": "Primeira em 1 hora, segunda no dia seguinte. Sem resposta nas duas, mova para a etapa de perda com o motivo real — sem motivo, o funil vira uma lista de nomes que ninguém sabe por que estão ali.",
+              "es": "Primero en 1 hora, segundo al día siguiente. Sin respuesta, mueva a la etapa de pérdida con el motivo real."
+            }
+          }
+        ],
+        "action": {
+          "label": {
+            "pt-BR": "Abrir o funil",
+            "es": "Abrir el embudo"
+          },
+          "capability": "kanban.open"
+        }
+      }
+    ]
+  }
+}

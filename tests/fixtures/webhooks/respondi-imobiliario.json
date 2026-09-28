@@ -1,0 +1,92 @@
+{
+  "_comment": "Fixture sanitizada — estrutura real do payload que o Respondi envia pro webhook genérico (form 'Imobiliárias e Incorporadoras'), com nome/telefone/e-mail/empresa trocados por dado fictício. Capturado via leitura read-only de webhook_events_log em 2026-08-25; nenhum dado pessoal real está aqui.",
+  "form": {
+    "form_id": "9FiY9mrO",
+    "form_name": "Imobiliárias e Incorporadoras"
+  },
+  "respondent": {
+    "date": "2026-08-25 03:17:10",
+    "score": 55,
+    "status": "completed",
+    "answers": {
+      "Qual é o seu nome?": "Maria Exemplo",
+      "Autorização de contato": "Aceito",
+      "Qual é o seu melhor e-mail?": "maria.exemplo@example.com",
+      "Qual é o nome da sua empresa?": "Exemplo Incorporadora",
+      "Qual é a sua função na empresa?": "Diretor(a) ou gestor(a)",
+      "Qual é o seguimento da sua empresa?": "Incorporadora",
+      "Qual é o Instagram ou site da empresa?": "@exemploincorporadora",
+      "Em qual cidade e estado sua empresa atua?": "Sorocaba - SP",
+      "Qual é o faturamento médio mensal da empresa?": "De R$ 30 mil a R$ 50 mil",
+      "Como sua empresa faz marketing e atendimento hoje?": "Fazemos internamente, mas sem processo definido",
+      "Quando você pretende começar a melhorar essa operação?": "Mais adiante",
+      "Hoje, qual é o principal desafio comercial da sua empresa?": "Aumentar a conversão da equipe comercial",
+      "Qual é o melhor WhatsApp para falarmos sobre essa análise?": "55 15988887777",
+      "Quanto sua empresa investe atualmente em marketing por mês?": "De R$ 5 mil a R$ 10 mil",
+      "Considerando estratégia, tecnologia, atendimento e mídia, qual faixa de investimento seria viável para sua empresa crescer?": "De R$ 4 mil a R$ 7 mil por mês"
+    },
+    "raw_answers": [
+      {
+        "answer": ["Incorporadora"],
+        "question": { "question_id": "xqo17erhz57g", "question_type": "radio", "question_title": "Qual é o seguimento da sua empresa?" }
+      },
+      {
+        "answer": ["Diretor(a) ou gestor(a)"],
+        "question": { "question_id": "x0gwa339l9tfi", "question_type": "radio", "question_title": "Qual é a sua função na empresa?" }
+      },
+      {
+        "answer": "Exemplo Incorporadora",
+        "question": { "question_id": "x81rqz5zi2fx", "question_type": "text", "question_title": "Qual é o nome da sua empresa?" }
+      },
+      {
+        "answer": "@exemploincorporadora",
+        "question": { "question_id": "x21uvt0c5mdh", "question_type": "text", "question_title": "Qual é o Instagram ou site da empresa?" }
+      },
+      {
+        "answer": "Sorocaba - SP",
+        "question": { "question_id": "xwc0y0tz685", "question_type": "text", "question_title": "Em qual cidade e estado sua empresa atua?" }
+      },
+      {
+        "answer": ["De R$ 30 mil a R$ 50 mil"],
+        "question": { "question_id": "xnq4e13pc11k", "question_type": "radio", "question_title": "Qual é o faturamento médio mensal da empresa?" }
+      },
+      {
+        "answer": ["Aumentar a conversão da equipe comercial"],
+        "question": { "question_id": "xdy0rr6cr6qb", "question_type": "radio", "question_title": "Hoje, qual é o principal desafio comercial da sua empresa?" }
+      },
+      {
+        "answer": ["Fazemos internamente, mas sem processo definido"],
+        "question": { "question_id": "xu0v6wh59fw", "question_type": "radio", "question_title": "Como sua empresa faz marketing e atendimento hoje?" }
+      },
+      {
+        "answer": ["De R$ 5 mil a R$ 10 mil"],
+        "question": { "question_id": "xkufb9awfthd", "question_type": "radio", "question_title": "Quanto sua empresa investe atualmente em marketing por mês?" }
+      },
+      {
+        "answer": ["De R$ 4 mil a R$ 7 mil por mês"],
+        "question": { "question_id": "xrgvs1g2v5qf", "question_type": "radio", "question_title": "Considerando estratégia, tecnologia, atendimento e mídia, qual faixa de investimento seria viável para sua empresa crescer?" }
+      },
+      {
+        "answer": ["Mais adiante"],
+        "question": { "question_id": "xnzbz5ipyvze", "question_type": "radio", "question_title": "Quando você pretende começar a melhorar essa operação?" }
+      },
+      {
+        "answer": "Maria Exemplo",
+        "question": { "question_id": "x8oadm87qhyf", "question_type": "name", "question_title": "Qual é o seu nome?" }
+      },
+      {
+        "answer": { "phone": "15988887777", "country": "55" },
+        "question": { "question_id": "x2i29hyadnnk", "question_type": "phone", "question_title": "Qual é o melhor WhatsApp para falarmos sobre essa análise?" }
+      },
+      {
+        "answer": "maria.exemplo@example.com",
+        "question": { "question_id": "xgw7byf4a6sl", "question_type": "email", "question_title": "Qual é o seu melhor e-mail?" }
+      },
+      {
+        "answer": "yes",
+        "question": { "question_id": "xkmuhuumumqn", "question_type": "legaltext", "question_title": "Autorização de contato" }
+      }
+    ],
+    "respondent_id": "00000000-0000-4000-8000-000000000001"
+  }
+}

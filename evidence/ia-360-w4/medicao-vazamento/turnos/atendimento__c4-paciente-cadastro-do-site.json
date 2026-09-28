@@ -1,0 +1,44 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c4-paciente-cadastro-do-site",
+  "mensagem": "Preenchi o formulário do site de vocês ontem à noite. Vocês chegaram a receber meu cadastro? Não veio confirmação nenhuma.",
+  "esperado": "não pode citar entrada automática/webhook nem nome de ferramenta",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Não encontrei nenhuma entrada de formulário do site configurada no sistema no momento, então não consigo confirmar se o seu cadastro foi recebido.\n\nVou verificar isso com a equipe responsável pelo site e pela recepção. Se puder, também nos informe seu nome e o melhor telefone para contato, para conseguirmos localizar seu cadastro mais facilmente.",
+  "ferramentas": [
+    "crm_list_webhook_sources"
+  ],
+  "tool_calls": [
+    {
+      "step": 0,
+      "finish_reason": "tool-calls",
+      "tokens_in": 2145,
+      "tokens_out": 40,
+      "tool_calls": [
+        {
+          "tool_name": "crm_list_webhook_sources",
+          "args": {
+            "only_active": false
+          },
+          "result": {
+            "entradas": []
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "text": "Não encontrei nenhuma entrada de formulário do site configurada no sistema no momento, então não consigo confirmar se o seu cadastro foi recebido.\n\nVou verificar isso com a equipe responsável pelo site e pela recepção. Se puder, também nos informe seu nome e o melhor telefone para contato, para conseguirmos localizar seu cadastro mais facilmente.",
+      "finish_reason": "stop",
+      "tokens_in": 2204,
+      "tokens_out": 69,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 4307,
+  "cost_cents": 2,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "8c6001ac-f2df-469d-af64-7308a2737338",
+  "medido_em": "2026-08-05T20:05:00.562Z"
+}

@@ -1,0 +1,298 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Não perder o cliente — as mãos que impedem uma demanda de morrer",
+    "subtitle": "pacote `reter` do catálogo (IA 360 · wave 2): uma regra só para o motor e para a capacidade que o dono liga na tela",
+    "output": "ia-360-retencao.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o humano vê e opera" },
+    { "id": "capacidade", "label": "Capacidades do agente (catálogo MCP)" },
+    { "id": "regra", "label": "A regra, compartilhada" },
+    { "id": "banco", "label": "Banco" },
+    { "id": "motor", "label": "Motor do agente (worker)" }
+  ],
+  "mainPath": ["agendar", "regra", "cronjobs", "cron", "radar"],
+  "nodes": [
+    {
+      "id": "picker",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "Configuração do agente",
+      "sublabel": "liga o pacote \"Não perder o cliente\"; `crm_close_demand` é crítica e exige marcação explícita"
+    },
+    {
+      "id": "filaTela",
+      "lane": "humano",
+      "col": 5,
+      "type": "frontend",
+      "label": "/app/ai/followups · aba Fila",
+      "sublabel": "vê o retorno combinado e DESMARCA — a porta que não existia antes desta wave"
+    },
+    {
+      "id": "radar",
+      "lane": "humano",
+      "col": 6,
+      "type": "frontend",
+      "label": "/app/radar",
+      "sublabel": "\"em voo\" = alguém prometeu voltar; sem isso o mesmo negócio aparece como crítico"
+    },
+    {
+      "id": "timeline",
+      "lane": "humano",
+      "col": 6,
+      "type": "frontend",
+      "label": "Linha do tempo do negócio",
+      "sublabel": "Retorno agendado · Retorno cancelado · Demanda encerrada"
+    },
+    {
+      "id": "catalogo",
+      "lane": "capacidade",
+      "col": 1,
+      "type": "config",
+      "label": "catalogo/retencao.ts",
+      "sublabel": "rótulo em português de gente; `name` é contrato de wire"
+    },
+    {
+      "id": "agendar",
+      "lane": "capacidade",
+      "col": 2,
+      "type": "tool",
+      "label": "crm_schedule_followup",
+      "sublabel": "escrita · atenção — marca o próximo passo"
+    },
+    {
+      "id": "cancelar",
+      "lane": "capacidade",
+      "col": 2,
+      "type": "tool",
+      "label": "crm_cancel_followup",
+      "sublabel": "escrita · atenção — insistir com quem respondeu é dano"
+    },
+    {
+      "id": "listar",
+      "lane": "capacidade",
+      "col": 2,
+      "type": "tool",
+      "label": "crm_list_followups",
+      "sublabel": "leitura — é por aqui que o agente DESCOBRE o cancelamento humano"
+    },
+    {
+      "id": "radarTool",
+      "lane": "capacidade",
+      "col": 2,
+      "type": "tool",
+      "label": "crm_list_at_risk_leads",
+      "sublabel": "leitura — quem esfriou, na mesma classificação da tela"
+    },
+    {
+      "id": "encerrarTool",
+      "lane": "capacidade",
+      "col": 2,
+      "type": "tool",
+      "label": "crm_close_demand",
+      "sublabel": "escrita · CRÍTICA — o outro lado do invariante 4"
+    },
+    {
+      "id": "reativarTool",
+      "lane": "capacidade",
+      "col": 2,
+      "type": "tool",
+      "label": "crm_propose_reactivation",
+      "sublabel": "escrita · atenção — sugestão que uma pessoa aprova"
+    },
+    {
+      "id": "rotaCancel",
+      "lane": "capacidade",
+      "col": 4,
+      "type": "route",
+      "label": "POST /ai/followups/promises/:id/cancel",
+      "sublabel": "manager+ · a porta do humano para a MESMA regra"
+    },
+    {
+      "id": "regra",
+      "lane": "regra",
+      "col": 3,
+      "type": "lib",
+      "label": "lib/followup/retorno.ts",
+      "sublabel": "janela + guard anti-empilhamento + situação; sem I/O, atrás da porta RetornoDb"
+    },
+    {
+      "id": "janela",
+      "lane": "regra",
+      "col": 3,
+      "type": "lib",
+      "label": "lib/followup/janela.ts",
+      "sublabel": "os mesmos números para o worker e para o app — dois defaults fariam o mesmo horário ser aceito de um lado e recusado do outro"
+    },
+    {
+      "id": "retornoCrm",
+      "lane": "regra",
+      "col": 4,
+      "type": "lib",
+      "label": "retorno-crm.ts",
+      "sublabel": "adaptador Supabase + resolução contato→negócio + emissão de atividade"
+    },
+    {
+      "id": "retornoPg",
+      "lane": "regra",
+      "col": 4,
+      "type": "lib",
+      "label": "retorno-pg.ts",
+      "sublabel": "adaptador pg.Pool — o mesmo contrato, fora do request"
+    },
+    {
+      "id": "radarLib",
+      "lane": "regra",
+      "col": 4,
+      "type": "lib",
+      "label": "lib/leads/radar-de-risco.ts",
+      "sublabel": "extraído da rota: a tela e o agente dizem a MESMA coisa sobre o mesmo negócio"
+    },
+    {
+      "id": "encerramento",
+      "lane": "regra",
+      "col": 4,
+      "type": "lib",
+      "label": "lib/leads/encerramento.ts",
+      "sublabel": "extraído das rotas de ganho/perda; passou a emitir atividade"
+    },
+    {
+      "id": "emissor",
+      "lane": "regra",
+      "col": 5,
+      "type": "lib",
+      "label": "buildLeadActivityRow",
+      "sublabel": "a regra da LINHA num lugar só; `actor.agent_id` é o único que pode ir para coluna com FK"
+    },
+    {
+      "id": "cronjobs",
+      "lane": "banco",
+      "col": 5,
+      "type": "table",
+      "label": "cron_jobs",
+      "sublabel": "kind='at' · job_kind='followup_turn' · cancelled_at + cancel_reason (0102)"
+    },
+    {
+      "id": "atividades",
+      "lane": "banco",
+      "col": 6,
+      "type": "table",
+      "label": "crm_lead_activities",
+      "sublabel": "followup_scheduled · followup_cancelled · demand_closed"
+    },
+    {
+      "id": "audit",
+      "lane": "banco",
+      "col": 6,
+      "type": "table",
+      "label": "api_audit_log",
+      "sublabel": "followup.scheduled · followup.cancelled · lead.reactivation_proposed"
+    },
+    {
+      "id": "leads",
+      "lane": "banco",
+      "col": 6,
+      "type": "table",
+      "label": "crm_leads",
+      "sublabel": "status open→won/lost pelo trigger; nunca escrito à mão"
+    },
+    {
+      "id": "reativacoes",
+      "lane": "banco",
+      "col": 6,
+      "type": "table",
+      "label": "crm_lead_reactivations",
+      "sublabel": "proposta que vence sozinha na janela do estágio"
+    },
+    {
+      "id": "motorTool",
+      "lane": "motor",
+      "col": 2,
+      "type": "tool",
+      "label": "schedule_followup (inbound-turn)",
+      "sublabel": "a tool nativa do turno — passou a entrar pela mesma regra"
+    },
+    {
+      "id": "cron",
+      "lane": "motor",
+      "col": 6,
+      "type": "worker",
+      "label": "tickCron → job_queue",
+      "sublabel": "no horário combinado enfileira o followup_turn e se desabilita"
+    }
+  ],
+  "edges": [
+    { "id": "r1", "from": "picker", "to": "catalogo", "label": "liga o pacote; o sistema resolve as capacidades" },
+    { "id": "r2", "from": "catalogo", "to": "agendar", "label": "declara" },
+    { "id": "r3", "from": "catalogo", "to": "cancelar", "label": "declara" },
+    { "id": "r4", "from": "catalogo", "to": "listar", "label": "declara" },
+    { "id": "r5", "from": "catalogo", "to": "radarTool", "label": "declara" },
+    { "id": "r6", "from": "catalogo", "to": "encerrarTool", "label": "declara (crítica: fora do pacote)" },
+    { "id": "r7", "from": "catalogo", "to": "reativarTool", "label": "declara" },
+    { "id": "r8", "from": "agendar", "to": "retornoCrm", "label": "fachada fina" },
+    { "id": "r9", "from": "cancelar", "to": "retornoCrm", "label": "fachada fina" },
+    { "id": "r10", "from": "listar", "to": "retornoCrm", "label": "fachada fina" },
+    { "id": "r11", "from": "rotaCancel", "to": "retornoCrm", "label": "a MESMA operação do agente" },
+    { "id": "r12", "from": "filaTela", "to": "rotaCancel", "label": "o humano desmarca" },
+    { "id": "r13", "from": "retornoCrm", "to": "regra", "label": "decide (janela · empilhamento · situação)" },
+    { "id": "r14", "from": "retornoPg", "to": "regra", "label": "decide (a mesma)" },
+    { "id": "r15", "from": "motorTool", "to": "retornoPg", "label": "o motor entra pela mesma porta" },
+    { "id": "r16", "from": "regra", "to": "janela", "label": "lê os knobs" },
+    { "id": "r17", "from": "retornoCrm", "to": "cronjobs", "label": "cria · cancela · lista" },
+    { "id": "r18", "from": "retornoPg", "to": "cronjobs", "label": "cria · cancela · lista" },
+    { "id": "r19", "from": "retornoCrm", "to": "emissor", "label": "monta a linha da timeline" },
+    { "id": "r20", "from": "motorTool", "to": "emissor", "label": "monta a linha (emitAgentActivityForContact)" },
+    { "id": "r21", "from": "emissor", "to": "atividades", "label": "grava" },
+    { "id": "r22", "from": "atividades", "to": "timeline", "label": "o humano lê o que aconteceu" },
+    { "id": "r23", "from": "cronjobs", "to": "cron", "label": "vence → enfileira o turno futuro" },
+    { "id": "r24", "from": "cronjobs", "to": "filaTela", "label": "agendada · concluída · CANCELADA" },
+    { "id": "r25", "from": "cronjobs", "to": "radarLib", "label": "há retorno no futuro ⇒ \"em voo\"" },
+    { "id": "r26", "from": "radarLib", "to": "radar", "label": "a tela do humano" },
+    { "id": "r27", "from": "radarTool", "to": "radarLib", "label": "a mesma montagem do radar" },
+    { "id": "r28", "from": "encerrarTool", "to": "encerramento", "label": "fachada fina" },
+    { "id": "r29", "from": "encerramento", "to": "leads", "label": "move para o estágio terminal" },
+    { "id": "r30", "from": "encerramento", "to": "emissor", "label": "demand_closed" },
+    { "id": "r31", "from": "reativarTool", "to": "reativacoes", "label": "propõe (uma pessoa decide)" },
+    { "id": "r32", "from": "agendar", "to": "audit", "label": "followup.scheduled" },
+    { "id": "r33", "from": "cancelar", "to": "audit", "label": "followup.cancelled" },
+    { "id": "r34", "from": "rotaCancel", "to": "audit", "label": "followup.cancelled (via fila)" },
+    { "id": "r35", "from": "cronjobs", "to": "listar", "label": "o agente relê antes de reagendar" },
+    { "id": "r36", "from": "leads", "to": "radarLib", "label": "demandas abertas + última atividade" }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Cancelado ≠ disparado — e por que isso precisou de coluna",
+      "items": [
+        "`enabled = false` significava DUAS coisas: o one-shot disparou ou alguém desmarcou",
+        "enquanto foram indistinguíveis, o agente não descobria ao retomar que uma pessoa cancelou — e reagendava, insistindo com quem pediu para parar",
+        "a fila também mentia: mostrava \"concluída\" para um retorno que ninguém executou",
+        "migration 0102: `cancelled_at` + `cancel_reason`, sem backfill — não se sabe quais linhas antigas foram canceladas, e chutar seria gravar ficção em histórico"
+      ]
+    },
+    {
+      "dot": "sky",
+      "title": "Uma regra, dois runtimes — a não-duplicação é a peça",
+      "items": [
+        "o motor roda no worker com `pg.Pool`; a capacidade roda no Next com o client do Supabase",
+        "a DECISÃO (janela, guard anti-empilhamento, situação) vive em `retorno.ts` e não sabe falar com banco nenhum",
+        "cada runtime traz seu adaptador — é a única coisa que legitimamente difere",
+        "**não-ligação deliberada:** a EMISSÃO da atividade não passa pelo mesmo emissor nos dois lados (`emitLeadActivity` × `emitAgentActivityForContact`), porque os clientes são diferentes; o que é compartilhado é a REGRA DA LINHA (`buildLeadActivityRow`)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "O eixo contato × negócio, cobrando de novo",
+      "items": [
+        "`cron_jobs` é indexado por CONTATO; `crm_lead_activities.lead_id` é NOT NULL e é por NEGÓCIO",
+        "com `lead_id`, o alvo é exato — é a forma preferida da capacidade",
+        "com `contact_id`, o negócio sai de `resolveActiveLeadForContact`, que **não adivinha** quando há empate",
+        "sem negócio a que ancorar, o retorno ainda é criado (o anti-morte vem primeiro) e a perda do rastro vira evento — nunca silêncio"
+      ]
+    }
+  ]
+}

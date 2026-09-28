@@ -1,0 +1,67 @@
+=====================================================================
+ .env.local — qué va y de dónde sale cada valor
+=====================================================================
+Tu .env.local YA ESTÁ COMPLETO y probado con tu proyecto de Supabase
+(el que se usa en el video). Esta plantilla es para mostrarlo en
+cámara y explicar de dónde sale cada valor.
+
+pnpm demo corre la app en modo producción: si falta cualquier
+variable marcada OBLIGATORIA, el CRM no arranca.
+---------------------------------------------------------------------
+
+# --- Marca (sin tocar código) ---
+APP_NAME="Atiendo CRM"                # el nombre de tu marca
+APP_ACCENT_HEX="#10b981"
+APP_LOCALE=es                        # interfaz, login y empresa nueva en español
+
+# --- Supabase ---
+# Supabase > Project Settings > API Keys (y Data API para la URL)
+NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co          # OBLIGATORIA
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>                    # OBLIGATORIA
+SUPABASE_SERVICE_ROLE_KEY=<service_role key>                # OBLIGATORIA
+# Supabase > botón "Connect" > "Session pooler" (funciona con IPv4).
+# Si la contraseña tiene "@", va escrita como %40.
+SUPABASE_DB_URL=postgresql://postgres.<ref>:<PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres   # OBLIGATORIA
+
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# --- Secretos: se GENERAN, nunca se copian de un ejemplo ---
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+INTERNAL_SECRET=<64 hex>                                    # OBLIGATORIA
+CPF_ENCRYPTION_KEY=<64 hex>                                 # OBLIGATORIA
+WAHA_BYO_ENCRYPTION_KEY=<64 hex>                            # OBLIGATORIA
+# node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+# Tiene que medir EXACTAMENTE 32 bytes; si no, no se puede guardar la key de OpenAI.
+AI_CRED_AES_KEY=<base64 de 32 bytes>                        # OBLIGATORIA
+# No cambiar AI_CRED_AES_KEY después de cargar la key de OpenAI en el CRM.
+
+# --- IA ---
+OPENAI_API_KEY=sk-...        # la misma que pegás en el onboarding
+
+# --- WhatsApp por Zernio ---
+# Tu dominio FIJO de ngrok (dashboard.ngrok.com > Domains). Sin barra al final.
+CHANNEL_WEBHOOK_BASE_URL=https://tu-dominio.ngrok-free.dev
+# VACÍAS a propósito: la cuenta y la API key de Zernio se cargan en
+# Conexiones > Proveedor asociado (quedan cifradas por empresa).
+ZERNIO_API_KEY=
+ZERNIO_ACCOUNT_ID=
+
+# --- WAHA y Redis: NO se usan acá, pero el modo producción exige que existan ---
+WAHA_API_BASE_URL=http://127.0.0.1:9
+WAHA_API_KEY=sin-waha
+WAHA_WEBHOOK_BASE_URL=http://localhost:3000
+UPSTASH_REDIS_REST_URL=sin-redis-local
+UPSTASH_REDIS_REST_TOKEN=sin-redis-local
+
+# --- Solo para grabar: que la IA responda en segundos ---
+# Por defecto espera 8 s por si llegan más mensajes seguidos y revisa la
+# cola cada 15 s cuando está ociosa (respuesta en 10-25 s).
+# Consultan la base más seguido: sacarlas después de grabar.
+INBOUND_DEBOUNCE_MS=1500
+CRM_DRAIN_IDLE_INTERVAL_MS=1000
+QUEUE_POLL_INTERVAL_MS=500
+
+---------------------------------------------------------------------
+Nota: tu .env.local actual tiene ZERNIO_API_KEY con valor. No molesta
+(sin ZERNIO_ACCOUNT_ID el CRM no la usa), pero si vas a mostrar el
+archivo en cámara, conviene dejarla vacía para no exponerla.

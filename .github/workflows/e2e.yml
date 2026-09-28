@@ -1,0 +1,2159 @@
+name: e2e
+
+# Issue #63: as specs de tests/e2e/ não rodavam em lugar nenhum. Este job fecha o
+# buraco com o subconjunto que não depende de serviço externo.
+#
+# NÃO conte aqui quantas são: o summary do job CONTA em vez de afirmar, e
+# `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando uma spec do
+# disco não está em nenhuma das quatro listas abaixo. Um número escrito nesta linha
+# é a quarta fonte da mesma verdade, e as três anteriores já divergiram — este
+# cabeçalho dizia "29 de 33" quando o disco tinha 45 e o job rodava 44.
+#
+# A execução é dividida em DUAS invocações do playwright de propósito: o
+# limitador de login do produto é por IP (60/300s) e no CI todos os specs vêm do
+# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte 1 de 4".
+#
+# É CHECK OBRIGATÓRIO. A régua, para reconferir em vez de acreditar nesta linha:
+#   $ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
+#       --jq '.required_status_checks.contexts|join(", ")'
+#   verify, build-and-size, invariants, e2e, imagens-ok   # medido em 2026-08-14
+#
+# São CINCO. A versão anterior deste bloco colava a saída de 2026-08-12, com
+# quatro — `imagens-ok` virou obrigatório em 2026-08-13, um dia depois. Trocar
+# uma afirmação vencida por outra vencida é o mesmo defeito, e o commit
+# bcd88c30 desta branch existe justamente por causa dele: quem lê aqui para
+# saber contra o que medir concluiria que imagem quebrada não segura merge.
+# Este cabeçalho afirmou o contrário ("NÃO-BLOQUEANTE por ausência… quando N
+# execuções seguidas passarem limpas, adicionar aos obrigatórios") por tempo
+# demais depois de a promoção ter acontecido — e quem lesse isso mediria o custo
+# de uma mudança contra a régua errada.
+#
+# O job falha honestamente: a primeira versão usava `continue-on-error: true` no
+# job inteiro e reportou VERDE com o `supabase start` quebrado e zero teste
+# executado. Verde que não distingue "passou" de "nem rodou" é pior que vermelho.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# O GITHUB_TOKEN deste job serve a `actions/checkout` (clone) e a
+# `actions/setup-node` (manifest de `actions/node-versions`, repo público).
+#
+# `supabase/setup-cli@v3` merece a frase inteira, porque a resposta curta está
+# errada: ele é `using: composite` e aninha `oven-sh/setup-bun`, cujo input
+# `token` tem default `${{ github.token }}` — o token É repassado. Com o
+# `.bun-version` do setup-cli fixo em semver exato, o caminho que gasta o token
+# (api.github.com/repos/oven-sh/bun/git/refs/tags) não é tomado; se um dia for, é
+# leitura de repo público e `contents: read` basta. Grep no `action.yml` de topo
+# não enumera consumidor de token quando a action é composite: o consumidor mora
+# um nível abaixo.
+#
+# `actions/upload-artifact@v7` não tem input de token: publica pela Actions
+# Results API, com ACTIONS_RUNTIME_TOKEN + ACTIONS_RESULTS_URL. Nenhum passo
+# `run:` enxerga o GITHUB_TOKEN — ele só entra no ambiente via
+# `secrets.GITHUB_TOKEN`, ausente aqui.
+permissions:
+  contents: read
+
+# Cancelamento da rodada superada: por JOB (os pesados), nunca no workflow nem
+# no agregador — razão medida e a tabela por evento no cabeçalho do ci.yml.
+
+jobs:
+  # O PR ALCANÇA ALGO QUE O E2E MEDE? Responde em segundos, antes das partes.
+  #
+  # O e2e é o maior consumidor da fila: 56% dos minutos de runner medidos de 15 a
+  # 18/09/2026. Um PR só de documentação, teste de outra suíte ou workflow alheio
+  # pagava três partes de ~23 min para medir o mesmo produto — 25 dos 200 PRs
+  # mais recentes eram assim. A regra, e o porquê de cada caminho, estão no
+  # cabeçalho de scripts/pr-alcanca-o-e2e.sh.
+  #
+  # Fora de pull_request é SEMPRE `sim`: a `main` mede tudo. Falha ao listar,
+  # lista cortada (≥3000) ou resposta estranha também viram `sim`. E o agregador
+  # `e2e` só aceita parte pulada quando ESTE job terminou `success` com `nao`:
+  # job que falhou aqui reprova, em vez de passar por falta de medida.
+  #
+  # Roda nas máquinas do GitHub sempre: é de segundos, e não pode depender do
+  # executor próprio estar de pé para decidir nada.
+  e2e-alcance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      e2e: ${{ steps.alcance.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          sparse-checkout: scripts/pr-alcanca-o-e2e.sh
+          sparse-checkout-cone-mode: false
+
+      - name: O PR alcança o que o e2e mede?
+        id: alcance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo "e2e=sim" >> "$GITHUB_OUTPUT"; echo "evento ${GITHUB_EVENT_NAME}: roda"; exit 0
+          fi
+          if ! arquivos=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[].filename'); then
+            echo "e2e=sim" >> "$GITHUB_OUTPUT"; echo "::warning::não consegui listar os arquivos do PR — roda"; exit 0
+          fi
+          n=$(printf '%s\n' "$arquivos" | grep -c . || true)
+          if [ "$n" -ge 3000 ]; then
+            resposta=sim
+          else
+            resposta=$(printf '%s\n' "$arquivos" | bash scripts/pr-alcanca-o-e2e.sh) || resposta=sim
+          fi
+          [ "$resposta" = "nao" ] || resposta=sim
+          echo "e2e=${resposta}" >> "$GITHUB_OUTPUT"
+          echo "${n} arquivo(s) no PR → e2e=${resposta}"
+
+  # AS DUAS PARTES RODAM EM PARALELO, e o motivo é medido, não estético.
+  #
+  # Elas rodavam como dois passos do MESMO job, então somavam contra um único
+  # teto de 30 min. Medido no run 33125422531, o último verde antes deste
+  # conserto: parte 2 = 16,3 min, parte 1 = 8,2 min, setup (build + Supabase +
+  # browser) ≈ 4,5 min — total ≈ 29 min, com 1 min de folga. A folga acabou:
+  # dois runs da própria `main` foram CANCELADOS em 30 min exatos (23:30→00:00
+  # e 23:26→23:56 de 2026-08-27), e um PR de UM arquivo foi cancelado junto.
+  #
+  # Em paralelo, cada parte paga o setup uma vez e tem o teto inteiro para si:
+  # o job mais longo passou a ser ≈ 21 min em vez de ≈ 29.
+  #
+  # ⚠️ ESSA ÚLTIMA FRASE VENCEU. Ela estava certa quando escrita e descreve o
+  # efeito do paralelismo, não o estado: dez dias depois o job mais longo era 26
+  # min e chegou a ser cancelado aos 30. Quem lê "≈ 21 min" para saber se cabe
+  # mais spec mede contra a régua errada. O estado de hoje está no bloco
+  # "REBALANCEAMENTO DE 2026-09-04" mais abaixo — que também traz o comando que
+  # produz o número, porque número escrito envelhece e comando não.
+  #
+  # E há um ganho que não era o objetivo: a razão de existirem partes separadas é
+  # "processo novo, contador de login zerado" — o teto por IP. Runners de
+  # matrix são máquinas diferentes, com IPs diferentes, então a separação
+  # deixa de depender de reiniciar o processo.
+  #
+  # O teto de 30 min FICA. Ele é o que denuncia a suíte crescendo de novo;
+  # subi-lo seria trocar um vermelho honesto por um CI que demora mais a cada
+  # mês sem ninguém perceber.
+  #
+  # A parte 4 já custou às outras três: os contêineres dela (WAHA, redis,
+  # serverless-redis-http) eram `services:`, que é chave do JOB e sobe em
+  # TODAS as pernas — o Actions não aceita condição por braço da matriz. Na
+  # parte 1 do run 35124188017, que não usa nenhum deles, "Initialize
+  # containers" foi de 16:53:22.468 a 16:54:13.725 — 51s, quase todos no pull
+  # do WAHA —, com a parte 3 do mesmo run em 26m04s. Agora eles sobem por
+  # `docker run` no passo "Subir WAHA e o par Redis da VPS fresca", com
+  # `if: matrix.parte == 4`. Não os devolva para `services:`: a guarda
+  # `tests/unit/e2e-parte-4-fala-com-os-servicos-do-runner.test.ts` reprova.
+  e2e-parte:
+    needs: [e2e-alcance]
+    if: needs.e2e-alcance.outputs.e2e == 'sim'
+    # Executor próprio para trabalho NOSSO (push na main, PR de branch deste
+    # repo) quando a variável de repositório EXECUTOR_PROPRIO vale `ligado`;
+    # máquinas do GitHub para todo o resto, fork inclusive. A expressão decide
+    # só para quem não a edita — a guarda que vale contra fork mora na máquina
+    # (infra/executor-proprio/so-o-que-e-nosso.sh). Vigiado por
+    # tests/unit/executor-proprio-so-roda-o-que-e-nosso.test.ts.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
+    # O teto FICA EM 30, e essa foi uma correção de rumo desta branch.
+    #
+    # Eu tinha subido para 45, com o argumento de que o teto acumula dois papéis
+    # que brigam (guarda de travamento × detector de crescimento) e de que só o
+    # primeiro depende do valor. O argumento continua certo para o `verify`.
+    #
+    # Aqui ele é FALSO, e quem mostrou foi o @webtecnica no #1056: com o corte
+    # legível dele em TETO − MARGEM, o `timeout-minutes` vira inalcançável, e o
+    # portão real passa a ser TETO_SEGUNDOS. Subir os dois juntos não separa
+    # papel nenhum — move o portão de 28 para 43 min. É exatamente o
+    # afrouxamento contra o qual ele escreveu uma catraca, e ela me reprovou.
+    #
+    # O conserto certo não é afrouxar: é repartir. Por isso esta branch traz o
+    # rebalanceamento junto (o #1174), e com as partes em ~18 min o portão de 28
+    # deixa de ser apertado sem que ninguém precise ceder.
+    timeout-minutes: 30
+    concurrency:
+      group: ${{ github.workflow }}-e2e-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      # Sem fail-fast: se a parte 1 quebrar, ainda quero saber se a 2 também.
+      # Com ele ligado, o primeiro vermelho esconde o outro e o conserto vira
+      # uma rodada por parte.
+      fail-fast: false
+      matrix:
+        parte: [1, 2, 3, 4, 5]
+    # ─────────────────────────────────────────────────────────────────────────
+    # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
+    #
+    # Antes, as listas viviam nos dois `run:` e a declaração do que NÃO é coberto
+    # era um `echo` escrito à mão. As duas fontes divergiram em silêncio: o texto
+    # dizia "32 de 33 specs" quando o disco tinha 39 e o job rodava 36 — e as
+    # ausentes eram justamente as novas, incluindo `agente-papeis-operador`, a
+    # prova de tela do épico dos três papéis, que nunca rodou em job nenhum.
+    #
+    # Cobertura parcial silenciosa se lê como cobertura total. Agora há UMA fonte
+    # por lista, o summary CONTA em vez de afirmar, e
+    # `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando um arquivo
+    # de spec não está em nenhuma das quatro listas.
+    #
+    # FORA_DO_CI exige motivo escrito no próprio nome do bloco abaixo — spec fora
+    # do gate sem razão declarada é a dívida voltando pela porta de serviço.
+    # ─────────────────────────────────────────────────────────────────────────
+    #
+    # ═══ `cadastro-sem-confirmacao-de-email`: A PRECONDIÇÃO É DO PROVEDOR ═══
+    #
+    # Ela mede o cadastro com "Confirm email" DESLIGADO no provedor de auth — o
+    # estado em que `signUp()` já devolve sessão e não existe link nenhum para
+    # clicar. Isso não é dado que a spec possa semear: é `GOTRUE_MAILER_AUTOCONFIRM`,
+    # fixado quando o Supabase local sobe, e o `supabase/config.toml` do repo
+    # declara `enable_confirmations = true` — que é o que `signup-journey` e
+    # `invite-lifecycle` exercitam. Ligar o autoconfirm por causa desta spec
+    # trocaria o provedor da SUÍTE INTEIRA, e as duas de cima passariam a medir
+    # outro fluxo sem que ninguém percebesse.
+    #
+    # O gate de todo dia é o par de testes de unidade, que roda no `verify`:
+    # `app/actions/auth/signUp.test.ts` (a action DIZ que a sessão veio aberta) e
+    # `tests/unit/cadastro-sem-confirmacao-nao-manda-esperar-email.test.tsx` (a
+    # tela AGE sobre isso). A spec é a prova pela tela de que os dois, juntos,
+    # resolvem a jornada — e ela CONFERE a própria precondição em `beforeAll`,
+    # falhando alto em vez de se auto-pular.
+    #
+    # ═══ `aviso-de-caso-chega-no-whatsapp`: O CI NÃO TEM ENDEREÇO PÚBLICO ═══
+    #
+    # Ela prova o envio de verdade do aviso de caso, com um receptor HTTP no
+    # lugar do WhatsApp — e para isso precisa de um `NEXT_PUBLIC_APP_URL`
+    # público, porque o produto RECUSA mandar um aviso cujo link não abriria no
+    # celular de outra pessoa (`lib/escalacao/aviso-ao-suporte.ts`, guarda 9;
+    # `lib/escalacao/aviso-de-teste.ts`, guarda 9).
+    #
+    # O `.env.e2e` grava `NEXT_PUBLIC_APP_URL=http://localhost:$E2E_PORT`, e não
+    # por esquecimento: é o endereço em que o servidor sob teste responde de
+    # verdade, e as três specs de fluxo por e-mail (`password-recovery`,
+    # `reset-password-mfa`, `signup-journey`) quebram se ele apontar para outro
+    # lugar — o browser segue o 3xx e cai onde não há ninguém escutando. O valor
+    # é lido uma vez, no boot (`lib/env.ts`, `safeParse(process.env)`), então não
+    # há como valer só para uma spec: trocá-lo troca para a suíte inteira.
+    #
+    # O que roda no CI é `aviso-de-caso-no-whatsapp.spec.ts`, e ela não pula o
+    # assunto: prova a tela E a RECUSA honesta ponta a ponta (a entrega nasce
+    # `falhou/sem_endereco_publico` e a tela diz isso em português), que é
+    # exatamente o comportamento de uma instalação recém-feita.
+    #
+    # A spec de fora CONFERE a própria precondição e falha alto com a receita de
+    # como rodá-la — `test.skip()` seria um verde que não distingue "passou" de
+    # "nem tentou". A prova local está em `evidence/casos-vivos/aviso/`.
+    #
+    # ═══ O 429 DE `olhar-telas-do-epico`: RESOLVIDO DUAS VEZES, EM CAMADAS DIFERENTES ═══
+    #
+    # A spec reprovava com **429** em TODAS as 7 telas, falha PRÉ-EXISTENTE NA MAIN (run
+    # 31343408488, main, 2026-08-10T00:03, lista byte-idêntica).
+    #
+    # Duas sessões chegaram à MESMA causa raiz em paralelo, sem se ver, e os dois
+    # consertos são complementares — nenhum torna o outro dispensável:
+    #
+    #  - `a60cae2d` (main, PR #220) desligou a telemetria NO AMBIENTE DO CI:
+    #    `SENTRY_DSN: "off"` no build e em todas as partes (e no `perf.yml`). Ver o
+    #    comentário do passo "Build de produção" abaixo — a armadilha é que vazio NÃO
+    #    desliga, seleciona o Sentry da comunidade.
+    #  - `77b4a486` (este PR) consertou O PRODUTO: o SDK do browser mandava duas SESSÕES
+    #    de release health por NAVEGAÇÃO para o DSN da comunidade — de toda instalação
+    #    self-host, não só do CI. `browserSessionIntegration` é default do SDK e
+    #    `integrations: [x]` SOMA aos defaults, então a política "no Sentry da comunidade,
+    #    só erro" estava declarada e não estava em vigor. Detalhe em `lib/sentry/dsn.ts`;
+    #    o gate é `tests/unit/sentry-comunidade-so-erro.test.ts`.
+    #
+    # O ingest respondia `429` com `x-sentry-rate-limits: 60::organization:suspended` —
+    # lista de categorias vazia, isto é, TODAS: a organização estava suspensa por cota, e
+    # cada tentativa barrada virava erro de console, que é o que esta spec cobra.
+    #
+    # FONTE DA VERDADE do ambiente da suíte é `scripts/gerar-env-e2e.sh` (o `.env.e2e`
+    # que o passo "Publicar" joga no `$GITHUB_ENV`, e que vale também para quem roda
+    # local). As três linhas `SENTRY_DSN: "off"` de nível de passo FICAM como segunda
+    # camada — `env:` de passo vence o `$GITHUB_ENV`, então elas protegem o CI se o
+    # gerador mudar. Duas fontes que CONCORDAM e uma delas declarada como principal;
+    # apagar as do colega para "limpar duplicação" seria trocar defesa por estética.
+    #
+    # Três hipóteses minhas caíram por medição, e o custo delas foi maior que o do
+    # conserto. As duas primeiras foram descartadas na época:
+    #
+    #  1. "a parte 2 está sobrecarregada" — caiu de 69 para 53 testes, falha byte-idêntica.
+    #  2. "as specs anteriores exaurem o contador" — posta em PRIMEIRO lugar, contador
+    #     limpo, as mesmas 7 telas deram 429, inclusive a primeira.
+    #  3. "é o fallback em memória do limitador" — foi o que este comentário afirmou como
+    #     "a pista que sobra". MEDIDO no job real: 120 quedas para memória, 103 delas no
+    #     bucket `auth:login:ip` contra teto de 1000. O limitador não barrou nada.
+    #
+    # A lição operacional é sobre INSTRUMENTO, não sobre limitador: a mensagem do browser
+    # para requisição barrada é "Failed to load resource: ... 429" e não diz QUEM
+    # respondeu; a spec descartava `m.location()` e o relatório não guarda trace, então a
+    # única cópia do endereço morria ali. Três runs foram gastos adivinhando o dono de um
+    # 429 cuja URL o próprio teste tinha em mãos. A spec agora registra a URL.
+    #
+    # `AUTH_RATE_LIMIT_LOGIN_IP` segue existindo pelo motivo dele (o teto por IP no CI é
+    # um runner só) e não teve nada a ver com isto. Afrouxar o limitador do produto para
+    # acomodar teste segue sendo a troca errada — e aqui não foi preciso.
+    #
+    # A ordem das listas voltou ao que era: mudá-la foi tentativa que não se sustentou,
+    # e deixar a mudança de pé com um comentário dizendo "hipótese" seria pior — o
+    # próximo leitor herdaria uma decisão tomada por um motivo medido FALSO.
+    #
+    # O rebalanceamento das duas partes FICA, por outro motivo e sem alegar mais do que
+    # faz: 6,5 + 8,1 min em vez de 2,7 + 12,2.
+    #
+    # ═══ REBALANCEAMENTO DE 2026-09-04 — O PRIMEIRO MEDIDO POR ARQUIVO ═══
+    #
+    # A folga acabou de novo. Run 33820766602 (verde), confirmado em seis rodadas:
+    #
+    #   parte 1: 103 testes · 9,1 min de Playwright · job 18 min
+    #   parte 2: 127 testes · 18,0 min de Playwright · job 26 min
+    #   setup (build + Supabase + browser) ≈ 8-9 min, igual nos dois
+    #   as seis: parte 1 = 18 17 15 15 18 14 min · parte 2 = 26 28 26 26 25 25 min
+    #
+    # E não é mais risco: a parte 2 já ESTOUROU o teto — 30 min 17 s num PR, e de
+    # novo no run 33823969191 (deste PR), CANCELADA aos 30 min com 117 dos 133
+    # casos terminados.
+    #
+    # ── Por que contagem de TESTES não serve como régua ─────────────────────
+    #
+    # Este arquivo já registra dois proxies que inverteram o sinal da medição
+    # (ver o bloco de `SPECS_PARTE_1` abaixo). O terceiro proxy tentador é o
+    # número de testes por parte, e ele cai na PRÓPRIA tabela acima:
+    #
+    #   103 testes / 9,1 min  = 5,3 s por teste na parte 1
+    #   127 testes / 18,0 min = 8,5 s por teste na parte 2
+    #
+    # O mesmo "teste" custa 60% mais de um lado. E dentro de uma parte a
+    # dispersão é MAIOR: medido por arquivo no run 33823969191,
+    # `agenda-kit-visual` tem 20 casos e custa 21,6 s; `navegacao` tem 9 casos e
+    # custa 239,2 s. Mover o arquivo com MAIS casos desloca **11× menos tempo**
+    # que mover o de menos.
+    #
+    # ── O instrumento, para não haver quarto proxy ──────────────────────────
+    #
+    # O passo de execução roda com `--reporter=list` (o `dot`, default em CI,
+    # despeja os pontos em rajada — 37 numa linha só, cobrindo 4,9 min). Cada
+    # caso vira uma linha carimbada pelo Actions, e o custo de RELÓGIO de um
+    # arquivo é o intervalo entre o último caso dele e o último caso do arquivo
+    # anterior — o que inclui o `beforeAll`, que é onde as specs pagam o
+    # `execFileSync` dos seeds.
+    #
+    # Somar a duração que o reporter imprime NÃO serve: `result.duration` é só o
+    # caso. Medido na parte 1 do 33823969191 — soma das durações 7,14 min contra
+    # 7,95 min de relógio contra 8,1 min do rodapé do Playwright. O relógio
+    # fecha em 98% do rodapé; a soma das durações joga fora 12%, concentrado
+    # justamente nas specs que semeiam.
+    #
+    # Para refazer a medição em qualquer run, em vez de acreditar nos números
+    # desta seção:
+    #
+    #   gh run view --job <id-do-job> --log > /tmp/e2e.log
+    #   grep -E '\[chromium\] › tests/e2e/' /tmp/e2e.log
+    #
+    # ── O que mudou, e por que UM arquivo só ────────────────────────────────
+    #
+    # `navegacao.spec.ts` vai da PARTE_2 para a PARTE_1. Medido: 239,2 s
+    # (3,99 min), 23,3% de todo o relógio que a parte 2 chegou a gastar antes do
+    # corte. É o maior item das duas partes depois de `prova-painel-provedores`,
+    # e move sozinho quase exatamente o que falta.
+    #
+    # Um arquivo só, e não três de peso médio, porque as duas partes rodavam
+    # contra o MESMO banco sem reset: cada spec movida era uma vizinhança nova.
+    # ⚠️ ESTA FRASE VENCEU e fica como registro do que valia: hoje `supabase
+    # start` é passo do PRÓPRIO `e2e-parte`, e a matriz dá um runner (e um banco)
+    # por parte. Mover spec entre partes deixou de criar vizinhança de DADO; o
+    # que sobra é vizinhança de ORDEM dentro da parte, que o Playwright resolve
+    # em ordem alfabética de arquivo. Conferir na fonte, não nesta linha:
+    # `grep -n "supabase start" .github/workflows/e2e.yml` e o job em que ele cai.
+    # `navegacao` é a que tem menos aresta — só afirma cromo de navegação
+    # (sidebar, abas, ⌘K, medidas de layout), não lê dado semeado por vizinha
+    # nenhuma, e a precondição dela (`afirmarAdminDeTenantPuro`) é satisfeita em
+    # qualquer parte, porque quem promove `platform_admin` é
+    # `seed-e2e-system-update` e ele promove o `e2e-dono` REVOGANDO o `e2e-admin`.
+    # Alfabeticamente cai entre `mfa-opcional` e `notificacoes-`, isto é, ANTES
+    # de `relogio-http-cron-externo` — a restrição do tick global segue de pé.
+    #
+    # ── PREVISÃO (é previsão; a rodada seguinte deste PR é que mede) ────────
+    #
+    # Aplicada ao run de referência (9,1 + 18,0 = 27,1 min), com os 8 arquivos
+    # que o corte impediu de medir estimados em ~2,4 min (16 casos à média de
+    # 8,8 s/caso da própria parte 2), `navegacao` vale ≈ 3,6 min lá:
+    #
+    #   parte 1 ≈ 12,7 min de Playwright → job ≈ 21,6 min
+    #   parte 2 ≈ 14,4 min de Playwright → job ≈ 22,4 min
+    #   folga contra o teto: ≈ 7,6 min no pior dos dois (era 4 min, e virou −0:17)
+    #
+    # ── 16/09, noite: a previsão acima NÃO se confirmou, e as duas voltam ───
+    #
+    # Medido no run 35160549180 (lote 12, head 2a847f6f0): a parte 1 ESTOUROU o
+    # teto — 30 min cravados, cancelada no caso 141 de 156, ainda passando. A
+    # parte 2 mediu 15 min e a 3, 22 min. Ou seja, a partição prevista em
+    # 21,6/22,4 virou >30 contra 15: a folga está toda na parte 2.
+    #
+    # O que cresceu não foram as specs novas: as três de QA do lote 12 que caíram
+    # na parte 1 somam 5 casos e 31 s. Cresceram os casos acrescentados às specs
+    # que já estavam lá (o arrasto duplo do #919 em `kanban-owner-filter`, entre
+    # outros), que é crescimento que nenhuma linha deste arquivo anuncia.
+    #
+    # Então `prova-painel-provedores` (199,4 s, a alavanca que o bloco abaixo já
+    # nomeava) e `navegacao` (239,2 s) vão as duas para a PARTE_2. Medido nos
+    # logs deste run: a parte 1 gastou 978 s de Playwright em 138 casos
+    # concluídos; tirar 438 s devolve ~7,3 min e põe o job perto de 22 min, com
+    # a parte 2 em ~23 min.
+    #
+    # ── ONDE A REGRA DO TETO MORA (correção de 18/09/2026) ─────────────────
+    #
+    # Esta linha dizia, por meses: "subir `timeout-minutes` não entra: o teto é
+    # o que denuncia o crescimento". A INTENÇÃO está certa e segue valendo. A
+    # FORMULAÇÃO estava errada, e ela **contradizia um mecanismo do próprio
+    # repositório** — o que é pior que não dizer nada, porque manda quem lê
+    # obedecer a prosa e desobedecer o gate.
+    #
+    # `tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts` guarda os tetos
+    # num mapa `TETOS` de `{minutos, razao}`: o teto **pode** subir, desde que a
+    # razão seja escrita e versionada ali. Catraca com justificativa, não
+    # proibição. E é o único lugar do repo onde essa decisão fica auditável.
+    #
+    # Então a regra em vigor é a do portão, e esta prosa só aponta para ele:
+    # quem mexer num teto troca o `razao` junto, com a medição nova, ou o portão
+    # reprova — que é exatamente o que ele deve fazer.
+    #
+    # Por que a distinção não é acadêmica: a razão em vigor para o `verify`
+    # ("p90 594s, máximo 609s em 51 verdes — folga de ~4m45") estava CERTA quando
+    # escrita e VENCEU. Medido em 18/09 sobre 39 rodadas, a folga de 4m45 virou
+    # 0,1 min e 13 rodadas morriam no teto. Uma regra que proíbe mexer no número
+    # também proíbe CORRIGIR a razão vencida — e aí o repo fica com uma
+    # afirmação de estado errada que ninguém tem autorização para consertar.
+    #
+    # Aqui, no `e2e`, o teto continua em 30 e a decisão é a mesma de sempre: o
+    # caminho é repartir (foi o que se fez), não afrouxar. A diferença é que
+    # agora isso está escrito como CONCLUSÃO desta medição, e não como proibição
+    # geral que o mecanismo do repo desmente.
+
+    # ── 2026-09-18, noite: a apertada passou a ser a PARTE 2 ────────────────
+    #
+    # Medido em jobs VERDES (misturar vermelha e cancelada nesta conta dá número
+    # sem significado), relógio do JOB, que é onde o teto de 30 min morde:
+    #
+    #     parte 1 → mediana 1367s (n=21, máx 1388)  ← folga de 412s
+    #     parte 2 → mediana 1522s (n=17, máx 1594)  ← folga de 206s, a menor
+    #     parte 3 → mediana 1443s (n=16, máx 1572)  ← folga de 228s
+    #
+    # Só de Playwright, em três amostras de cada: parte 2 = 1060/1173/1180s
+    # contra parte 1 = 794/803/973s. A parte 3 era a que aparecia nos relatos
+    # porque era onde o caso instável caía — "onde o problema aparece" não é
+    # "onde a folga acabou".
+    #
+    # UM arquivo muda de lista, e é o menor movimento que equilibra:
+    #
+    #   `agente-novo-e-uso` (102–120s)  PARTE_2 → PARTE_1, onde já moram
+    #       `agente-papeis-operador` e as outras telas de agente.
+    #
+    # Previsão (é previsão; a rodada deste PR é que mede): ~1060s × ~1003s de
+    # Playwright, com a diferença caindo de ~300s para ~60s. Mover TAMBÉM
+    # `capacidades-do-agente` (99–102s) inverteria o desequilíbrio — 958 × 1105.
+    #
+    # ⚠️ `navegacao` (281–305s, 25% da parte 2) continua onde está: o bloco
+    # acima documenta que ela REPROVA na parte 1 por estado do banco daquela
+    # parte (run 35345305473). A alavanca óbvia pelo relógio é justamente a
+    # proibida pela medição.
+    #
+    # NÃO MEDIDO: se `agente-novo-e-uso` passa no estado de banco da parte 1 —
+    # é exatamente o que derrubou a tentativa com `navegacao`, e quem responde é
+    # a rodada deste PR, não esta previsão.
+
+    # ── A próxima alavanca, quando esta acabar ──────────────────────────────
+    #
+    # `prova-painel-provedores` é 199,4 s — 42% de toda a parte 1, num arquivo
+    # de 8 casos a 25 s cada. Se a parte 1 voltar a estourar, é lá que se olha
+    # antes de repartir o resto. E se as duas estourarem juntas, a alavanca
+    # deixa de ser a partição e passa a ser uma terceira parte: o setup de
+    # 8-9 min é pago por parte, então três partes custam ~9 min de runner a mais
+    # e devolvem ~9 min de relógio a cada uma.
+    # ── 2026-09-18: a parte 3 estourou o teto, e a folga estava toda na 1 ──
+    #
+    # Medido no run 35339808887 (PR de release 1.35.0): parte 1 = 15,9 min de
+    # relógio, parte 2 = 28,4 min, parte 3 = CANCELADA em 30 min 17 s com 91 de
+    # 93 casos. Somando só o tempo de Playwright, por parte:
+    #
+    #     parte 1 →  9,4 min (134 casos)   ← 13 min de folga ociosa
+    #     parte 2 → 22,1 min (131 casos)
+    #     parte 3 → 23,6 min ( 90 casos)   ← piso: 2 casos não chegaram a medir
+    #
+    # O setup (Supabase + baseline + build + browser + seeds) custa ~6,5 min por
+    # parte, e é pago três vezes. Total de 55,1 min de casos em três partes dá
+    # 18,4 min cada como ponto de equilíbrio — e era isso que estava torto.
+    #
+    # Três arquivos mudam de lista, escolhidos pelo relógio e pela vizinhança:
+    #
+    #   `prova-painel-provedores` (4,03 min)  PARTE_2 → PARTE_1. Volta para onde
+    #       estava antes de 2026-09-04.
+    #   `inbox-busca-e-filtros-dizem-a-verdade` (3,98 min)  PARTE_3 → PARTE_1.
+    #       É o maior item da parte 3, e a parte 1 já tem as outras `inbox-*`.
+    #   `agenda-google-meet` (0,92 min)  PARTE_3 → PARTE_2, onde já moram
+    #       `agenda-conectar-google` e as duas `agenda-ocupacao-do-google-*`.
+    #
+    # ⚠️ `navegacao` NÃO se move, e a razão é medida, não preferência. A primeira
+    # versão deste rebalanceamento a levava da 2 para a 1, e lá ela REPROVOU
+    # (run 35345305473, parte 1: 153 passaram, 1 falhou em 18,6 min):
+    #
+    #     navegacao.spec.ts:222 — "em 900px o menu inteiro tem de caber sem
+    #     scroll": esperado false, recebido true. `titulosFora` = 0, ou seja,
+    #     nenhum grupo saiu da dobra — o menu passa do alto por pouco.
+    #
+    # A mesma spec passa na PARTE_2. A diferença não é a partição: é o ESTADO do
+    # banco daquela parte (cada parte tem o seu), que muda o que o menu mostra.
+    # Ou seja, o menu está no limite e alguma vizinhança da parte 1 o empurra —
+    # sinal de PRODUTO, não de CI, e por isso vira item próprio em vez de virar
+    # uma partição escolhida para esconder o vermelho. Quem for atrás: rodar
+    # `navegacao` na parte 1 e ler `nav.scrollHeight` contra a altura visível.
+    #
+    # PREVISÃO (é previsão; a rodada deste PR é que mede): 18,0 / 18,4 / 18,7 min
+    # de casos, ou ~25 min de relógio por parte, com ~5 min de folga cada.
+    #
+    # O teto de 30 min continua fora de discussão: ele é o que denuncia a suíte
+    # crescendo, e foi exatamente o que aconteceu aqui.
+    # ── 2026-09-19: uma QUINTA parte, porque redistribuir três já não cabia ──
+    #
+    # A partição redistribui; ela não desfaz CRESCIMENTO. Medido em 43 rodadas
+    # nossas com as três partes comuns verdes (relógio do JOB, teto 1800s):
+    #
+    #     parte 1 → mediana 1543s · máx 1605 · folga do máx 195s
+    #     parte 2 → mediana 1419s · máx 1571 · folga do máx 229s
+    #     parte 3 → mediana 1551s · máx 1687 · folga do máx 113s
+    #
+    # E a cauda que a mediana esconde apareceu: DOIS cortes por relógio em
+    # 19/09 na parte 3 — 12:26Z (1693s) e 14:16Z (o do #1198, 1339s de suíte
+    # sobre 341s de preparo, exit 124). Nos dois, ZERO caso vermelho: o job
+    # morreu de tamanho, não de defeito, e cada corte reprova um PR que não tem
+    # culpa.
+    #
+    # ⚠️ POR QUE NÃO BASTOU MOVER UM ARQUIVO (a tentativa anterior, medida e
+    # descartada): mover 132s da parte 3 para a 2 levaria a 2 de 1571 para 1703
+    # de pior caso — a MENOR FOLGA DO CONJUNTO cairia de 113s para 97s. Trocar
+    # o estouro de lugar não é consertar.
+    #
+    # ⚠️ E POR QUE NÃO ENCHER A PARTE 4: ela é a da instalação fresca
+    # (`vps-fresh-onboarding`). Os passos de semeadura são `if: matrix.parte != 4`
+    # e no lugar deles ela sobe WAHA, o par Redis e cria o dono como o
+    # `install.sh` faz. Spec comum ali falha por falta de fixture; e semear
+    # dados naquele job sujaria a premissa da única prova da jornada de
+    # instalação. Os ~19 min ociosos dela são INTRANSFERÍVEIS.
+    #
+    # ── A DISTRIBUIÇÃO, escolhida pelo tempo medido por spec ────────────────
+    #
+    # Playwright por parte antes (run 35446998755): 1 = 1135s · 2 = 1089s ·
+    # 3 = 1221s. Total comum 3445s ÷ 4 partes comuns = ~861s de alvo.
+    #
+    #   da 1 → inbox-busca-e-filtros-dizem-a-verdade (217s), qa-l12-inbox (25s),
+    #          filtro-por-marcador-pela-tela (23s)                    −265s
+    #   da 2 → followup-builder (87s), followup-journey (46s),
+    #          followup-dossie (37s), followup-queue (23s), qa-l12-funil (43s)  −236s
+    #   da 3 → i18n-espanhol-na-tela (84s), extensoes-declarativas (72s),
+    #          extensoes-versao (49s), marca-logo (67s), suporte-temporario (57s),
+    #          olhar-telas-do-epico (51s)                             −380s
+    #
+    # Famílias inteiras (`inbox-*`, `followup-*`, `extensoes-*`) andam juntas:
+    # vizinhança compartilha estado de banco dentro da parte, e separar irmãs é
+    # como se descobre isso do jeito caro.
+    #
+    # PREVISÃO (é previsão; a rodada deste PR mede): 870 / 852 / 842 / 880s de
+    # Playwright nas quatro comuns — espalhamento de 38s contra os 132s de hoje.
+    #
+    # ⚠️ `navegacao` (304s, a maior da parte 2) NÃO se move, pela razão medida no
+    # bloco acima: ela reprova fora da parte 2 por estado do banco. A maior
+    # alavanca do relógio é justamente a proibida pela medição.
+    #
+    # NÃO MEDIDO: se as 14 specs movidas passam no estado de banco da parte 5.
+    # É o risco que derrubou a tentativa com `navegacao`, e quem responde é a
+    # rodada deste PR — não esta previsão.
+
+    # ── QUANDO ABRIR A PRÓXIMA PARTE (a regra, para não virar decisão de susto)
+    #
+    # Redistribuir tem fim. A regra tem DOIS gatilhos, e o segundo existe porque
+    # o primeiro sozinho chegaria tarde:
+    #
+    #   (a) a MENOR FOLGA DO CONJUNTO abaixo de 120s em 5 rodadas seguidas com
+    #       todas as partes comuns verdes; ou
+    #   (b) 2 CORTES POR RELÓGIO SEM CASO VERMELHO em 24h.
+    #
+    # Cinco rodadas em (a) porque o espalhamento medido entre rodadas chega a
+    # 180s: uma rodada ruim é ruído, cinco seguidas é tendência.
+    #
+    # E (b) NÃO é redundante com (a): em 19/09 a régua (a) NÃO disparou — as
+    # cinco últimas rodadas completas deram folga 256, 237, 324, 220 e 197s —
+    # enquanto a parte 3 era cortada TRÊS vezes no mesmo dia (12:26Z, 14:16Z no
+    # #1198 e 14:24Z no #1294). A mediana descreve o meio; o teto ceifa a cauda,
+    # e é a cauda que reprova PR de quem não tem culpa.
+    #
+    # SONDA DE (a) — menor folga das últimas 5 rodadas com as comuns verdes:
+    #   gh api --paginate "repos/OWNER/REPO/actions/runs?per_page=100" --jq \
+    #     '.workflow_runs[]|select(.name=="e2e" and .conclusion=="success")|.id' \
+    #   | head -5 | while read r; do gh api "repos/OWNER/REPO/actions/runs/$r/jobs" \
+    #       --jq '[.jobs[]|select((.name|startswith("e2e-parte")) and .conclusion=="success"
+    #             and (.name|test("\\(4\\)")|not))
+    #             |1800-((.completed_at|fromdateiso8601)-(.started_at|fromdateiso8601))]|min'; done
+    #
+    # SONDA DE (b) — cortes por relógio SEM vermelho, nas últimas 24h:
+    #   para cada job `e2e-parte` com conclusion=failure e duração > 1200s, o log
+    #   tem de conter a linha RENDERIZADA
+    #     ##[error]...Nenhum caso vermelho até o corte: a parte cresceu.
+    #
+    # ⚠️ CONTROLE POSITIVO E ARMADILHA DA SONDA (b), medidos em 19/09:
+    #   · `grep '::error title='` devolve ZERO: o Actions RENDERIZA como
+    #     `##[error]`, e o `::error title=` que aparece no log é a linha do
+    #     `echo` que a define. Procure a renderizada.
+    #   · NÃO conte `✘` no log do job para decidir se havia vermelho: o log ecoa
+    #     o script deste passo, e o `✘` DESTE COMENTÁRIO entra na conta — medido,
+    #     deu "1 vermelho" em dois cortes que tinham ZERO. Quem acerta é o passo
+    #     do corte, que conta no ARQUIVO da saída da suíte, não no log do job.
+    #   · Controle positivo obrigatório antes de concluir ausência: rodar a sonda
+    #     contra um corte conhecido (job 105911210567, do #1294) e ver 1.
+    env:
+      # Provider controlado; preview/assistência executam core, ferramentas e gates reais.
+      INTERNAL_AGENT_RUN_STUB: "true"
+      # Única exceção HTTP do laboratório de extensões. O servidor é iniciado
+      # pela própria spec, em loopback, com SQLite e PID exclusivos.
+      EXTENSIONS_LOCAL_CATALOG_ORIGIN: "http://127.0.0.1:56331"
+      SPECS_PARTE_1: >-
+        conversoes-reprocessamento.spec.ts
+        pre-go-live-whatsapp.spec.ts
+        smoke.spec.ts auth.spec.ts error-pages.spec.ts
+        icone-da-marca.spec.ts
+        password-recovery.spec.ts signup-journey.spec.ts
+        primeiro-acesso-sem-organizacao.spec.ts
+        rbac-roles.spec.ts inbox-scope.spec.ts reset-password-mfa.spec.ts
+        degradacao-silenciosa.spec.ts vps-webhook-outbound-ssrf.spec.ts
+        kanban-owner-filter.spec.ts queue-assign.spec.ts
+        conversa-vira-lead.spec.ts contato-salva-email.spec.ts
+        confirmar-dado-do-contato.spec.ts
+        credenciais-de-ia.spec.ts
+        risk-radar.spec.ts invite-lifecycle.spec.ts system-update.spec.ts
+        agente-novo-e-uso.spec.ts
+        agente-papeis-operador.spec.ts
+        followup-linguagem.spec.ts followup-ramos.spec.ts
+        wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
+        agenda-tela-do-produto.spec.ts
+        notificacoes-diz-o-que-falta.spec.ts
+        sons-dos-avisos.spec.ts
+        relogio-http-cron-externo.spec.ts
+        j20-elegibilidade-respondi.spec.ts j20-elegibilidade-followup.spec.ts
+        j20-elegibilidade-atendimento-manual.spec.ts
+        juntar-contatos-duplicados.spec.ts
+        lote-no-quadro-do-funil.spec.ts
+        motivos-de-perda-do-funil.spec.ts
+        importar-leads-planilha.spec.ts
+        prova-painel-provedores.spec.ts
+        relatorio-de-atividades.spec.ts
+        canal-mudo-avisa-na-central.spec.ts
+        qa-l12-troca-de-funil.spec.ts
+        qa-l12-agente-ia.spec.ts
+      # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright
+      # ordena os arquivos por CAMINHO, não pela ordem em que são passados na
+      # linha de comando. Medido no run 31838253496: `marca-logo.spec.ts` estava
+      # escrita por último aqui e executou em 15º de 23 — a linha de progresso
+      # `···F°°··············` mostra 14 testes completando DEPOIS dela.
+      #
+      # Este comentário afirmava, por três commits, que ela era "a ÚLTIMA de
+      # propósito" e que isso limitava contaminação a zero specs. Era falso, e
+      # a consequência foi pior que o comentário errado: creditei a esse
+      # reposicionamento o desaparecimento do React #418 entre dois ciclos.
+      # Não foi ele — a ordem nunca mudou. Foi o `test.afterAll` da própria
+      # spec, que passou a limpar as DUAS camadas de marca e por isso as specs
+      # seguintes deixaram de ver logo gravado.
+      #
+      # O que continua verdade, e a frase precisou ser corrigida em 2026-09-07
+      # porque descrevia o mundo de ANTES da matrix: as specs de UMA MESMA parte
+      # rodam contra o MESMO banco, sem reset entre elas — o que uma spec deixa
+      # gravado, as seguintes daquela parte enxergam. Quem protege contra isso é
+      # a limpeza da spec, não a posição dela nesta lista.
+      #
+      # Entre partes DIFERENTES não há banco compartilhado: cada job da matrix é
+      # um runner próprio que paga o seu setup inteiro (~8,5 min, medidos iguais
+      # em cada um). É por isso que mover spec entre partes é risco: ela troca de
+      # vizinhança, e a vizinhança é que deixou o banco no estado que ela espera.
+      #
+      # ⚠️ Ela esteve no TOPO desta lista por três commits, pela razão errada.
+      # Eu media "carga de login por parte" com um regex que contava a PALAVRA
+      # login — e casava comentário, nome de helper e string. O proxy não só era
+      # impreciso: ele INVERTEU o sinal (dizia 162 vs 145; o real, contando
+      # chamadas, é 63 vs 82), então mover a spec "para a parte mais leve" a
+      # mudou para a mais carregada. E o critério era irrelevante desde o
+      # começo — o `AUTH_RATE_LIMIT_LOGIN_IP: "1000"` mais abaixo desliga o
+      # teto no CI, e esta spec faz 6 logins (eram 3 até a revisão que descobriu
+      # que dois casos rodavam DESLOGADOS: `page` é fixture de escopo de teste,
+      # não de worker — cada caso precisa do seu login).
+      #
+      # E o desfecho: a movida não teve efeito NENHUM, porque a ordem é por
+      # caminho (ver o bloco acima). Duas medições erradas em sequência levaram
+      # a uma mudança inócua — que eu ainda por cima creditei por um resultado
+      # que veio de outra coisa. Fica escrito porque o erro instrutivo não é o
+      # proxy ruim: é ter medido de novo, com outro instrumento ruim, em vez de
+      # perguntar se o mecanismo suposto existia.
+      #
+      # (Este comentário mora FORA do bloco `>-` porque dentro dele `#` não é
+      # comentário: é conteúdo, e cada palavra viraria argumento do playwright.
+      # Medido: com o texto dentro, a variável ia de 23 para 205 tokens.)
+      #
+      # `agente-marca-consulta` entrou aqui em 2026-08-27, e a dívida que a segurava era
+      # explícita: ela estava em FORA_DO_CI com o motivo escrito de que eu não conseguira
+      # EXECUTÁ-LA. Foi executada em ambiente completo (banco do baseline, app buildado),
+      # 3 casos / 3 verdes, e o primeiro run achou um defeito real de servidor — a tela não
+      # dizia de quem era o compromisso. Entra na PARTE_2 e não na 1 porque é AQUI que mora
+      # o molde dela, `agente-organiza-operacao`; o comentário antigo dizia PARTE_1 e estava
+      # errado sobre o próprio vizinho.
+      # `relogio-http-cron-externo` entrou na PARTE_1 em 2026-08-28, e a escolha da
+      # parte é o cuidado que ela exige: o tick que ela dispara é GLOBAL por
+      # natureza — ele roda as tarefas de minuto da instalação inteira, não só as
+      # da fixture dela. Um enrollment de outra spec que esteja vencido naquele
+      # instante É processado.
+      #
+      # Por que isso não quebra ninguém, medido e não presumido: as specs que
+      # criam enrollment e depois conferem `current_node_id` são
+      # `followup-journey`, `followup-queue` e `followup-dossie` (PARTE_2, outro
+      # processo, depois) e `followup-ramos` (PARTE_1). A ordem de execução é por
+      # CAMINHO — ver o bloco acima —, e `followup-ramos` < `relogio-http-...`,
+      # então ela já terminou quando o tick roda. Nenhuma spec posterior da
+      # PARTE_1 depende de enrollment parado.
+      #
+      # Se um dia uma spec de follow-up entrar na PARTE_1 com nome depois de
+      # `relogio-`, é aqui que se olha: ou ela vai para a PARTE_2, ou esta vai.
+      SPECS_PARTE_2: >-
+        protecao-de-envio-nao-congela-o-padrao.spec.ts
+        agente-marca-consulta.spec.ts
+        agenda-marcar-pela-tela.spec.ts
+        agenda-remarcar-e-cancelar.spec.ts
+        agenda-tipos-de-agendamento.spec.ts
+        cliente-pela-agenda.spec.ts
+        agenda-dia-desenhado-na-virada-do-mes.spec.ts
+        agenda-grade-interativa.spec.ts
+        agenda-papel-de-leitura.spec.ts
+        agenda-busca-cliente-pelo-nome-do-perfil.spec.ts
+        agente-organiza-operacao.spec.ts
+        central-de-avisos-capacidades.spec.ts
+        escalacao-ciclo.spec.ts
+        distribuicao-atendimento.spec.ts
+        capacidades-do-agente.spec.ts
+        escopo-de-funil-do-agente.spec.ts
+        followup-tempo-adaptativo.spec.ts
+        gatilho-de-etapa.spec.ts
+        etapa-avisa-na-central.spec.ts
+        gatilho-de-caso.spec.ts
+        conversa-do-caso.spec.ts
+        aviso-de-caso-no-whatsapp.spec.ts
+        agenda-ocupacao-do-google-na-grade.spec.ts
+        agenda-ocupacao-do-google-no-historico.spec.ts
+        followup-publicado-abre-no-construtor.spec.ts
+        automacao-diz-a-verdade.spec.ts
+        acervo-de-conhecimento.spec.ts
+        agenda-kit-visual.spec.ts
+        agenda-conectar-google.spec.ts
+        agenda-painel-cabe-na-tela.spec.ts
+        agenda-ver-na-agenda.spec.ts
+        agenda-escopo-da-organizacao.spec.ts
+        agenda-caminho-ate-os-horarios.spec.ts
+        agenda-google-volta-do-consentimento.spec.ts
+        agenda-google-volta-nao-desloga.spec.ts
+        redes-sociais-volta-nao-desloga.spec.ts
+        navegacao.spec.ts
+        menu-por-empresa-e-a-porta-de-volta.spec.ts
+        agenda-google-meet.spec.ts
+        painel-de-configuracao-da-instalacao.spec.ts
+      # `moeda-da-organizacao` entrou na PARTE_2 em 2026-09-04, ao lado de
+      # `navegacao` — mesmo domínio (Configurações) e a mesma ausência de
+      # dependência: sem WAHA, Resend, Nuvemshop ou Redis. Toca a organização
+      # única do banco do CI (troca a moeda e devolve para BRL no afterEach),
+      # o mesmo cuidado que `troca-de-organizacao-tem-volta` já toma.
+      #
+      # `zona-de-perigo` entrou na mesma leva e no mesmo grupo, e por um
+      # cuidado a mais: ela APAGA dados, e por isso NÃO toca a organização
+      # compartilhada do banco do CI — o seed dela cria duas organizações
+      # próprias e descartáveis, e o caso zera uma para provar que a outra
+      # sai inteira. Sem WAHA, Resend, Nuvemshop ou Redis.
+      # Cada item aqui tem o motivo MEDIDO, não presumido — e o gate cobra que a
+      # lista exista e some com as outras duas.
+      #
+      # ⚠️ HISTÓRICO: `vps-fresh-onboarding` NÃO está mais fora — desde o PR da
+      # issue #179 ela roda na PARTE_4 (ver o bloco `SPECS_PARTE_4` abaixo). O
+      # registro fica pelas lições, e o fecho dele foi atualizado.
+      #
+      # `vps-fresh-onboarding` ficava fora por DUAS razões, e só a primeira estava
+      # escrita — com o número errado, contradito 8 linhas abaixo neste mesmo
+      # arquivo, que já usava 17 como controle positivo:
+      #
+      #   (1) 17 linhas dependem de WAHA/Resend/Nuvemshop/Redis
+      #       (`grep -ciE "waha|resend|nuvemshop|redis"` → 17 linhas, 22 ocorrências).
+      #
+      #   (2) `orgRow()` resolvia a organização com `.limit(1).single()` em
+      #       `organizations`, SEM `where` — pressupondo banco de UMA organização
+      #       só. O banco de uma parte é compartilhado entre as specs dela, e
+      #       `signup-journey.spec.ts:32` cria uma segunda org sem cleanup: depois
+      #       que ela roda, já há ≥2 na mesma parte.
+      #
+      #       ⚠️ ESTA LINHA DIZIA QUE "o `.single()` falha". É FALSO, e a frase
+      #       errada é o motivo de a classe ter sobrevivido em quatro lugares:
+      #       ela descrevia o desfecho como barulho quando o desfecho é dano.
+      #       Medido em 2026-09-04 contra PostgREST v14.10, três linhas na tabela:
+      #
+      #           .select(...).limit(1).single()  →  error: null + a PRIMEIRA linha
+      #           .select(...).single()           →  PGRST116 ("Cannot coerce…")
+      #
+      #       O `.limit(1)` recorta ANTES da checagem de singularidade. Ou seja:
+      #       o `beforeAll` desta suíte — que zera `onboarded_at`, apaga
+      #       `ai_agents` e apaga `channel_sessions` — apagava dados de uma
+      #       organização QUALQUER, em silêncio. Levantado por @Elevstudio-Dev
+      #       (PR #559) depois de acontecer numa instalação de trabalho.
+      #
+      #       A instância está corrigida (a org sai do dono do bootstrap) e a
+      #       classe inteira virou gate: `tests/unit/e2e-nao-escolhe-a-primeira-linha`.
+      #       A razão (1) — dependência externa — era a que ainda a segurava, e
+      #       foi a que a PARTE_4 resolveu: WAHA e o par Redis sobem por
+      #       `docker run` só nela, e Resend/Nuvemshop falam com um dublê HTTP real.
+      #
+      # Ela é a P0 da doutrina de QA Visual, e é por isso que o limite da prova
+      # fica escrito onde ela roda: o WAHA do CI é o CORE, não o Plus (ver o
+      # passo "Subir WAHA e o par Redis da VPS fresca") — a jornada de onboarding é exercitada; o que só
+      # o Plus tem, não.
+      #
+# As CINCO specs da missão "Follow-up Vivo" (`followup-linguagem`,
+      # `followup-ramos`, `followup-dossie`, `followup-tempo-adaptativo`,
+      # `gatilho-de-etapa`) entraram nas listas de execução, e não aqui, porque a
+      # medição não dá motivo para excluí-las: grep de waha/resend/nuvemshop/redis
+      # devolve **0 em todas as cinco** (controle positivo: `vps-fresh-onboarding`
+      # devolve 17). Usam o endpoint de cron, como a `followup-journey` que já roda.
+      #
+      # ⚠️ O QUE NÃO ESTÁ MEDIDO: elas passam LOCALMENTE, e verde local não é verde
+      # de CI. Nenhuma delas rodou num job ainda — foram escritas nesta missão e
+      # ficaram fora de todas as listas, isto é, existiam e nenhum job as invocava.
+      # A primeira execução do `e2e` neste PR é que decide; se alguma reprovar por
+      # ambiente, o lugar dela é aqui embaixo COM o motivo medido, nunca uma
+      # exclusão preventiva "por garantia" — que é exatamente a dívida entrando
+      # pela porta de serviço que este bloco existe para barrar.
+      #
+      # `prova-painel-provedores` esteve aqui e SAIU: em 2026-08-08 o caso F3 exigia
+      # mais de 50 modelos da OpenRouter e o catálogo chegava ao CI com 2 linhas — a
+      # spec media a sorte do ambiente. `scripts/seed-e2e-catalogo-openrouter.ts`
+      # (main, 2026-08-09) semeia o catálogo no job, então a condição que a excluía
+      # deixou de existir e ela voltou para a lista de execução.
+      #
+      # `inbox-tempo-real` entrou aqui em 2026-08-26, no dia seguinte ao merge, e o
+      # motivo é medido nos dois eixos que importam — não é "está flaky, tira".
+      #
+      #  (a) ELE NÃO DISCRIMINA O CONSERTO QUE DIZ GUARDAR. Bancada local fiel a
+      #      este job (Supabase local na major do `config.toml` — era pg17 em
+      #      2026-08-26, o dia da medição abaixo; quem cobre pg15 E pg17 hoje é a
+      #      matriz do job `invariants`, no ci.yml —, `baseline.sql`, Realtime
+      #      reiniciado depois do baseline, `next build` de produção, os mesmos
+      #      seeds), revertendo SÓ `lib/supabase/browser.ts` para a versão
+      #      anterior ao
+      #      #327 — e conferindo no bundle que o conserto saiu
+      #      (`grep -rc realtime-token .next/static` → 0, controle positivo
+      #      `sb-deskcomm-auth` → 1):
+      #
+      #          com o conserto  → 1 passed
+      #          sem o conserto  → 1 passed
+      #
+      #      Causa provável: `useMessagesRealtime` liga `refetchOnWindowFocus:
+      #      true` e o `execFileSync` que injeta a mensagem devolve o foco à
+      #      janela. Dois caminhos, mesma saída. Quem discrimina de verdade é
+      #      `tests/unit/realtime-token-do-socket.test.ts`, no `verify`.
+      #
+      #  (b) ELE REPROVA PR ALHEIO POR SORTE. Desde o conserto do locator:
+      #      #327 `dd58ec7c` pass · #343 `b508208b` pass · #344 `4e5acb21` FAIL ·
+      #      #344 rerun do MESMO sha FAIL. O #344 não toca uma linha de inbox,
+      #      realtime ou socket.
+      #
+      #      Um gate que reprova por moeda é pior que gate nenhum: ele treina o
+      #      time a reexecutar em vez de olhar, e foi assim que a degradação
+      #      silenciosa passou despercebida da primeira vez.
+      #
+      #      A spec CONTINUA no repositório e continua sendo a cerca de ponta a
+      #      ponta contra o sintoma relatado — roda local. Volta para a lista de
+      #      execução quando a issue #347 entregar entrega determinística (o
+      #      caminho provável é desligar o `refetchOnWindowFocus` durante a
+      #      asserção, para sobrar um caminho só).
+      #
+      # Atualização de 2026-09-16 (issue #347): a spec ganhou o discriminador que
+      # faltava. Ela deixou de asserir só a SAÍDA (o texto na tela, que tem dois
+      # caminhos) e passou a asserir a ENTRADA do caminho realtime — o `phx_join`
+      # com token do USUÁRIO e o frame `postgres_changes` com o corpo da mensagem
+      # (ver o cabeçalho da spec). O item (a) acima caducou como motivo de
+      # exclusão; o que falta para voltar ao gate é fechar a matriz de sabotagem
+      # (reverter só `lib/supabase/browser.ts` e ver VERMELHO) numa rodada do
+      # runner — a bancada exige Docker, ausente na VPS onde a mudança foi escrita.
+      #
+      # ✅ `agenda-marcar-pela-tela` SAIU DAQUI — e o registro é o motivo.
+      # Ela nasceu `skip` pela DECISÃO 21.3: a frente 1 é API e não tem pixel
+      # próprio, então em vez de CITAR num relatório qual spec vai prová-la em
+      # tela, a spec é CRIADA com a condição de saída no cabeçalho.
+      #
+      # ⚠️ E ESSA CONDIÇÃO VENCEU SEM NINGUÉM VOLTAR PARA CONFERIR. Declarar a
+      # condição foi a coisa certa; o que faltou é que ninguém relê condição de
+      # saída. Medido quando alguém foi olhar:
+      #
+      #     grep -n "^export async function" app/api/v1/agenda/agendamentos/route.ts
+      #     # GET:95  POST:145  PATCH:149  DELETE:153
+      #
+      # Escrita e executada, ela achou CINCO defeitos que nenhuma leitura de
+      # código tinha achado — entre eles a tela dizendo "Marcado ✓" sem criar
+      # linha nenhuma, e um laço de requisições no painel de marcação.
+      #
+      # Entra na PARTE_2 ao lado de `agente-marca-consulta` porque as duas usam
+      # `seed-e2e-agenda.ts` — e cada uma o chama por si, para nenhuma depender
+      # da ordem em que a outra rodou.
+      # para dirigir, e a condição que a exclui deixa de existir. Enquanto isso,
+      # rodá-la no CI custaria um job para exercitar um `skip`.
+      #
+      # `agenda-conectar-google` entra pela MESMA 21.3 e pela frente 3 (Google
+      # Calendar BYO), que também não tem pixel: o botão "Conectar Google" e a
+      # faixa de estado moram na tela da Agenda, da frente 2.
+      #
+      # São DUAS condições de saída, e a primeira depende só de tela:
+      #
+      #  (a) o caso SEM CHAVE sai daqui assim que a tela consumir
+      #      `googleEstaConfigurado()` — ele não precisa de Google nenhum, porque
+      #      o que prova é a instalação SEM `GOOGLE_CALENDAR_CLIENT_ID`, que é o
+      #      estado de 100% dos deploys novos (DECISÃO 3.1, envs opcionais). É o
+      #      caso que vem PRIMEIRO no arquivo de propósito: spec que só cobre o
+      #      caminho feliz deixa sem prova justamente a primeira tela que todo
+      #      self-hoster encontra;
+      #
+      #  (b) o caso COM CHAVE precisa, além da tela, de uma conta Google de teste
+      #      com consentimento pré-aprovado. Sem ela o job pararia num
+      #      `accounts.google.com` esperando login humano — e é por isto que ela
+      #      fica FORA do CI em vez de ficar sem existir.
+      # ─── PARTE 3 — nasceu em 2026-09-07, e o teto de 30 min é quem a pediu ───
+      #
+      # A parte 2 foi CANCELADA aos 30 min neste PR (job 101799282999), com 55 dos
+      # 57 arquivos terminados. Não foi defeito de spec: foi a suíte crescendo —
+      # o PR acrescenta 10 specs e todas as 10 caíram na parte 2 (47 → 57).
+      #
+      # Duas partes não davam mais para equilibrar com segurança. Medido pelo
+      # instrumento desta seção no próprio run cancelado: 24,9 min de relógio na
+      # parte 2 contra 13,7 min na parte 1, e o setup custa ~8,5 min IGUAIS em
+      # cada job. Dividir 39,7 min de Playwright em dois daria 28,4 min por job —
+      # 1,6 min abaixo do teto, que é folga que a próxima spec consome. Em três,
+      # dá ~22 min, a mesma folga que a parte 1 tem hoje.
+      #
+      # O corte é o ponto onde o relógio ACUMULADO da parte 2 chega à metade, na
+      # ordem em que o Playwright executa — não por contagem de arquivos, que
+      # esta seção já registra como proxy que inverte o sinal. Ficaram
+      # 32 arquivos (13.3 min) na parte 2 e 25 (11.7 min) aqui.
+      #
+      # A parte 3 é a CAUDA contígua da parte 2, e isso é deliberado: as specs de
+      # uma parte compartilham o banco sem reset, então cada vizinhança rompida é
+      # risco de contaminação. Uma cauda rompe UMA fronteira; um sorteio romperia
+      # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
+      # eles são justamente o fim da fila.
+      SPECS_PARTE_3: >-
+        autonomia-assistida.spec.ts
+        roteamento-por-canal.spec.ts
+        whatsapp-pareamento-por-codigo.spec.ts
+        central-avisos-destino.spec.ts
+        agenda-presenca-recuperacao.spec.ts
+        agenda-google-sync.spec.ts
+        encerramento-atendimento.spec.ts
+        passagem-com-contexto.spec.ts
+        interface-por-vinculo.spec.ts
+        pipelines-gestao.spec.ts
+        qa-agente-usa-as-maos.spec.ts
+        qa-selo-no-funil-usado.spec.ts
+        qa-telas-descobertas-w4.spec.ts
+        retorno-anti-morte.spec.ts
+        webhooks.spec.ts
+        logo-moldura-no-tema-escuro.spec.ts
+        historico-de-captacao.spec.ts
+        inbox-quem-manda.spec.ts
+        inbox-rotulo-de-origem.spec.ts
+        troca-de-organizacao-tem-volta.spec.ts
+        organizacoes-criacao-convite-e-cache.spec.ts
+        inbox-abas-espelham-o-comando.spec.ts
+        busca-na-conversa.spec.ts
+        moeda-da-organizacao.spec.ts
+        zona-de-perigo-apaga-dados-de-teste.spec.ts
+        email-da-instalacao-pela-tela.spec.ts
+        central-avisos-resolver-em-lote.spec.ts
+        central-por-gravidade.spec.ts
+        voz-desligada-por-padrao.spec.ts
+        voz-primeiro-pareamento.spec.ts
+        qa-titulos-das-telas.spec.ts
+        qa-equipe-pinta-na-hora.spec.ts
+        qa-sugestao-rejeitada-e-motivo.spec.ts
+        qa-l12-agenda-contatos.spec.ts
+        qa-l12-tags-radar.spec.ts
+        extensoes-recuperacao.spec.ts
+        extensoes-portas-novas.spec.ts
+        motivo-do-publicar-na-tela.spec.ts
+        followup-cartoes.spec.ts
+        followup-modelos-de-clinica.spec.ts
+        presenca-do-atendente.spec.ts
+        trunk-sip-config.spec.ts
+        fotos-no-catalogo.spec.ts
+
+      # ─── PARTE 4 — a spec de VPS fresca, e quem pode entrar ao lado dela ───
+      #
+      # A `vps-fresh-onboarding` era a última spec fora do CI. A infraestrutura
+      # que faltava chegou em dois lugares:
+      #
+      #  * o passo "Subir WAHA e o par Redis da VPS fresca" (`docker run`, só
+      #    nesta parte): WAHA (devlikeapro/waha) e o par Redis do
+      #    `docker-compose.prod.yml` — `redis:7-alpine` + o
+      #    `hiett/serverless-redis-http` que fala o REST do Upstash;
+      #  * `scripts/duble-saas-e2e.mjs`: dublê HTTP REAL (recebe requisição de
+      #    verdade, na porta, com processo separado) do Resend e do handshake
+      #    OAuth da Nuvemshop. Não é mock em processo — a doutrina de QA visual
+      #    pede receiver real para efeito colateral externo.
+      #
+      # Ela veio para cá por um motivo que não é relógio: as partes 1 a 3
+      # explicitamente NÃO resetam o banco entre specs (é a vizinhança que elas
+      # escolheram), e a fresca precisa do oposto — a instalação sem dono, sem
+      # tenant, sem fixtures. Por isso os dois passos de semeadura
+      # (`Semear credenciais de teste` e `Semear as fixtures`) recebem
+      # `if: matrix.parte != 4`, e o único dado que existe antes dela é o dono
+      # do bootstrap — criado pelo passo `Criar o dono da instalação`, com o
+      # mesmo `scripts/bootstrap-owner.ts` que o `install.sh` roda na VPS. A
+      # spec EXIGE esse dono como precondição (está no cabeçalho dela, junto de
+      # WAHA e Redis); o que ela afirma é a jornada a partir dali, não a
+      # existência do usuário.
+      #
+      # `funil-arquivado-volta-pela-tela` entrou aqui, e ela NÃO precisa de WAHA,
+      # Redis, Resend nem Nuvemshop — o critério desta parte deixou de ser só
+      # "depende de serviço externo" e passou a incluir "onde cabe no relógio".
+      # Medido no run 35448173547: as fatias deram 25, 24, (cortada pelo teto) e
+      # 6 minutos, contra `timeout-minutes` de 30 e orçamento de 24. A parte 4 é
+      # a única com folga; pôr esta spec em qualquer uma das outras três mataria
+      # o job por relógio, que é reprovação sem relação com o que se mede.
+      #
+      # ⚠️ ELA SEMEIA O PRÓPRIO DADO, e isso é precondição, não conveniência: os
+      # passos `Semear credenciais de teste` e `Semear as fixtures` são
+      # `if: matrix.parte != 4`, então aqui não existe `.e2e-creds.json`. O
+      # `beforeAll` dela roda `scripts/seed-e2e-credentials.ts` (lê o ambiente,
+      # que já tem o `.env.e2e` publicado no job) e apaga os próprios funis no
+      # `afterAll`.
+      #
+      # ⚠️ E ISSO CRIA UMA SEGUNDA ORGANIZAÇÃO NESTE BANCO, o que seria fatal
+      # para a `vps-fresh-onboarding` na versão dela que resolvia a org com
+      # `.limit(1).single()` sem `where`. Não é mais: `orgRow()` amarra a org ao
+      # DONO do bootstrap (pelo e-mail) e todo delete dela é
+      # `.eq("organization_id", …)` — conferido linha a linha antes de somar
+      # esta spec à lista. Quem mexer em `orgRow()` reabre esta porta.
+      # ⚠️ ESTA LISTA É FECHADA: só spec de INSTALAÇÃO FRESCA entra aqui, e a
+      # cerca que a mantém fechada está em tests/unit/e2e-cobertura-completa.
+      #
+      # O ambiente desta parte é outro: os passos de semeadura são
+      # `if: matrix.parte != 4`, e no lugar deles ela sobe WAHA, o par Redis e
+      # cria o dono como o `install.sh` faz. A premissa que a `vps-fresh-onboarding`
+      # prova é justamente "o único dado que existe antes dela é o dono".
+      #
+      # Medido em 19/09: `funil-arquivado-volta-pela-tela` entrou aqui e PASSOU —
+      # mas por acoplamento, não por direito. Ela semeia os próprios funis
+      # (`Arquivo E2E`) e chama `scripts/seed-e2e-credentials.ts` no `beforeAll`,
+      # ou seja, ela CRIA no banco da instalação fresca dados que a premissa da
+      # vizinha diz não existirem. Passar assim depende da ordem e morre num
+      # retry. Ela foi para a PARTE_5 (comum, com seeds), e esta lista voltou a
+      # ter só a jornada de instalação.
+      SPECS_PARTE_4: >-
+        vps-fresh-onboarding.spec.ts
+
+      # `jev-decisoes-rapidas` entrou na PARTE_5 em 2026-09-23, pelo relógio e não
+      # pela família. A família dela (`prova-painel-provedores`,
+      # `credenciais-de-ia`) mora na PARTE_1 — e a PARTE_1 é a mais apertada.
+      # Medido nas 5 últimas rodadas verdes da main (runs 35921818285,
+      # 35920487831, 35918022238, 35914742522, 35893024353), relógio do JOB:
+      #
+      #     parte 1 → máx 1570s · folga 230s
+      #     parte 2 → máx 1373s · folga 427s
+      #     parte 3 → máx 1481s · folga 319s
+      #     parte 5 → máx 1352s · folga 448s   ← a maior
+      #
+      # Ela não depende da vizinhança: sobe o próprio dublê (porta 3996, a do
+      # `JEV_API_BASE_URL` que o `.env.e2e` grava), semeia a entrada de mensagens
+      # com o seed da `conversa-vira-lead` e apaga a chave e o `settings.jev` que
+      # criou, antes e depois. PREVISÃO, não medida: ~1,5 min de Playwright.
+      #
+      # `jev-roteador` entrou junto dela em 2026-09-25 (onda 2 do Jev, bloco
+      # 2.2), pelo mesmo motivo e com o mesmo isolamento: sobe o próprio dublê
+      # (a mesma porta 3996, com `DUBLE_JEV_RESPOSTAS` forçando a escolha do
+      # Jev), semeia um número, dois agentes e um roteador ativo SÓ dela pelo
+      # service role e apaga tudo no fim. Roda depois da `jev-decisoes-rapidas`
+      # — as duas nunca disputam a porta, porque a parte roda uma spec por vez.
+      # PREVISÃO, não medida: ~1 min.
+      SPECS_PARTE_5: >-
+        inbox-busca-e-filtros-dizem-a-verdade.spec.ts
+        extensoes-da-instalacao.spec.ts
+        admin-credencial-google.spec.ts
+        agenda-primeira-pintura-no-fuso.spec.ts
+        agenda-portao-de-hidratacao.spec.ts
+        qa-l12-inbox.spec.ts
+        etapa-pela-conversa.spec.ts
+        filtro-por-marcador-pela-tela.spec.ts
+        funil-arquivado-volta-pela-tela.spec.ts
+        followup-builder.spec.ts
+        followup-journey.spec.ts
+        followup-dossie.spec.ts
+        followup-queue.spec.ts
+        fluxo-de-atendimento.spec.ts
+        qa-l12-funil.spec.ts
+        i18n-espanhol-na-tela.spec.ts
+        extensoes-declarativas.spec.ts
+        extensoes-versao.spec.ts
+        marca-logo.spec.ts
+        suporte-temporario.spec.ts
+        olhar-telas-do-epico.spec.ts
+        jev-decisoes-rapidas.spec.ts
+        jev-roteador.spec.ts
+        buffer-ssr-caixa-orfa.spec.ts
+
+      # ─── FORA_DO_CI — as que ficaram fora, e o motivo de cada uma ───
+      #
+      # A `vps-fresh-onboarding` saiu desta lista no PR da issue #179 (a infra
+      # dela está no `SPECS_PARTE_4` logo acima). As de baixo continuam fora, e
+      # o motivo de cada uma está escrito neste arquivo — no topo do workflow ou
+      # logo abaixo. (Este parágrafo dizia "as duas" com três na lista: número
+      # em prosa envelhece, e por isso ele saiu.)
+      #
+      # `jev-chave-real` entrou aqui em 2026-09-23: EXIGE UMA CHAVE PAGA da
+      # TypeSafe AI (`JEV_API_KEY`), e segredo de repositório público não é
+      # lugar para ela. Não é o caso de ficar no CI e pular os casos pagos, como
+      # a `acervo-de-conhecimento` faz: aqui a chave é a spec inteira, e mesmo
+      # com ela este job a reprovaria — o `pnpm e2e:env` aponta o Jev do
+      # servidor para o dublê, e ela recusa medir o dublê. O que o CI prova é a
+      # `jev-decisoes-rapidas` (PARTE_5), contra um dublê que responde o contrato
+      # MEDIDO na API real. O que só esta prova é que o contrato ainda é esse — a
+      # versão fixada responde e a chave passa no teste. Sem a chave, ela pula; o
+      # cabeçalho dela tem a receita para rodar contra a API de verdade.
+      #
+      # `modelos-do-parceiro-editar-apagar` entrou aqui em 2026-09-26: o servidor
+      # do app tem de NASCER apontado para um dublê do provedor intermediado
+      # (ZERNIO_API_BASE_URL + conta e chave), e isso é ambiente do `next start`,
+      # não da spec — ligá-lo no `.env.e2e` de todas as partes mudaria o que as
+      # outras specs medem. Roda local; o comando está no cabeçalho da spec.
+      FORA_DO_CI: >-
+        inbox-tempo-real.spec.ts
+        cadastro-sem-confirmacao-de-email.spec.ts
+        aviso-de-caso-chega-no-whatsapp.spec.ts
+        jev-chave-real.spec.ts
+        modelos-do-parceiro-editar-apagar.spec.ts
+    steps:
+      # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
+      #
+      # O `timeout-minutes` do job conta do INÍCIO DO JOB, então é do
+      # início do job que o aviso tem de medir. Medir só o relógio do
+      # Playwright deixaria de fora o que o preparo já gastou — e o preparo é
+      # pago por parte (checkout, `preparar-node`, stack do Supabase, baseline,
+      # build, env): no run 35160549180 a parte 1 gastou 978 s de Playwright,
+      # mas o relógio do JOB cravou os 30 min e o caso **141 de 156 estava
+      # VERDE** quando o cancelamento chegou. Sem este T0, a parte que cresce
+      # chega a quem olha o run como "a rodada caiu" — ou seja, como problema
+      # de infraestrutura — e o log precisa ser contado caso a caso para
+      # descobrir que o problema era o TAMANHO da parte.
+      #
+      # Este passo é o PRIMEIRO do job, de propósito: tudo depois dele entra no
+      # DECORRIDO. Se ele descer na ordem, a medição volta a mentir por baixo.
+      - name: Marcar o relógio da parte (orçamento × teto)
+        run: |
+          set -euo pipefail
+          {
+            echo "T0_JOB=$(date -u +%s)"
+            # Orçamento declarado: é aqui que a parte deveria caber, com o
+            # relógio do job inteiro. 24 min < teto de propósito — o aviso vem
+            # ANTES do corte, não no lugar dele.
+            echo "ORCAMENTO_SEGUNDOS=1440"
+            # O MESMO teto do `timeout-minutes` do job (30 min). Dois números
+            # medindo o mesmo relógio divergem: a catraca é
+            # tests/unit/e2e-avisa-antes-do-teto.test.ts, que reprova se este
+            # valor e o `timeout-minutes` deixarem de concordar.
+            echo "TETO_SEGUNDOS=1800"
+            # Corte antecipado, 2 min antes do teto. A margem paga o que o
+            # relógio de passo NÃO vê: o que o runner faz antes do primeiro passo
+            # (até o #983 incluía ~51 s de `Initialize containers` em toda
+            # perna; os contêineres agora sobem só na parte 4, dentro de um
+            # passo) e o envio de artefato/resumo depois da suíte.
+            # ── A CARÊNCIA DO KILL É UM CUSTO, E ELE FOI MEDIDO ─────────
+            #
+            # O corte abaixo usa `timeout -k 30 --signal=TERM`. O `-k 30` NÃO é
+            # grátis, e o custo tem uma condição. Medido pelo @webtecnica
+            # (GNU coreutils 9.4, orçamento reduzido a 2s e filho dormindo 90s
+            # para não terminar sozinho e mascarar a carência):
+            #
+            #   timeout -k 3  2 …'trap "" TERM; sleep 90'          rc=137   5,00s
+            #   timeout -k 30 2 …'trap "" TERM; sleep 90'          rc=137  32,00s
+            #   timeout -k 30 2 …'trap "exit 143" TERM; sleep 90'  rc=124   2,01s
+            #
+            # A conta fecha exata: **a carência custa o valor do `-k`, e SÓ
+            # quando o filho ignora o TERM.** Quem sai no TERM não paga nada.
+            # Traduzido para cá:
+            #
+            #   spec que respeita o TERM → morre em FOLGA,      rc=124
+            #   spec que IGNORA  o TERM → morre em FOLGA + 30s, rc=137
+            #
+            # ⚠️ RESTRIÇÃO DE DESENHO, e é ela que este comentário existe para
+            # não deixar implícita: o job precisa de **ao menos 30s de folga
+            # dentro do `timeout-minutes` depois do ponto de corte**. Senão o
+            # corte do próprio GitHub chega ANTES do KILL, e o aviso existe mas
+            # ninguém chega a ler — gate que fala depois de o job morrer é gate
+            # decorativo.
+            #
+            # A conta em vigor, conferida antes de o #1184 ser mesclado:
+            #
+            #   corte ............. (1800 − 120) / 60 = 28,0 min
+            #   KILL .............. 28,0 + 30s        = 28,5 min
+            #   teto do job ....... 30,0 min
+            #   folga após o KILL .................... 90 s   ← 3× o mínimo
+            #
+            # Quem mexer em MARGEM_SEGUNDOS refaz essa conta: `MARGEM` menor que
+            # ~35s põe o KILL depois do teto e cala o aviso.
+            #
+            # NÃO MEDIDO: o caso completo no e2e, com um spec que ignore o TERM
+            # de propósito. O `-k 30` está aqui por comportamento observado no
+            # `timeout` (os três `rc` acima), não por sabotagem de spec real.
+            echo "MARGEM_SEGUNDOS=120"
+            # Piso para a suíte sequer começar: com menos que isto, rodar a
+            # suíte é gastar o que resta para ver um cancelamento no meio.
+            echo "PISO_SEGUNDOS=120"
+          } >> "$GITHUB_ENV"
+          echo "parte ${{ matrix.parte }}: relógio do job iniciado em $(date -u +%H:%M:%S) UTC"
+
+      - uses: actions/checkout@v7
+
+      # ─── As portas do Supabase saem da faixa efêmera do kernel ─────────────
+      #
+      # O `supabase start` publica portas FIXAS no host — as de
+      # `supabase/config.toml`, 54320 a 54329 — e todas caem dentro da faixa
+      # efêmera do Linux (`net.ipv4.ip_local_port_range`, 32768–60999 no
+      # runner). Qualquer conexão de SAÍDA deste job (o pull das imagens do
+      # próprio Supabase, o `pnpm install`) pode receber uma delas como porta de
+      # origem, e o bind do contêiner morre com
+      #
+      #   failed to bind host port for 0.0.0.0:54322:172.18.0.2:5432/tcp:
+      #   address already in use
+      #
+      # Medido de 15 a 22/09/2026: 6 partes vermelhas assim (54322 cinco vezes,
+      # 54324 uma), em 5 PRs e 1 push da `main` — runs 34997333501, 35013924504,
+      # 35331913043, 35343096791, 35423329919 e 35497099264 —, todas em
+      # `ubuntu-latest`, com a parte morta em ~2 min sem rodar teste. A triagem
+      # mandava rerodar (§3-quater do TRIAGEM.md). Reservar as portas tira-as do
+      # sorteio do kernel, e elas continuam livres para o bind explícito do
+      # Docker.
+      #
+      # Depois do checkout porque as portas são LIDAS do `config.toml` — mudou
+      # lá, a reserva acompanha sem ninguém lembrar deste passo. E antes de
+      # qualquer passo que abra conexão em massa.
+      #
+      # Só em máquina do GitHub: no executor próprio o runner é um contêiner, e
+      # quem publica a porta é o Docker do hospedeiro — a reserva feita aqui
+      # dentro não alcançaria o namespace de rede que importa.
+      - name: Tirar as portas do Supabase da faixa efêmera
+        if: runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          portas=$(grep -oE '^[[:space:]]*(shadow_)?port[[:space:]]*=[[:space:]]*[0-9]+' supabase/config.toml \
+            | grep -oE '[0-9]+$' | sort -un | paste -sd, -)
+          if [ -z "$portas" ]; then
+            echo "::error::nenhuma porta lida de supabase/config.toml — a sonda perdeu o arquivo, e reservar nada é não reservar"
+            exit 1
+          fi
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$portas"
+          echo "faixa efêmera: $(cat /proc/sys/net/ipv4/ip_local_port_range) | reservadas: $(cat /proc/sys/net/ipv4/ip_local_reserved_ports)"
+          # A reserva vale para conexões NOVAS. Uma já aberta numa destas portas
+          # continua lá até fechar — se houver, fica dito aqui, e não no bind.
+          abertas=$(ss -Htan | awk '{print $4}' | sed 's/.*://' | sort -u)
+          ocupadas=$(comm -12 <(printf '%s\n' "$abertas") <(tr , '\n' <<<"$portas" | sort -u))
+          if [ -n "$ocupadas" ]; then
+            echo "::warning::porta(s) do Supabase já em uso por conexão aberta antes da reserva: $(echo $ocupadas)"
+          fi
+
+      # ─── Serviços da parte 4 — a spec de VPS fresca (issue #179) ──────────
+      #
+      # Eram `services:` do job, e `services:` é chave do JOB, não do braço da
+      # matriz: subiam nas quatro partes e ficavam ociosos em três. Na parte 1
+      # do run 35124188017, que não usa nenhum deles, "Initialize containers"
+      # custou 51s (quase todos no pull do WAHA), com as partes a ~2 min do
+      # teto de 30. Aqui eles sobem por `docker run` SÓ na parte 4 — a alavanca
+      # que o comentário do teto, no topo deste job, nomeava.
+      #
+      # A rede própria devolve o que `services:` dava de graça: o nome `redis`
+      # resolvendo para o contêiner do Redis, que é o endereço do
+      # serverless-redis-http. As portas publicadas são as mesmas (3000, 6379,
+      # 8079), então o passo "Ligar a VPS fresca" — que espera cada serviço
+      # RESPONDER e falha fechado — não muda. O passo sobe logo no começo do
+      # job para os contêineres ficarem prontos enquanto o Supabase e o build
+      # correm; por isso eles continuam nascendo ANTES de o `.env.e2e` existir.
+      - if: matrix.parte == 4
+        name: Subir WAHA e o par Redis da VPS fresca
+        env:
+          # Tag PINADA, e a MESMA do `docker-compose.prod.yml`: este job existe
+          # para provar o que o self-hoster recebe, e `:latest` deixou de ser
+          # isso em 01/09/2026 (o digest do `latest` virou 2026.8.2 enquanto o
+          # pin segue em 2026.7.2). Medido no run 35095923107: com `:latest` o
+          # contêiner NÃO sobe.
+          WAHA_IMAGE: devlikeapro/waha:latest-2026.7.2
+          REDIS_IMAGE: redis:7-alpine
+          # O MESMO digest do compose: `:latest` é tag móvel. Medido em
+          # 2026-09-16 com `docker buildx imagetools inspect`: o `:latest` de
+          # então É este índice. Bumpar é junto com o compose.
+          SRH_IMAGE: hiett/serverless-redis-http@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150
+          # Inerte nesta jornada, e escrito para não parecer que funciona: o job
+          # roda no host, então o 127.0.0.1 de dentro do WAHA é o próprio WAHA.
+          # O que a spec exercita é app→WAHA (o QR), não o webhook de volta.
+          WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
+          # A chave do WAHA tem UMA fonte: `.env.e2e`, gerado por
+          # `scripts/gerar-env-e2e.sh` e publicado no ambiente do job. Escrever a
+          # chave aqui foi reprovado pelo guard
+          # `tests/unit/e2e-workflow-honra-o-env.test.ts` (eram DOIS valores
+          # diferentes, e o app levava 401) — e este passo roda ANTES do que
+          # publica o arquivo (é o que deixa o pull correr junto com o resto do
+          # job), então o contêiner não tem como receber o valor da fonte única.
+          #
+          # Daí o `WAHA_NO_API_KEY`: sem ele o WAHA NÃO roda sem chave — ele
+          # SORTEIA uma no boot. Está no pin, em `core/auth/config.js`:
+          # `FromEnv('WAHA_API_KEY', parseBool(process.env.WAHA_NO_API_KEY), rand(), keys)`,
+          # e o `ApiKeyAuthFactory` só cai em `NoAuth` quando a chave resolve
+          # vazia. Medido no run 35100039158: com a chave sorteada, todo
+          # `X-Api-Key` que o CRM manda — o do `.env.e2e` — toma 401, e o
+          # serviço fica de pé e inútil. Com `True` a API é pública (o próprio
+          # contêiner avisa no log: "No API key detected"), e o que este job
+          # exercita é a jornada de onboarding, não o contrato de autenticação do
+          # WAHA — esse tem fonte e teste no produto.
+          WAHA_NO_API_KEY: "True"
+          # O MESMO motor do `docker-compose.prod.yml`
+          # (`WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}`). Sem
+          # esta linha o contêiner cai no default WEBJS — o log do run
+          # 35124188017 mostra `"engine":"WEBJS"` —, e o produto RECUSA essa
+          # sessão: `compatibleSession()` em `lib/waha/client.ts` devolve false
+          # para qualquer engine que não seja NOWEB, e o `createSession` lança.
+          # Com WEBJS a jornada do QR não teria como ficar verde nem com o WAHA
+          # alcançável.
+          #
+          # Limite escrito para não ser descoberto: isto é o WAHA CORE (o mesmo
+          # log diz `"tier":"CORE"`), não o WAHA Plus que a doutrina exige em
+          # produção. A licença do Plus não pode viver num CI que roda PR de
+          # fork sem segredo nenhum. Multi-sessão, retry e S3 — o que só o Plus
+          # tem — NÃO são exercitados aqui; a jornada de onboarding é.
+          WHATSAPP_DEFAULT_ENGINE: NOWEB
+        run: |
+          set -euo pipefail
+          docker network create vps-fresca
+
+          docker run -d --name redis --network vps-fresca --network-alias redis \
+            -p 6379:6379 "$REDIS_IMAGE"
+          # O serverless-redis-http conecta no boot: ele só sobe com o Redis de pé.
+          for _ in $(seq 1 30); do
+            if docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; then break; fi
+            sleep 1
+          done
+          if ! docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; then
+            echo "o redis não respondeu PING em 30s"; docker logs --tail 40 redis 2>&1 || true
+            exit 1
+          fi
+
+          docker run -d --name redis-http --network vps-fresca -p 8079:80 \
+            -e SRH_MODE=env -e SRH_TOKEN=e2e-token-nao-e-segredo \
+            -e SRH_CONNECTION_STRING=redis://redis:6379 "$SRH_IMAGE"
+
+          docker run -d --name waha -p 3000:3000 \
+            -e WHATSAPP_HOOK_URL -e WAHA_NO_API_KEY -e WHATSAPP_DEFAULT_ENGINE "$WAHA_IMAGE"
+
+          docker ps --format '{{.Names}} {{.Image}} {{.Status}} {{.Ports}}'
+
+      - uses: ./.github/actions/preparar-node
+        # O teto do preâmbulo mora aqui porque passo de composite action não
+        # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
+        timeout-minutes: 5
+
+      # Versão EXATA, e nunca `latest`: é o CLI que escolhe qual stack o e2e
+      # sobe (PostgREST, GoTrue, Storage, Realtime) e o e2e exercita exatamente
+      # esse stack. Com `latest`, o registry no minuto do run decidia o produto
+      # sob teste — release upstream virava vermelho num PR sem relação.
+      # 2.117.0 é o que `latest` apontava em 2026-09-14 (release de 2026-09-07).
+      # Subir o pino é ato deliberado: data e razão junto, no mesmo commit.
+      # A catraca que reprova `latest`/faixa está em
+      # tests/unit/workflows-pinam-o-supabase-cli.test.ts, e roda no job
+      # `verify` (o `pnpm test:unit` do ci.yml).
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.117.0
+
+      # Sobe Postgres + Auth (GoTrue) + PostgREST + Storage. Auth de verdade é
+      # requisito: os specs de login exercitam o GoTrue, não um mock.
+      #
+      # A pasta de migrations sai do caminho ANTES do start: a cadeia não sobe
+      # em banco novo (quebra na 0010, `alter table public.contacts` sobre uma
+      # tabela que ainda não existe) — está no CLAUDE.md e foi confirmado neste
+      # CI. O que o self-hoster aplica é o `baseline.sql`, então é ele que o
+      # e2e aplica: o banco do teste fica igual ao de quem instalou o produto.
+      #
+      # ⚠️ O PULL DAS IMAGENS BATE NO LIMITE DO REGISTRO, e por isso há laço.
+      #
+      # Medido em 23/09/2026, run 35908153939: com ~10 PRs disparando CI quase
+      # juntos, as CINCO partes morreram aqui com
+      #
+      #   Error response from daemon: toomanyrequests: retry-after: 913.381µs, allowed: 44000/minute
+      #   failed to pull docker image from all registries: ghcr.io/supabase/gotrue:v2.196.0 …
+      #
+      # O CLI já tenta 3 vezes por imagem, mas com 4s e 8s de espera — tudo
+      # dentro do mesmo minuto em que o limite estourou. O laço daqui espera
+      # 20s, 60s e 120s, e o `supabase stop` entre tentativas não apaga as
+      # camadas já baixadas (ficam no Docker do runner): a tentativa seguinte
+      # só baixa o que faltou. Só tenta de novo quando a saída é de pull/rede;
+      # qualquer outra falha (porta ocupada, contêiner que não fica saudável)
+      # vermelha na hora, sem gastar o relógio da parte.
+      #
+      # Esperar só não basta, e isso foi MEDIDO: na primeira rodada do PR que
+      # criou este laço (run 35910532729), o ghcr.io seguiu recusando por 4,5
+      # min, nas 4 tentativas, nas 5 partes. O limite não era rajada de um
+      # minuto; era o registro inteiro sob carga. Por isso as tentativas pares
+      # trocam de REGISTRO: o `supabase/setup-cli` exporta
+      # `SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io`, e o CLI publica as mesmas
+      # imagens em `public.ecr.aws` (o default dele sem o setup-cli). As 7
+      # tags que este stack sobe responderam 200 lá em 23/09/2026. Camada é
+      # endereçada por digest, então o que já veio de um registro não é
+      # baixado de novo do outro.
+      #
+      # `-x studio,postgres-meta`: menos imagens, menos requisições ao
+      # registro. Nenhuma spec, script ou passo deste workflow fala com o
+      # Studio (porta 54323) nem com o postgres-meta (que só o Studio usa):
+      # `grep -rn "54323\|STUDIO_URL\|pgmeta" tests scripts lib app` devolveu
+      # vazio em 23/09/2026, e este workflow não cita nenhum dos três fora deste
+      # comentário. imgproxy, edge-runtime, logflare e vector já não subiam (o
+      # log do run acima não baixa nenhum deles).
+      - name: Subir Supabase local (sem a cadeia de migrations)
+        run: |
+          # O shell padrão do passo é `bash -e`, SEM pipefail: sem esta linha o
+          # `supabase start | tee` teria o status do `tee`, e a falha passaria.
+          set -euo pipefail
+          mv supabase/migrations /tmp/migrations-off
+          mkdir -p supabase/migrations
+          esperas=(0 20 60 120)
+          registros=(ghcr.io public.ecr.aws ghcr.io public.ecr.aws)
+          for tentativa in 1 2 3 4; do
+            espera=${esperas[$((tentativa - 1))]}
+            registro=${registros[$((tentativa - 1))]}
+            if [ "$espera" -gt 0 ]; then
+              echo "::warning title=supabase start: nova tentativa::tentativa ${tentativa} de 4 daqui a ${espera}s, puxando de ${registro} — a anterior falhou baixando imagem do registro"
+              supabase stop --no-backup || true
+              sleep "$espera"
+            fi
+            if SUPABASE_INTERNAL_IMAGE_REGISTRY="$registro" supabase start -x studio,postgres-meta 2>&1 | tee /tmp/supabase-start.log; then
+              exit 0
+            fi
+            if ! grep -qE 'toomanyrequests|failed to pull docker image|error pulling image|TLS handshake timeout|i/o timeout|connection reset by peer' /tmp/supabase-start.log; then
+              echo "::error title=supabase start falhou (não é o registro)::a saída acima não tem erro de pull nem de rede, então não há nova tentativa"
+              exit 1
+            fi
+          done
+          echo "::error title=supabase start falhou 4 vezes baixando imagens::ghcr.io e public.ecr.aws recusaram o pull nas 4 tentativas (esperas de 20s, 60s e 120s). É limite de taxa ou rede do registro, não o PR — rerode a parte."
+          exit 1
+
+      # O baseline é um dump `--schema-only`: ele USA os tipos das extensões
+      # (public.vector, citext, gin_trgm_ops) mas não as cria. O stack local do
+      # Supabase traz os binários e não as habilita — mesmo prelúdio que o
+      # scripts/test-db.sh faz para o Postgres cru, só a parte de extensões
+      # (roles e schema auth já vêm prontos aqui).
+      - name: Habilitar extensões exigidas pelo baseline
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -q <<'SQL'
+          create schema if not exists extensions;
+          create extension if not exists "uuid-ossp" with schema extensions;
+          create extension if not exists pgcrypto with schema extensions;
+          create extension if not exists vector with schema public;
+          create extension if not exists citext with schema public;
+          create extension if not exists pg_trgm with schema public;
+          SQL
+
+      - name: Aplicar o baseline.sql (o mesmo que o install.sh do kit aplica)
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+            -v ON_ERROR_STOP=1 -q -f supabase/baseline.sql
+
+      # A chave de cifra dos segredos, como o install.sh semeia em TODA instalação
+      # (`ensure_encryption_key`, em hostgator-setup-kit/_common.sh). Sem ela,
+      # `fn_encrypt_oauth` levanta "NUVEMSHOP_OAUTH_ENCRYPTION_KEY ausente" e
+      # qualquer tela que guarda segredo cifrado recusa o salvamento — medido na
+      # `email-da-instalacao-pela-tela.spec.ts`, a primeira a exercitar isso
+      # pela tela: o log do servidor dizia exatamente essa frase, e a senha do
+      # SMTP nunca chegava ao banco. O ambiente do e2e imita a VPS recém-
+      # instalada; uma VPS recém-instalada TEM essa chave.
+      - name: Semear a chave de cifra dos segredos (o que o install.sh faz)
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -q \
+            -c "insert into private.app_secrets (name, value) values ('nuvemshop_oauth_key', '$(openssl rand -hex 32)') on conflict (name) do nothing;"
+
+      # ⚠️ O REALTIME PRECISA REINICIAR DEPOIS DO BASELINE — senão ele assina e
+      # não entrega, em silêncio.
+      #
+      # A ordem acima é `supabase start` (que sobe o Realtime) e SÓ DEPOIS o
+      # baseline, que é quem adiciona `messages`, `conversations`, `crm_leads` e
+      # as demais à publication `supabase_realtime`. O Realtime já subiu com a
+      # publication sem essas tabelas e não as reconhece depois.
+      #
+      # Medido no PR #327, com o defeito atravessando três rodadas: o script de
+      # apoio confirmou a gravação (`[e2e-chega-mensagem] entregue em 6f5fd1f2…`)
+      # e o snapshot da página no mesmo instante mostrava "Nenhuma mensagem nesta
+      # conversa." — gravado no banco, nunca entregue à tela. Canal anônimo e
+      # canal sem publication falham do MESMO jeito: respondem SUBSCRIBED e
+      # calam, que é a razão de isto ter custado três rodadas de 15 minutos.
+      #
+      # Na VPS o problema não existe: lá o `install.sh` aplica o baseline e só
+      # então o compose sobe os serviços. Reiniciar aqui é o que faz o ambiente
+      # do teste refletir o de quem instalou.
+      - name: Reiniciar o Realtime (a publication nasceu no passo anterior)
+        run: |
+          IDS=$(docker ps -q --filter name=supabase_realtime)
+          if [ -z "$IDS" ]; then
+            echo "::error::Nenhum container supabase_realtime — o stack não subiu como esperado."
+            exit 1
+          fi
+          docker restart $IDS
+          # Espera ficar saudável: seguir sem isso devolve o mesmo silêncio que
+          # este passo existe para eliminar, só que mais tarde e sem explicação.
+          for i in $(seq 1 30); do
+            estado=$(docker inspect -f '{{.State.Health.Status}}' $IDS 2>/dev/null || echo desconhecido)
+            [ "$estado" = "healthy" ] && { echo "realtime saudável em ~$((i*2))s"; break; }
+            sleep 2
+          done
+          docker inspect -f '{{.State.Health.Status}}' $IDS
+
+      - name: Exportar credenciais do stack local
+        run: |
+          supabase status -o env > /tmp/sb.env
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$(grep '^API_URL=' /tmp/sb.env | cut -d'"' -f2)"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(grep '^ANON_KEY=' /tmp/sb.env | cut -d'"' -f2)"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(grep '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d'"' -f2)"
+          } >> "$GITHUB_ENV"
+
+      # O `.env.e2e` é o ambiente da suíte, e ele NASCE aqui — não é opcional.
+      #
+      # `playwright.config.ts` passou a exigi-lo e a falhar alto quando falta,
+      # de propósito: sem ele o `next start` carrega o `.env.local`, que num
+      # checkout de trabalho aponta para PRODUÇÃO. O modo de falha que isso
+      # substitui é a suíte escrever organizações e usuários de teste no banco
+      # real, passando verde.
+      #
+      # No CI o `.env.local` aponta para o Supabase local, então o risco não é o
+      # mesmo — mas o contrato é único, e um workflow que contorna o gate seria
+      # o começo de ele não valer para ninguém.
+      - name: Gerar o .env.e2e (ambiente da suíte)
+        run: pnpm e2e:env
+
+      # E publica o arquivo no ambiente do JOB, para que servidor e testes leiam
+      # literalmente a mesma fonte.
+      #
+      # Sem isto havia duas: o `.env.e2e` (que o playwright.config injeta no
+      # `next start`) e um bloco `env:` copiado à mão em cada passo de teste. As
+      # duas divergiram — `INTERNAL_SECRET` valia `e2e-placeholder…` no servidor
+      # e `ci-placeholder…` no processo de teste. Sintoma medido: 401 em toda
+      # chamada a rota interna, 8 specs vermelhas (6 de system-update no
+      # heartbeat, o drain do anti-SSRF, e o invite-lifecycle).
+      #
+      # Medido no Playwright 1.5x: `webServer.env` MESCLA com o ambiente herdado
+      # (uma var só do shell chega ao servidor) e VENCE nas colisões. Ou seja,
+      # copiar valores à mão nunca ia empatar com o arquivo — só uma fonte
+      # empata.
+      #
+      # De brinde, o processo de teste passa a ver as chaves de CIFRA de verdade
+      # (32 bytes, geradas pelo script) em vez do rótulo de 21 caracteres que o
+      # bloco `env:` fixava e que o app recusa.
+      - name: Publicar o .env.e2e no ambiente do job
+        run: grep -vE '^[[:space:]]*(#|$)' .env.e2e >> "$GITHUB_ENV"
+
+      # `pnpm e2e:build`, não `pnpm build`: as três `NEXT_PUBLIC_*` são embutidas
+      # no BUNDLE durante o build. Buildar com um env e trocar só no `next start`
+      # deixaria a URL errada dentro do JavaScript que roda no browser — servidor
+      # falando com um banco e cliente com outro, no mesmo teste.
+      - name: Build de produção (com o ambiente do E2E)
+        run: pnpm e2e:build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # `off`, NÃO vazio. Vazio seleciona o Sentry DA COMUNIDADE — está
+          # escrito em lib/sentry/dsn.ts:8-10, e é o default de propósito num
+          # produto self-host. Só "off" desliga.
+          #
+          # Sem isto, o SDK do browser tuneliza por /monitoring (next.config.ts:71)
+          # para o Sentry real do projeto, que devolve 429 por cota. Os 429 caem
+          # no console, e `olhar-telas-do-epico` — a ÚNICA spec que afirma "não
+          # cospe erro no console" — reprova nas 7 telas de uma vez.
+          # Medido em 2026-08-10 capturando a URL: /monitoring?o=4509908078559232,
+          # que é o org id do DEFAULT_SENTRY_DSN (lib/sentry/dsn.ts:17).
+          SENTRY_DSN: "off"
+
+      - name: Instalar o browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      # `.env.local` é CÓPIA do `.env.e2e`, não uma terceira redação dele.
+      #
+      # O arquivo precisa existir porque alguns seeds leem `.env.local` do disco,
+      # não de `process.env`. Ele era montado à mão aqui, com os valores
+      # redigitados — e foi a terceira fonte do mesmo `INTERNAL_SECRET`, com o
+      # terceiro valor. Copiar não pode divergir; redigitar já divergiu.
+      #
+      # No CI as duas apontam para o mesmo stack local, então a cópia não
+      # reintroduz o risco que o `.env.e2e` existe para evitar (o `.env.local` de
+      # um checkout de trabalho apontar para produção).
+      #
+      # O seed cria 1 org + 4 usuários com os 4 papéis e um TOTP verified de
+      # secret conhecido no admin — sem ele, todo spec que loga fica de fora, que
+      # era a maior parte da suíte.
+      # ─── A parte fresca: WAHA, Redis e o dublê de SaaS, antes da spec ──────
+      #
+      # O dublê é exercitado pelo SMOKE antes da spec: se ele não responder o
+      # contrato, o job falha aqui, com a rota nomeada, em vez de falhar seis
+      # minutos depois dentro do Playwright com "elemento não encontrado".
+      - if: matrix.parte == 4
+        name: Ligar a VPS fresca (WAHA, Redis e dublê de SaaS)
+        run: |
+          set -euo pipefail
+
+          # 1. O dublê de Resend/Nuvemshop: processo separado, porta de verdade.
+          nohup node scripts/duble-saas-e2e.mjs >/tmp/duble-saas.log 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3997/__duble/saude >/dev/null; then break; fi
+            sleep 1
+          done
+          cat /tmp/duble-saas.log
+          bash scripts/duble-saas-e2e-smoke.sh
+
+          # 2. O que a spec fresca exige do ambiente (cabeçalho dela):
+          #    WAHA ativo, Redis local, e Resend SEM chave — instalação nova não
+          #    tem chave de SaaS nenhuma, e é isso que a spec cobra.
+          {
+            # `WAHA_API_KEY` NÃO entra aqui: ela vem do `.env.e2e` (fonte única,
+            # já publicada no ambiente do job). Redigitá-la — com outro valor,
+            # que era o caso — é a segunda fonte que o guard
+            # `tests/unit/e2e-workflow-honra-o-env.test.ts` reprova.
+            echo "WAHA_API_BASE_URL=http://127.0.0.1:3000"
+            echo "UPSTASH_REDIS_REST_URL=http://127.0.0.1:8079"
+            echo "UPSTASH_REDIS_REST_TOKEN=e2e-token-nao-e-segredo"
+            echo "RESEND_API_BASE_URL=http://127.0.0.1:3997"
+            echo "RESEND_API_KEY="
+            echo "NUVEMSHOP_AUTH_BASE=http://127.0.0.1:3997"
+            echo "NUVEMSHOP_API_BASE=http://127.0.0.1:3997"
+            echo "NUVEMSHOP_CLIENT_ID=e2e-app-id"
+            echo "NUVEMSHOP_CLIENT_SECRET=e2e-placeholder-nao-e-segredo"
+          } > /tmp/vps-fresca.env
+
+          #    ⚠️ Estes valores vão para DENTRO do `.env.e2e`, não só para o
+          #    `$GITHUB_ENV` — senão o SERVIDOR nunca os vê.
+          #
+          #    O `playwright.config.ts` injeta o `.env.e2e` em `webServer.env`, e
+          #    ali a regra medida (escrita no próprio config) é: chave nos dois
+          #    lados, vence a do `.env.e2e`. O gerador escreve
+          #    `WAHA_API_BASE_URL=…:3999` e `UPSTASH_REDIS_REST_URL=…:3998`
+          #    (portas onde nada escuta), então só anexar ao `$GITHUB_ENV` dava
+          #    3000/8079 ao processo de TESTE e 3999/3998 ao app. Medido no run
+          #    35124188017 (parte 4): o contêiner do WAHA registrou DUAS
+          #    requisições no job inteiro — a sonda deste passo e o `beforeAll`
+          #    da spec, que leem o ambiente do processo —, e nenhuma do app. No
+          #    trace, o POST de sessão do onboarding voltou 502 sem `details`
+          #    (nenhuma resposta HTTP do WAHA) e os 19 GETs de status, 502. As 6
+          #    linhas `redis incr failed … fetch failed` do app são a mesma
+          #    causa, do lado do Redis.
+          #
+          #    Trocar as linhas NO arquivo mantém a fonte única: servidor, testes,
+          #    `.env.local` (copiado logo abaixo) e `$GITHUB_ENV` leem o mesmo.
+          chaves=$(cut -d= -f1 /tmp/vps-fresca.env | paste -sd'|' -)
+          grep -vE "^(${chaves})=" .env.e2e > /tmp/env-e2e-sem-parte-4
+          cat /tmp/env-e2e-sem-parte-4 /tmp/vps-fresca.env > .env.e2e
+          cat /tmp/vps-fresca.env >> "$GITHUB_ENV"
+          echo "--- o que o app da parte 4 recebe do .env.e2e ---"
+          grep -E "^(${chaves})=" .env.e2e
+
+          # 3. A cadeia de Redis, provada pelo protocolo que o produto usa: um
+          #    comando Upstash REST de verdade, que só responde PONG se o
+          #    serverless-redis-http estiver de pé E falando com o redis:7.
+          #
+          #    Falha FECHADO, como o laço do WAHA logo abaixo. A versão anterior
+          #    terminava o `for` sem `exit 1`: nas 30 voltas sem PONG o passo
+          #    seguia verde e o vermelho aparecia minutos depois, dentro do
+          #    Playwright, sem nome. Medido no run 35124188017 (parte 4): a linha
+          #    "pronto" nunca foi impressa, 30,3s de vão entre o smoke do dublê e
+          #    o WAHA, e o passo verde.
+          #
+          #    O `Content-Type` é o motivo de nunca ter passado. Sem ele o `curl
+          #    -d` manda `application/x-www-form-urlencoded`, e o
+          #    serverless-redis-http recusa: HTTP 400 `{"error":"Invalid content
+          #    type. Expected application/json."}`. Com ele: 200
+          #    `{"result":"PONG"}`. Medido contra o MESMO digest do
+          #    `docker-compose.prod.yml`, com o redis:7-alpine atrás. O SDK
+          #    `@upstash/redis` do produto manda o cabeçalho; a sonda tem de
+          #    mandar também, senão prova um protocolo que ninguém usa.
+          redis_pronto=""
+          for _ in $(seq 1 30); do
+            resposta=$(curl -s -X POST \
+              -H "Authorization: Bearer e2e-token-nao-e-segredo" \
+              -H "Content-Type: application/json" \
+              -d '["PING"]' -w ' http=%{http_code}' \
+              http://127.0.0.1:8079/ || true)
+            if printf '%s' "$resposta" | grep -q PONG; then
+              echo "Redis (REST do Upstash) pronto"
+              redis_pronto=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "$redis_pronto" ]; then
+            echo "Redis (REST do Upstash) não respondeu PONG em 30s: $resposta"
+            echo "--- o que os contêineres do Redis dizem ---"
+            docker ps -a --filter name=redis --format '{{.Names}} {{.Status}} {{.Ports}}' || true
+            docker logs --tail 40 redis-http 2>&1 || true
+            exit 1
+          fi
+
+          # 4. Alguns scripts leem o disco em vez do ambiente.
+          cp .env.e2e .env.local
+
+          # 5. Espera o WAHA responder DE VERDADE antes de entregar o turno para o
+          #    Playwright, e sonda a rota que o CRM usa (`/api/sessions`, com a
+          #    MESMA chave do `.env.e2e`). O passo antigo esperava
+          #    `curl -sf http://127.0.0.1:3000/api/health`: rota que NÃO EXISTE
+          #    neste pin — o health é `/health` (e exige chave); `/ping` é o único
+          #    endpoint público. Eram 404 a cada volta, 120s de espera e o job
+          #    vermelho em "WAHA não respondeu" (run 35100039158). `/ping` sozinho
+          #    diria apenas que o processo subiu, não que o CRM consegue falar com
+          #    ele.
+          for _ in $(seq 1 60); do
+            ping=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ping || true)
+            sessoes=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Api-Key: $WAHA_API_KEY" \
+              "http://127.0.0.1:3000/api/sessions?all=true" || true)
+            if [ "$ping" = "200" ] && [ "$sessoes" = "200" ]; then
+              echo "WAHA pronto (/ping 200 · /api/sessions 200)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "WAHA não respondeu em 120s: /ping=$ping · /api/sessions=$sessoes"
+          echo "--- o que o contêiner do WAHA diz ---"
+          docker ps -a --filter name=waha --format '{{.Names}} {{.Status}} {{.Ports}}' || true
+          docker logs --tail 40 waha 2>&1 || true
+          exit 1
+
+      # ─── O dono da instalação fresca: o `install.sh` cria, e o CI também ───
+      #
+      # PRECONDIÇÃO da spec, declarada por ela no cabeçalho: "primeiro usuário
+      # criado via scripts/bootstrap-owner.ts (como o install.sh)". Sem este
+      # passo o `beforeAll` dela morre antes do primeiro teste, com
+      # "esta suite APAGA dados da organizacao que resolver aqui, e nao achou o
+      # dono (dono@qa.local)" — a spec é destrutiva e se recusa a escolher a
+      # organização no escuro (a versão antiga escolhia "a primeira" e zerou o
+      # onboarding e a sessão de WhatsApp de uma instalação de trabalho).
+      #
+      # O que este passo NÃO faz: não semeia fixture, não pula wizard, não
+      # inventa tenant. Ele cria exatamente o que o `install.sh` cria numa VPS
+      # recém-instalada — dono (auth, e-mail confirmado), organização, vínculo
+      # como `admin` e a linha em `platform_admins` — e entrega a jornada
+      # (wizard, WhatsApp, convites) para a spec percorrer.
+      #
+      # As credenciais do dono não estão escritas aqui: vêm do `.env.e2e`, que
+      # é a fonte única do ambiente da suíte e já foi publicada no job no passo
+      # "Publicar o .env.e2e no ambiente do job". O script lê o ambiente.
+      - if: matrix.parte == 4
+        name: Criar o dono da instalação (como o install.sh)
+        run: pnpm exec tsx scripts/bootstrap-owner.ts
+
+      - if: matrix.parte != 4
+        name: Semear credenciais de teste
+        run: |
+          cp .env.e2e .env.local
+          pnpm exec tsx scripts/seed-e2e-credentials.ts
+
+      # `SUPABASE_DB_URL` no `.env.local` (e não só no `env:` do passo de teste):
+      # `seed-e2e-escalacao.ts` abre um `pg.Pool` direto, e o `.env.local` é a
+      # única fonte que ele lê. Sem a linha, o `pg` cai no default 5432 e morre
+      # com ECONNREFUSED — o stack local do Supabase publica o Postgres na 54322.
+      # Medido: foi exatamente assim que a primeira execução deste passo falhou.
+      #
+      # A maioria das specs roda o próprio seed num `beforeAll`. Estas TRÊS não
+      # — ou o cabeçalho manda rodar à mão, ou a fixture é de outra spec.
+      #
+      # `seed-e2e-followup-agent` (credencial de IA + sessão de canal) é o caso
+      # sutil: `followup-builder` o roda no próprio `beforeAll`, mas
+      # `agente-novo-e-uso` PRECISA das mesmas fixtures e vem ANTES na ordem
+      # alfabética — em banco fresco os comboboxes de credencial e canal abrem
+      # com a opção desabilitada e o clique estoura por timeout. Medido: o
+      # ensaio local passou porque o banco tinha as fixtures de uma rodada
+      # anterior; o CI, fresco, reprovou. Rodar aqui torna a precondição
+      # explícita em vez de depender da ordem dos arquivos.
+      #
+      # `--env-file` só na segunda, e a diferença não é capricho: o seed de
+      # capacidades importa `lib/env.ts` (via lib/ai/embed.ts), que lê
+      # `process.env`; o de escalação parseia o `.env.local` por conta própria.
+      # Sem a flag o de capacidades morre na validação Zod das 3 vars do Supabase.
+      - if: matrix.parte != 4
+        name: Semear as fixtures que as specs não semeiam sozinhas
+        run: |
+          pnpm exec tsx scripts/seed-e2e-escalacao.ts
+          pnpm exec tsx --env-file=.env.local scripts/seed-e2e-capacidades-ausentes.ts
+          pnpm exec tsx scripts/seed-e2e-followup-agent.ts
+          # O catálogo da OpenRouter não existe em banco fresco (o baseline
+          # semeia só anthropic/openai/google; os demais vêm do cron diário, que
+          # busca na internet). Sem esta linha, `prova-painel-provedores` mede a
+          # sorte do ambiente em vez da tela.
+          pnpm exec tsx scripts/seed-e2e-catalogo-openrouter.ts
+
+      # O que ficou DE FORA (e por quê) é declarado no passo de summary —
+      # cobertura parcial silenciosa se lê como cobertura total.
+      #
+      # `next start` roda com NODE_ENV=production, e aí toda var marcada
+      # `required()` no lib/env.ts vira obrigatória, inclusive as de serviço que
+      # estes specs nem tocam. Os valores abaixo são PLACEHOLDERS FALSOS, só
+      # para o boot passar da validação Zod — nenhum segredo real entra aqui.
+      # DUAS INVOCAÇÕES, e não uma — o motivo é medido, não estético.
+      #
+      # `lib/auth/rate-limit.ts` limita login a 60 por IP a cada 300s. No CI todo
+      # spec loga do mesmo 127.0.0.1, e ao subir a suíte de 15 para 29 specs o
+      # pico passou a ser 69–73 tentativas na janela: a suíte estourava o próprio
+      # teto do produto. O sintoma não é honesto — o login simplesmente não
+      # redireciona, e a spec sorteada pelo momento da saturação é a que falha.
+      # Foi assim que `risk-radar` caiu na main e `rbac-roles` num PR, sem
+      # nenhuma das duas ter mudado.
+      #
+      # Sem Upstash configurado, o limitador cai para memória DO PROCESSO (o log
+      # diz: "redis incr failed; falling back to in-memory"), e o
+      # `reuseExistingServer: false` do playwright.config.ts faz cada invocação
+      # subir o SEU `next start`. Duas invocações = dois processos = dois
+      # contadores, e o pico por processo volta para ~40.
+      #
+      # A alternativa seria afrouxar o teto por env — mexer num controle de
+      # segurança para acomodar o teste, que é a troca errada.
+      #
+      # `--workers=1` não é preciosismo: os specs compartilham UMA conta admin
+      # com MFA, e código TOTP é de uso único por janela no GoTrue. Com dois
+      # workers, dois specs gerando o mesmo código no mesmo intervalo de 30s
+      # fazem o segundo ser recusado como replay. Foi o que derrubava a
+      # `reset-password-mfa` (issue #80): ela passa sozinha e falha em paralelo.
+      - name: E2E — parte ${{ matrix.parte }} de 4
+        run: |
+          set -euo pipefail
+          # A lista sai da matrix, e as duas variáveis continuam existindo no
+          # `env:` do job porque é DELAS que `e2e-cobertura-completa.test.ts` lê
+          # a cobertura. Ler por indireção aqui e não duplicar a lista mantém
+          # UMA fonte por parte.
+          case "${{ matrix.parte }}" in
+            1) LISTA="$SPECS_PARTE_1" ;;
+            2) LISTA="$SPECS_PARTE_2" ;;
+            3) LISTA="$SPECS_PARTE_3" ;;
+            4) LISTA="$SPECS_PARTE_4" ;;
+            5) LISTA="$SPECS_PARTE_5" ;;
+            *) echo "::error::parte ${{ matrix.parte }} sem lista"; exit 1 ;;
+          esac
+          # Falha alto se a variável vier vazia: sem isto, um typo no nome faria
+          # o playwright rodar a suíte INTEIRA (ou nenhuma) e o job ficaria
+          # verde medindo outra coisa.
+          [ -n "$LISTA" ] || { echo "::error::lista da parte ${{ matrix.parte }} vazia"; exit 1; }
+          # `--reporter=list` NÃO é preferência de leitura: é o INSTRUMENTO que
+          # mede o custo de cada spec, e sem ele a partição das listas volta
+          # a ser chutada.
+          #
+          # O reporter default em CI é o `dot`, e ele destrói justamente o dado
+          # que decide o balanceamento: os pontos saem em rajada, esvaziados só
+          # quando outro processo escreve na saída, e o timestamp do Actions é
+          # por LINHA. Medido no run 33820766602 (verde): a parte 1 despejou
+          # **37 pontos numa linha só**, cobrindo 4,9 min — 37 testes que se
+          # tornam indistinguíveis entre si. Reconstruir tempo por spec a partir
+          # disso é o terceiro proxy ruim que este arquivo já viu, e os dois
+          # anteriores INVERTERAM o sinal da medição (ver o bloco de
+          # `SPECS_PARTE_1` abaixo).
+          #
+          # Com o `list`, cada teste vira uma linha com caminho e duração
+          # (`✓ 12 [chromium] › tests/e2e/x.spec.ts:9:5 › título (3.4s)`), e a
+          # soma por arquivo sai de um `gh run view <id> --log`. Custo medido:
+          # ~240 linhas a mais de log, zero segundo de execução.
+          # ── O AVISO, ANTES DO CORTE ───────────────────────────────────────
+          # Daqui para baixo o relógio que decide é o do JOB, não o da suíte.
+          # A conta é medida, não estimada: DECORRIDO é o que esta parte já
+          # gastou desde o T0 (checkout, node, stack do Supabase, baseline,
+          # build), e é ele que come a folga do teto de 30 min.
+          #
+          # O `timeout` abaixo é o AVISO ANTES DO CORTE. Sem ele, quem corta é
+          # o `timeout-minutes` do job — que cancela sem dizer do que se
+          # tratava, com a suíte ainda verde no caso 141 de 156 (run
+          # 35160549180). Com ele, a suíte é interrompida MARGEM_SEGUNDOS antes
+          # do teto e o erro nomeia a parte com os números na mão.
+          PARTE="${{ matrix.parte }}"
+          AGORA=$(date -u +%s)
+          DECORRIDO=$(( AGORA - T0_JOB ))
+          FOLGA=$(( TETO_SEGUNDOS - MARGEM_SEGUNDOS - (AGORA - T0_JOB) ))
+          if [ "$FOLGA" -lt "$PISO_SEGUNDOS" ]; then
+            echo "::error title=A parte ${PARTE} chegou à suíte sem folga até o teto::o preparo custou ${DECORRIDO}s e sobravam ${FOLGA}s para uma suíte de centenas de casos, num teto de $(( TETO_SEGUNDOS / 60 )) min. Não é infraestrutura: a parte cresceu além do orçamento de $(( ORCAMENTO_SEGUNDOS / 60 )) min — rebalanceie as listas ou reparta em mais uma parte."
+            exit 1
+          fi
+          echo "::notice title=A parte ${PARTE} entrou na suíte com ${FOLGA}s de folga::preparo de ${DECORRIDO}s; teto do job de $(( TETO_SEGUNDOS / 60 )) min"
+          INICIO_SUITE=$(date -u +%s)
+          # `-k 30` manda SIGKILL 30 s depois do TERM: o TERM deixa o Playwright
+          # escrever o relatório, o KILL garante que o job não pare no meio de um
+          # spec que ignorou o sinal.
+          # A saída vai para arquivo TAMBÉM, e não só para o log do Actions: é
+          # dela que sai (a) a contagem de casos já vermelhos quando o corte
+          # chega e (b) os specs mais lentos da rodada, no resumo. `PIPESTATUS`
+          # porque com `| tee` o `$?` seria o do tee — sempre 0.
+          SAIDA="${RUNNER_TEMP}/e2e-parte-${PARTE}.log"
+          set +e
+          timeout -k 30 --signal=TERM "${FOLGA}s" pnpm exec playwright test --workers=1 $LISTA --reporter=list 2>&1 | tee "$SAIDA"
+          CODIGO=${PIPESTATUS[0]}
+          set -e
+          echo "SAIDA_DA_SUITE=${SAIDA}" >> "$GITHUB_ENV"
+          SUITE=$(( $(date -u +%s) - INICIO_SUITE ))
+          {
+            echo "SUITE_SEGUNDOS=${SUITE}"
+            echo "CUSTO_FIXO_SEGUNDOS=${DECORRIDO}"
+          } >> "$GITHUB_ENV"
+          # 124 = o `timeout` cortou; 137 = o KILL da carência chegou antes.
+          # ── O CORTE NÃO PODE AFIRMAR "a parte cresceu" SEM OLHAR O VERMELHO ──
+          #
+          # Medido no #1210 (job 105739419202, parte 1): o `timeout` matou a
+          # suíte ANTES de o Playwright imprimir o sumário, então o único
+          # vestígio do caso que falhou era a linha `✘` no meio do log. O
+          # resumo do job dizia só "a parte cresceu" — e o time saiu
+          # rebalancear a partição. A parte estava saudável (797–933 s de
+          # suíte em quatro rodadas do mesmo dia): o que estourou o relógio foi
+          # UM caso vermelho de `followup-ramos.spec.ts`, que declara
+          # `test.setTimeout(420_000)` e, ao travar, queima 7 min sozinho —
+          # 29% do orçamento. Há specs com 480 e 600 s declarados; qualquer uma
+          # delas, travando, cabe nesta mesma armadilha.
+          #
+          # Então o corte passa a CONTAR os vermelhos antes de diagnosticar.
+          if [ "$CODIGO" -eq 124 ] || [ "$CODIGO" -eq 137 ]; then
+            # O padrão casa a linha do reporter `list` pelo FORMATO
+            # (`✘   36 [chromium] › …`), não pelo começo da linha: âncora em
+            # `^` só funciona no arquivo cru, e some no mesmo log baixado pela
+            # API do GitHub, que prefixa carimbo de hora. Uma sonda que depende
+            # do prefixo devolve zero — e zero aqui lê como "não havia vermelho".
+            PADRAO_VERMELHO="✘[[:space:]]+[0-9]+[[:space:]]+\["
+            # FALHA ESPERADA NÃO É VERMELHO. Spec que declara `test.fail(...)`
+            # (catraca de lacuna conhecida) é impressa com o MESMO `✘`, e a rodada
+            # termina verde — medido no run 35388254053, parte 1:
+            # `degradacao-silenciosa.spec.ts` sai com ✘ e o job fecha "150 passed".
+            # Contá-la aqui inverteria o erro: em vez de calar o vermelho, eu
+            # inventaria um.
+            ESPERADAS=$(grep -rlE "^[[:space:]]*test\.fail\(" tests/e2e --include="*.spec.ts" 2>/dev/null | sed "s|.*/||" | paste -sd"|" - || true)
+            SEM_ESPERADAS="tests/e2e/(${ESPERADAS:-nada-casa-aqui}):"
+            VERMELHOS=$(grep -aE "$PADRAO_VERMELHO" "$SAIDA" | grep -acvE "$SEM_ESPERADAS" || true)
+            if [ "${VERMELHOS:-0}" -gt 0 ]; then
+              echo "::error title=A parte ${PARTE} foi cortada pelo relógio, e já havia ${VERMELHOS} caso(s) VERMELHO(s) antes do corte::o corte veio aos ${SUITE}s (preparo de ${DECORRIDO}s, teto de $(( TETO_SEGUNDOS / 60 )) min), mas a suíte NÃO estava só grande: conserte o vermelho abaixo antes de concluir qualquer coisa sobre a partição. Caso que falha por tempo esgotado queima o timeout declarado no próprio spec (há specs com 420–600 s)."
+              grep -aE "$PADRAO_VERMELHO" "$SAIDA" | grep -avE "$SEM_ESPERADAS" | head -10
+            else
+              echo "::error title=A parte ${PARTE} estourou o relógio do e2e::a suíte rodou ${SUITE}s e foi interrompida ${FOLGA}s depois de entrar, o job já tinha ${DECORRIDO}s de preparo e o teto é de $(( TETO_SEGUNDOS / 60 )) min (orçamento: $(( ORCAMENTO_SEGUNDOS / 60 )) min). Nenhum caso vermelho até o corte: a parte cresceu."
+            fi
+          fi
+          exit "$CODIGO"
+        env:
+          # Só o que NÃO vem do `.env.e2e`: isto é ajuste de CI, não config do
+          # produto. CI = 1 IP para todos os specs, e o teto de produção
+          # (60/5min) é irreal aqui. O teto por CONTA (5 falhas) NÃO muda — é
+          # ele que barra brute force.
+          AUTH_RATE_LIMIT_LOGIN_IP: "1000"
+          # ver o comentário do passo de build: vazio NÃO desliga.
+          SENTRY_DSN: "off"
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report-parte-${{ matrix.parte }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      # ── ONDE A MEDIÇÃO FICA ───────────────────────────────────────────────
+      # A medição que só existe no log se perde: quem decide repartir as listas
+      # é quem olha o resumo do job, e o resumo é este. Os três relógios saem
+      # por parte, com o teto ao lado para o número ser lido contra alguma coisa.
+      #
+      # `if: always()` de propósito: o caso que interessa é justamente o da
+      # parte que falhou ou que foi cortada pelo `timeout` — sem o `always`, o
+      # resumo apareceria só nas rodadas em que nada aconteceu.
+      - name: Publicar o relógio da parte ${{ matrix.parte }} (preparo × suíte × teto)
+        if: always()
+        run: |
+          set -euo pipefail
+          PARTE="${{ matrix.parte }}"
+          # `não medido` quando o passo da suíte não chegou a publicar (parte
+          # que entrou sem folga até o teto): zero ali seria um número falso.
+          SUITE="${SUITE_SEGUNDOS:-não medido}"
+          FIXO="${CUSTO_FIXO_SEGUNDOS:-não medido}"
+          if [ -n "${T0_JOB:-}" ]; then
+            TOTAL=$(( $(date -u +%s) - T0_JOB ))
+          else
+            TOTAL=0
+          fi
+          # Aviso ANTES do corte: a parte que passou do orçamento mas ainda não
+          # estourou o teto. É esta a linha que evita o próximo "cancelado com
+          # 141 de 156 verde" — o orçamento estourado aparece numa rodada ainda
+          # verde, não na rodada em que o teto já cortou tudo.
+          if [ "$TOTAL" -gt "$ORCAMENTO_SEGUNDOS" ]; then
+            echo "::warning title=A parte ${PARTE} passou do orçamento do e2e::${TOTAL}s de relógio do job contra o orçamento de $(( ORCAMENTO_SEGUNDOS / 60 )) min (teto de $(( TETO_SEGUNDOS / 60 )) min). Ainda não estourou, mas a partição está desbalanceada: o bloco de partição das listas, no cabeçalho deste workflow, diz onde mexer."
+          fi
+          {
+            echo "## E2E parte ${PARTE} — o relógio da rodada"
+            echo ""
+            echo "| relógio | medido | referência |"
+            echo "| --- | --- | --- |"
+            echo "| preparo (primeiro passo → suíte) | ${FIXO}s | — |"
+            echo "| suíte (Playwright) | ${SUITE}s | — |"
+            echo "| **total da parte** | **${TOTAL}s** | orçamento $(( ORCAMENTO_SEGUNDOS / 60 )) min · teto $(( TETO_SEGUNDOS / 60 )) min |"
+            echo ""
+            echo ""
+            # ── OS SPECS MAIS LENTOS DA RODADA, NO RESUMO ───────────────────
+            # Quem decide rebalancear precisa do tempo POR SPEC, e ele só
+            # existia no log, linha a linha: para diagnosticar o #1210 foi
+            # preciso baixar o log do job e somar as durações na mão. Com a
+            # tabela abaixo, a próxima partição é decidida lendo o resumo — e
+            # um caso que sozinho come minutos (há specs com `setTimeout` de
+            # 420–600 s) aparece no topo em vez de se esconder na soma.
+            if [ -s "${SAIDA_DA_SUITE:-/inexistente}" ]; then
+              echo "### Os 5 specs mais caros desta parte"
+              echo ""
+              echo "| spec | segundos | casos |"
+              echo "| --- | --- | --- |"
+              awk '
+            match($0, /tests\/e2e\/[A-Za-z0-9._-]+\.spec\.ts/) {
+              nome = substr($0, RSTART + 10, RLENGTH - 10)
+              if (match($0, /\([0-9.]+(ms|s|m)\)[ \r]*$/)) {
+                bruto = substr($0, RSTART + 1, RLENGTH - 2)
+                sub(/[ \r]+$/, "", bruto)
+                if (bruto ~ /ms\)?$/) { sub(/ms.*/, "", bruto); seg = bruto / 1000 }
+                else if (bruto ~ /m\)?$/) { sub(/m.*/, "", bruto); seg = bruto * 60 }
+                else { sub(/s.*/, "", bruto); seg = bruto }
+                total[nome] += seg; casos[nome] += 1; soma += seg; casosTotal += 1
+              }
+            }
+            END {
+              n = 0
+              for (k in total) { ordem[++n] = k }
+              for (i = 1; i < n; i++) for (j = i + 1; j <= n; j++) if (total[ordem[j]] > total[ordem[i]]) { t = ordem[i]; ordem[i] = ordem[j]; ordem[j] = t }
+              for (i = 1; i <= n && i <= 5; i++) printf "| `%s` | %.0f | %d |\n", ordem[i], total[ordem[i]], casos[ordem[i]]
+              printf "| **soma da suíte** | **%.0f** | **%d casos** |\n", soma, casosTotal
+            }
+              ' "$SAIDA_DA_SUITE"
+              echo ""
+            fi
+            echo "O teto continua sendo o \`timeout-minutes: $(( TETO_SEGUNDOS / 60 ))\` do job — é ele que"
+            echo "denuncia a parte crescendo. Quem corta primeiro é o \`timeout\` que dá"
+            echo "$(( MARGEM_SEGUNDOS / 60 )) min de folga à suíte, para o vermelho dizer o NOME do problema"
+            echo "(qual parte, com quantos segundos medidos) em vez de cancelar em silêncio."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # O NOME DESTE JOB É O CHECK OBRIGATÓRIO, e é por isso que ele existe.
+  #
+  # A branch protection da `main` exige um check chamado exatamente `e2e`
+  # (medido: verify, build-and-size, invariants, e2e, imagens-ok). Jobs de
+  # matrix se chamam `e2e-parte (1)` e `e2e-parte (2)` — se o job das partes
+  # tivesse ficado com o nome `e2e`, a proteção passaria a esperar para sempre
+  # um check que nenhum run produz, e NENHUM PR mergearia. Este agregador é o
+  # mesmo padrão do `imagens-ok` em `publish-image.yml`.
+  e2e:
+    if: always()
+    needs: [e2e-alcance, e2e-parte]
+    runs-on: ubuntu-latest
+    # Nenhuma permissão: este job só lê o resultado de `needs` e escreve o
+    # summary. Sem o bloco, o token herdaria o default do REPOSITÓRIO, que vive
+    # fora do repo e muda num clique.
+    permissions: {}
+    steps:
+      - name: Falhar se qualquer parte não passou
+        env:
+          EVENTO: ${{ github.event_name }}
+          PORTAO: ${{ needs.e2e-alcance.result }}
+          ALCANCE: ${{ needs.e2e-alcance.outputs.e2e }}
+          PARTES: ${{ needs.e2e-parte.result }}
+        run: |
+          set -euo pipefail
+          echo "evento=${EVENTO} e2e-alcance=${PORTAO} e2e=${ALCANCE:-<vazio>}"
+          echo "e2e-parte: ${PARTES}"
+          # A pergunta tem de ter sido RESPONDIDA: job de alcance que falhou
+          # deixa as partes `skipped`, e isso não pode ler como aprovação.
+          [ "$PORTAO" = "success" ]
+          # `skipped` das partes só é aceito com `e2e=nao` em pull_request — PR
+          # que não alcança nada que o e2e mede (scripts/pr-alcanca-o-e2e.sh).
+          # Qualquer outra combinação exige `success`: parte pulada não mediu
+          # nada, e ler isso como aprovação é o modo de falha que o `imagens-ok`
+          # documenta.
+          if [ "$EVENTO" = "pull_request" ] && [ "$ALCANCE" = "nao" ]; then
+            [ "$PARTES" = "skipped" ]
+            echo "PR não alcança nada que o e2e mede — partes puladas (scripts/pr-alcanca-o-e2e.sh)" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            [ "$PARTES" = "success" ]
+          fi
+
+      - uses: actions/checkout@v7
+        if: always()
+
+      - name: Declarar o que este job ainda NÃO cobre
+        if: always()
+        run: |
+          set -euo pipefail
+          # CONTA, não afirma. A versão anterior deste passo era prosa digitada à
+          # mão e dizia "32 de 33" com 39 arquivos no disco — a única coisa que
+          # existia para declarar a lacuna estava, ela mesma, desatualizada.
+          #
+          # As listas saem do PRÓPRIO workflow, com recorte por bloco. Contar com
+          # um `grep` no arquivo inteiro daria número MAIOR: os nomes aparecem
+          # também em comentários, e foi assim que a contagem antiga mentiu.
+          #
+          # ⚠️ O RECORTE PARA DE SER POR RANGE DE `sed` — ele lia COMENTÁRIO.
+          #
+          # A versão anterior era `sed -n "/^      $1: >-/,/^      [A-Z_0-9]*:/p"`,
+          # e o `[A-Z_0-9]` incluía DÍGITO de propósito: sem ele o range de
+          # `SPECS_PARTE_1` não parava em `SPECS_PARTE_2` (que tem `2` no nome) e
+          # seguia até `FORA_DO_CI`, devolvendo a união das duas como se fosse a
+          # parte 1. Medido antes daquele conserto: 67 em vez de 29.
+          #
+          # O que aquele conserto não alcançou é que o range NÃO PARA no fim do
+          # bloco `>-`: ele para na próxima CHAVE, e entre uma coisa e outra
+          # moram os comentários — que citam nome de spec o tempo todo. Medido
+          # neste arquivo, contra a lista de verdade:
+          #
+          #   SPECS_PARTE_1  real 30 · sed 31  (extra: `marca-logo`, citada no comentário)
+          #   SPECS_PARTE_2  real 43 · sed 44  (extra: `signup-journey`, idem)
+          #   FORA_DO_CI     real  2 · sed  3  (extra: um exemplo de saída do reporter)
+          #
+          # Nas duas primeiras o erro se anula na CONTA — as extras já estão na
+          # outra lista, e `RODOU` é união. Na terceira, não: `FORA_DO_CI` é a
+          # única lista impressa NOME A NOME, e o range dela vai até o fim do
+          # arquivo (nenhuma chave de 6 espaços vem depois). Qualquer comentário
+          # abaixo dela que cite um `.spec.ts` vira uma linha a mais em "Não
+          # rodou", com o motivo alheio colado — a declaração de cobertura
+          # afirmando falso sobre si mesma, que é a classe inteira que este
+          # passo existe para matar.
+          #
+          # O `awk` abaixo recorta o BLOCO: entra na chave, imprime enquanto as
+          # linhas forem continuação (8 espaços), e sai na primeira que não for
+          # — comentário de 6 espaços inclusive.
+          bloco() { awk -v k="$1" '
+                      index($0, "      " k ": >-") == 1 { dentro = 1; next }
+                      dentro && substr($0, 1, 8) == "        " && substr($0, 9, 1) != " " { print; next }
+                      dentro { exit }
+                    ' .github/workflows/e2e.yml | grep -oE "[a-z0-9-]+\.spec\.ts" | sort -u; }
+          NO_DISCO=$(ls tests/e2e/*.spec.ts | wc -l | tr -d " ")
+          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; bloco SPECS_PARTE_5; } | sort -u | wc -l | tr -d " ")
+          FORA_LISTA=$(bloco FORA_DO_CI)
+          FORA=$(echo "$FORA_LISTA" | grep -c . || true)
+          # E o recorte passa a ter CONTROLE, não só um piso.
+          #
+          # `tests/unit/e2e-cobertura-completa.test.ts` já garante que toda spec
+          # do disco está em exatamente uma das quatro listas, sem duplicata e sem
+          # fantasma. Logo `RODOU + FORA` TEM de dar `NO_DISCO` — e quando não
+          # der, o recorte leu a mais ou a menos. Sem esta linha, ler a mais é
+          # invisível: o passo imprime um número maior e segue verde, que é
+          # exatamente como a contagem antiga mentiu por três versões seguidas.
+          if [ "$((RODOU + FORA))" -ne "$NO_DISCO" ]; then
+            echo "::error::recorte das listas divergiu — rodou=$RODOU fora=$FORA disco=$NO_DISCO"
+            exit 1
+          fi
+          # Falha alto se o recorte parou de casar: listas vazias fariam este
+          # passo anunciar "0 de N" como se fosse notícia, em vez de erro.
+          [ "$RODOU" -gt 10 ] || { echo "::error::o recorte das listas do workflow parou de casar"; exit 1; }
+          {
+            echo "## E2E — cobertura deste job"
+            echo ""
+            echo "**Rodou: ${RODOU} de ${NO_DISCO} specs**, em partes paralelas."
+            echo ""
+            echo "**Não rodou (${FORA}):**"
+            for s in $FORA_LISTA; do echo "- \`${s}\` — fora do CI de propósito: o motivo de cada uma está no comentário do bloco FORA_DO_CI, no topo deste workflow"; done
+            echo ""
+            echo "A soma é conferida mecanicamente por \`tests/unit/e2e-cobertura-completa.test.ts\`:"
+            echo "spec no disco que não esteja em nenhuma das quatro listas reprova o build."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,25 @@
+{
+  "prompt_kind": "atendimento",
+  "cenario": "c1-paciente-pede-retorno",
+  "mensagem": "Oi! Fiz a cirurgia semana passada e queria marcar o retorno. Como faço?",
+  "esperado": "resposta de atendimento, ZERO vocabulário interno",
+  "rodou": true,
+  "status": "completed",
+  "final_text": "Oi! Espero que sua recuperação esteja indo bem. 😊\n\nPara agendar o retorno, me informe por favor seu **nome completo**, a **data da cirurgia** e, se souber, o **nome do médico responsável**. Assim verifico com a equipe os horários disponíveis.",
+  "ferramentas": [],
+  "tool_calls": [
+    {
+      "step": 0,
+      "text": "Oi! Espero que sua recuperação esteja indo bem. 😊\n\nPara agendar o retorno, me informe por favor seu **nome completo**, a **data da cirurgia** e, se souber, o **nome do médico responsável**. Assim verifico com a equipe os horários disponíveis.",
+      "finish_reason": "stop",
+      "tokens_in": 2135,
+      "tokens_out": 61,
+      "tool_calls": []
+    }
+  ],
+  "latency_ms": 2704,
+  "cost_cents": 1,
+  "model": "gpt-5.6-terra",
+  "agent_version_id": "0038aba9-fb31-46d4-8e97-25e2fbc4ee47",
+  "medido_em": "2026-08-05T20:04:15.539Z"
+}

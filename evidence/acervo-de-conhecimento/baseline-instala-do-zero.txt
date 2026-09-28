@@ -1,0 +1,17 @@
+# O baseline.sql deste PR aplicado do ZERO, como o install.sh faz
+
+SHA: 3d1246f4   |   Data: 2026-08-26T19:35:35-03:00
+
+É o gate que a doutrina de packaging pede e que o pnpm gov:verify não cobre:
+o self-hoster aplica SÓ o baseline.sql, e o apêndice da 0181 tem que subir
+num banco vazio com ON_ERROR_STOP=1.
+
+```console
+$ psql "$DB" -c "drop schema public cascade; create schema public;"  # + extensões
+$ psql "$DB" -v ON_ERROR_STOP=1 -f supabase/baseline.sql
+baseline INSTALL rc=0
+linhas com ^ERROR: 0
+```
+
+O caminho update (re-aplicar em banco existente, SEM ON_ERROR_STOP) é o que
+o pnpm test:db exercita a cada rodada — 119 arquivos, 926 testes, verde.

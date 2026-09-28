@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Pré-go-live do WhatsApp", "subtitle": "Lista por canal sem autorização implícita por origem", "output": "pre-go-live-whatsapp.html", "quality_profile": "standard" },
+  "lanes": [
+    { "id": "operador", "label": "Operação" },
+    { "id": "servidor", "label": "Servidor" },
+    { "id": "banco", "label": "Persistência" }
+  ],
+  "mainPath": ["tela", "api", "config", "gate", "inbox"],
+  "nodes": [
+    { "id": "tela", "lane": "operador", "col": 1, "type": "frontend", "label": "Conexões / ChannelAiAccess" },
+    { "id": "api", "lane": "servidor", "col": 2, "type": "route", "label": "GET/PATCH channel-sessions/:id/ai-access" },
+    { "id": "config", "lane": "banco", "col": 3, "type": "database", "label": "metadata / fn_configurar_pre_go_live_canal" },
+    { "id": "gate", "lane": "servidor", "col": 4, "type": "lib", "label": "gate.ts / drain / turnos / sweep / automação" },
+    { "id": "sink", "lane": "servidor", "col": 5, "type": "service", "label": "sendMessageHandler / redrive watchdog / releitura antes do envio" },
+    { "id": "inbox", "lane": "operador", "col": 5, "type": "frontend", "label": "Inbox / conversa real e atendimento humano" },
+    { "id": "audit", "lane": "banco", "col": 4, "type": "database", "label": "api_audit_log / channel.ai_access_updated" },
+    { "id": "auditTela", "lane": "operador", "col": 5, "type": "frontend", "label": "Audit Log / registro da operação" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "tela", "to": "api", "label": "admin configura" },
+    { "id": "e2", "from": "api", "to": "config", "label": "UPDATE atômico por tenant" },
+    { "id": "e3", "from": "config", "to": "tela", "label": "modo salvo e lista" },
+    { "id": "e4", "from": "config", "to": "gate", "label": "allowlist estrita por telefone" },
+    { "id": "e5", "from": "gate", "to": "sink", "label": "somente elegíveis" },
+    { "id": "e6", "from": "config", "to": "sink", "label": "mudança durante geração também barra" },
+    { "id": "e7", "from": "sink", "to": "inbox", "label": "mensagem enviada ou falha visível" },
+    { "id": "e8", "from": "inbox", "to": "tela", "label": "operador valida e abre/restringe" },
+    { "id": "e9", "from": "api", "to": "audit", "label": "modo e contagem, sem telefone" },
+    { "id": "e10", "from": "audit", "to": "auditTela", "label": "consulta de auditoria existente" }
+  ]
+}

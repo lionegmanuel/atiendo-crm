@@ -1,0 +1,40 @@
+# Override OPCIONAL para buildar a imagem localmente em vez de puxar do registry.
+# Uso (avançado — requer VPS >=4GB RAM ou swap; build leva ~15-25min num VPS):
+#   docker compose -f docker-compose.prod.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# O caminho normal (leigo) NÃO usa este arquivo — puxa a imagem pronta do GHCR.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Sem args de segredo: a imagem é genérica (NEXT_PUBLIC_* viram placeholder
+      # no build e os valores reais entram em runtime via env_file). APP_VERSION
+      # não é segredo — é o que /api/v1/health responde, e sem ele a imagem
+      # local diria "desconhecido", que é a resposta certa para uma imagem que
+      # não veio de release nenhuma.
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${APP_IMAGE:-deskcomm-app:local}
+    pull_policy: never
+
+  # O worker e o scheduler já têm `build:` no compose de produção (é o escape
+  # que mantém a mudança aditiva). O que este override acrescenta é o
+  # `pull_policy: never`: sem ele, um `up -d` iria ao registry e substituiria a
+  # imagem local em silêncio — o mesmo modo de falha que o runbook descreve
+  # para o app, e que já mordeu uma vez.
+  worker:
+    build:
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${WORKER_IMAGE:-deskcomm-worker:local}
+    pull_policy: never
+
+  scheduler:
+    build:
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${SCHEDULER_IMAGE:-deskcomm-scheduler:local}
+    pull_policy: never
