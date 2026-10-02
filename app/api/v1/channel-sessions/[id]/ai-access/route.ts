@@ -7,9 +7,11 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger";
 import {
-  aiAccessUpdateSchema, lerModoDeAcessoDaIa, lerNumerosDeTeste,
+  acessoPermiteAlguem, aiAccessUpdateSchema, lerModoDeAcessoDaIa, lerNumerosDeTeste,
 } from "@/lib/ai/elegibilidade/pre-go-live";
+import { reencaminharMensagensSemResposta } from "@/lib/ai/elegibilidade/reencaminhar";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ id: string }> };
@@ -40,16 +42,34 @@ export async function PATCH(req: NextRequest, { params }: Context): Promise<Resp
   const parsed = aiAccessUpdateSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("validation_failed", "Use telefones com DDI, por exemplo +5511999998888.", 422, { requestId });
   const { mode, test_phone_numbers } = parsed.data;
+  const admin = createAdminClient();
   // RPC atômica: não sobrescreve as demais configurações de metadata.
-  const { data, error } = await createAdminClient().rpc("fn_configurar_pre_go_live_canal", {
+  const { data, error } = await admin.rpc("fn_configurar_pre_go_live_canal", {
     p_org: auth.org.orgId, p_canal: id, p_modo: mode, p_numeros: test_phone_numbers,
   });
   if (error) return fail("internal_error", "Não foi possível salvar o acesso da IA. Verifique se o banco está atualizado.", 500, { requestId });
   if (data !== 1) return fail("not_found", "Canal não encontrado.", 404, { requestId });
+  // Quem escreveu enquanto o canal estava fechado recebe a resposta agora. Falha
+  // aqui não desfaz a configuração salva: vira log, e a próxima mensagem do
+  // cliente já é respondida normalmente.
+  let reencaminhadas = 0;
+  if (acessoPermiteAlguem(parsed.data)) {
+    try {
+      reencaminhadas = await reencaminharMensagensSemResposta(admin, auth.org.orgId, id);
+    } catch (err) {
+      logger.warn("ai-access: reencaminhar mensagens sem resposta falhou", {
+        request_id: requestId, channel_session_id: id,
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+      });
+    }
+  }
   void audit({
     action: "channel.ai_access_updated", actorUserId: auth.user.id,
     organizationId: auth.org.orgId, resourceType: "channel_session", resourceId: id, requestId,
-    metadata: { mode, test_phone_numbers_count: test_phone_numbers.length },
+    metadata: {
+      mode, test_phone_numbers_count: test_phone_numbers.length,
+      ...(reencaminhadas > 0 ? { reencaminhadas } : {}),
+    },
   });
-  return ok(parsed.data, { requestId });
+  return ok({ ...parsed.data, reencaminhadas }, { requestId });
 }

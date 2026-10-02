@@ -78,6 +78,30 @@ export function preGoLiveAtivo(metadata: unknown): boolean {
   return lerModoDeAcessoDaIa(metadata) === "pre_go_live";
 }
 
+/**
+ * Modo de teste com a lista vazia: a IA não responde NINGUÉM neste canal.
+ *
+ * É o estado em que todo canal novo nasce (`metadataInicialDoCanal`), e é
+ * legítimo — mas calado ele parece defeito: o agente publicado, a mensagem no
+ * Inbox, e nenhuma resposta. Quem publica um agente ou libera o canal precisa
+ * ver isto escrito antes, não descobrir no `event_log`.
+ */
+export function iaNaoRespondeNinguem(acesso: {
+  mode: AiAccessMode;
+  test_phone_numbers: readonly string[];
+}): boolean {
+  return acesso.mode === "pre_go_live" && acesso.test_phone_numbers.length === 0;
+}
+
+/**
+ * A configuração nova deixa alguém receber resposta automática? Decide se vale
+ * reencaminhar à IA as mensagens que chegaram enquanto o canal estava fechado
+ * (ver `reencaminharMensagensSemResposta`). Lista vazia em teste = ninguém.
+ */
+export function acessoPermiteAlguem(acesso: AiAccessUpdate): boolean {
+  return !iaNaoRespondeNinguem(acesso);
+}
+
 /** Todo canal criado pelo produto nasce fechado até uma abertura explícita. */
 export function metadataInicialDoCanal(): Record<string, unknown> {
   return {

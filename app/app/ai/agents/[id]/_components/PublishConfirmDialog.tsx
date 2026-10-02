@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import Link from "next/link";
 
 import {
   AlertDialog,
@@ -12,6 +13,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useT } from "@/hooks/i18n/useT";
+import { apiClient } from "@/lib/api/client";
+import { iaNaoRespondeNinguem, type AiAccessMode } from "@/lib/ai/elegibilidade/pre-go-live";
 
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
@@ -58,6 +61,33 @@ export function PublishConfirmDialog({
     draft.system_prompt.length - (published?.system_prompt.length ?? 0);
   const modelChanged = !published || draft.model !== published.model;
   const providerChanged = !published || draft.provider !== published.provider;
+
+  // Todo canal nasce em modo de teste com a lista vazia: publicar ali deixa a
+  // IA muda, e o único rastro era um `nao_elegivel_para_ia` no `event_log`.
+  // A leitura é só de administrador; para os demais o aviso simplesmente não
+  // aparece, e a publicação segue igual.
+  const canal = draft.channel_session_id;
+  // Guarda QUAL canal foi medido mudo: trocar de canal no rascunho não herda o
+  // aviso do anterior.
+  const [canalMedidoMudo, setCanalMedidoMudo] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!open || !canal) return;
+    let vivo = true;
+    apiClient
+      .get<{ data: { mode: AiAccessMode; test_phone_numbers: string[] } }>(
+        `/api/v1/channel-sessions/${canal}/ai-access`,
+      )
+      .then((r) => {
+        if (vivo) setCanalMedidoMudo(iaNaoRespondeNinguem(r.data) ? canal : null);
+      })
+      .catch(() => {
+        if (vivo) setCanalMedidoMudo(null);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [open, canal]);
+  const canalMudo = open && Boolean(canal) && canalMedidoMudo === canal;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -114,6 +144,23 @@ export function PublishConfirmDialog({
                 : t("sem alteração")}
           </p>
         </div>
+
+        {canalMudo ? (
+          <div
+            role="alert"
+            className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs"
+          >
+            <p className="font-medium">
+              {t("Este canal está em modo de teste sem números autorizados: depois de publicar, a IA não vai responder ninguém por ele.")}
+            </p>
+            <p className="text-muted-foreground">
+              {t("Abra Conexões › Configurar acesso da IA e escolha Liberar atendimento ao público, ou autorize um número de teste.")}{" "}
+              <Link href="/app/connections" className="underline underline-offset-2">
+                {t("Abrir Conexões")}
+              </Link>
+            </p>
+          </div>
+        ) : null}
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>{t("Cancelar")}</AlertDialogCancel>

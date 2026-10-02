@@ -89,9 +89,14 @@ function AccessForm({ channelId, initial, onClose, phoneTesting }: { channelId: 
     setBusy(true);
     setError(null);
     try {
-      const saved = await apiClient.patch<{ data: Access }>(`/api/v1/channel-sessions/${channelId}/ai-access`, parsed.data);
+      const saved = await apiClient.patch<{ data: Access & { reencaminhadas?: number } }>(`/api/v1/channel-sessions/${channelId}/ai-access`, parsed.data);
       qc.setQueryData(["channel-ai-access", channelId], saved);
-      toast.success(t("Acesso da IA atualizado."));
+      const n = saved.data.reencaminhadas ?? 0;
+      toast.success(t("Acesso da IA atualizado."), n > 0 ? {
+        description: n === 1
+          ? t("A IA vai responder agora 1 conversa que ficou sem resposta.")
+          : `${t("A IA vai responder agora as conversas que ficaram sem resposta:")} ${n}`,
+      } : undefined);
       onClose();
     } catch {
       setError(t("Não foi possível confirmar o salvamento. Reabra este painel para conferir a configuração."));

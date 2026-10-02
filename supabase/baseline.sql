@@ -39293,6 +39293,66 @@ create trigger trg_aviso_da_central_criado
   after insert on public.agent_inbox_items
   for each row execute function public.fn_emit_aviso_da_central();
 
+-- ---- o funil semeado no idioma da organização (migration 0444) ----
+-- `fn_seed_default_pipeline_for_org` passa a nomear as etapas em espanhol quando
+-- a organização nasce com `locale` espanhol; o slug não muda. Backfill só das
+-- etapas que ainda têm o nome português semeado, em organizações em espanhol.
+-- Fica ACIMA da varredura de `anon` (ver o bloco seguinte). Idempotente.
+create or replace function public.fn_seed_default_pipeline_for_org() returns trigger
+    language plpgsql
+    set search_path to 'public', 'pg_temp'
+    as $$
+declare
+  v_pipeline_id uuid;
+  v_position numeric := 1000;
+  v_es boolean := coalesce(new.locale, '') = 'es' or coalesce(new.locale, '') like 'es-%';
+  r record;
+begin
+  insert into public.crm_pipelines (organization_id, name, slug, is_default, position)
+  values (new.id, 'Pedidos', 'pedidos', true, 1000)
+  returning id into v_pipeline_id;
+
+  for r in
+    select * from (values
+      ('Carrinho abandonado',  'Carrito abandonado', 'carrinho_abandonado',  false, false),
+      ('Aguardando pagamento', 'Esperando el pago',  'aguardando_pagamento', false, false),
+      ('Pago',                 'Pagado',             'pago',                 true,  false),
+      ('Em separação',         'En preparación',     'em_separacao',         false, false),
+      ('Enviado',              'Enviado',            'enviado',              false, false),
+      ('Entregue',             'Entregado',          'entregue',             false, false),
+      ('Pós-venda',            'Posventa',           'pos_venda',            false, false),
+      ('Cancelado',            'Cancelado',          'cancelado',            false, true)
+    ) as t(stage_name, stage_name_es, stage_slug, won, lost)
+  loop
+    insert into public.crm_stages (organization_id, pipeline_id, name, slug, position, is_won, is_lost)
+    values (new.id, v_pipeline_id, case when v_es then r.stage_name_es else r.stage_name end,
+            r.stage_slug, v_position, r.won, r.lost);
+    v_position := v_position + 1000;
+  end loop;
+
+  return new;
+end$$;
+
+update public.crm_stages s
+   set name = t.nome_es
+  from (values
+      ('carrinho_abandonado',  'Carrinho abandonado',  'Carrito abandonado'),
+      ('aguardando_pagamento', 'Aguardando pagamento', 'Esperando el pago'),
+      ('pago',                 'Pago',                 'Pagado'),
+      ('em_separacao',         'Em separação',         'En preparación'),
+      ('entregue',             'Entregue',             'Entregado'),
+      ('pos_venda',            'Pós-venda',            'Posventa')
+  ) as t(slug, nome_pt, nome_es),
+       public.crm_pipelines p,
+       public.organizations o
+ where s.slug = t.slug
+   and s.name = t.nome_pt
+   and p.id = s.pipeline_id
+   and p.organization_id = s.organization_id
+   and p.slug = 'pedidos'
+   and o.id = s.organization_id
+   and (o.locale = 'es' or o.locale like 'es-%');
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria

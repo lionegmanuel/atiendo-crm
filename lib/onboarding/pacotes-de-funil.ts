@@ -18,6 +18,8 @@
  * quadro errado por um quadro certo e igualmente parado — ver o cabeçalho de
  * `proposta-de-funil.ts` para a medição.
  */
+import { traduzir } from "@/lib/i18n/dicionario";
+import type { Idioma } from "@/lib/i18n/idiomas";
 import type { PropostaDeFunil } from "@/lib/onboarding/proposta-de-funil";
 
 export interface PacoteDeFunil {
@@ -145,3 +147,26 @@ export const PACOTE_PADRAO: PacoteDeFunil =
   (() => {
     throw new Error("PACOTES sem o pacote genérico — ele é o último recurso do passo do funil");
   })();
+
+/**
+ * O pacote no idioma de quem vai usá-lo.
+ *
+ * Os nomes do quadro não são rótulo de tela: a pessoa edita e GRAVA esse texto,
+ * e ele vira a coluna do funil dela. Traduzir só na renderização deixaria a tela
+ * em espanhol e o funil gravado em português. Por isso a tradução acontece no
+ * dado, antes de chegar ao formulário — com o mesmo dicionário das telas (a chave
+ * é o texto em português; o que não tiver tradução fica como está).
+ *
+ * `comoSeApresenta` NÃO é traduzido aqui: é rótulo de tela, e a tela já o passa
+ * por `t()`. Traduzir duas vezes seria inofensivo hoje e frágil amanhã.
+ */
+export function pacoteNoIdioma(pacote: PacoteDeFunil, idioma: Idioma): PacoteDeFunil {
+  if (idioma === "pt-BR") return pacote;
+  return {
+    ...pacote,
+    proposta: {
+      nome: traduzir(pacote.proposta.nome, idioma),
+      etapas: pacote.proposta.etapas.map((e) => ({ ...e, nome: traduzir(e.nome, idioma) })),
+    },
+  };
+}

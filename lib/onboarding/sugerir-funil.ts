@@ -23,7 +23,13 @@ import {
   validarProposta,
   type PropostaDeFunil,
 } from "@/lib/onboarding/proposta-de-funil";
-import { PACOTES, PACOTE_PADRAO, type PacoteDeFunil } from "@/lib/onboarding/pacotes-de-funil";
+import {
+  PACOTES,
+  PACOTE_PADRAO,
+  pacoteNoIdioma,
+  type PacoteDeFunil,
+} from "@/lib/onboarding/pacotes-de-funil";
+import type { Idioma } from "@/lib/i18n/idiomas";
 
 /** O que se sabe do negócio quando a sugestão é pedida. */
 export interface ContextoDoNegocio {
@@ -31,7 +37,16 @@ export interface ContextoDoNegocio {
   nome: string;
   /** O que ele respondeu quando perguntamos o que o negócio faz. */
   oQueFaz: string;
+  /**
+   * O idioma em que as colunas vão ser GRAVADAS. Sem ele a IA respondia em
+   * português (o pedido é em português) e a instalação em espanhol ganhava um
+   * funil em outra língua. Ausente = português, como antes.
+   */
+  idioma?: Idioma;
 }
+
+/** Como pedir o idioma à IA. Só o que difere do português precisa de linha. */
+const IDIOMA_DAS_COLUNAS: Partial<Record<Idioma, string>> = { es: "espanhol" };
 
 /**
  * Palavras que o próprio dono usaria — não nomes de vertical de mercado.
@@ -44,7 +59,8 @@ export interface ContextoDoNegocio {
 const PISTAS: Record<string, RegExp> = {
   clinica:
     /\b(cl[ií]nic|consult[óo]ri|dentist|odonto|m[ée]dic|terapeut|psic[óo]log|fisioterap|est[ée]tic|sal[ãa]o|barbear|petshop|veterin[áa]ri|nutricion)/i,
-  imobiliaria: /\b(imobili[áa]ri|corret|im[óo]ve|apartament|alugu[ée]|loteament|terren)/i,
+  imobiliaria:
+    /\b(in?mobili[áa]ri|corret|im[óo]ve|inmueble|propiedad|apartament|departament|alugu[ée]|alquil|loteament|terren)/i,
   servicos:
     /\b(ag[êe]nci|consultori|advocac|advogad|contabil|arquitet|engenhar|reform|obra|marcenar|servi[çc]o|manuten[çc]|instala[çc])/i,
   curso: /\b(curso|mentori|infoprodut|aula|treinament|workshop|escola|ensino|coach)/i,
@@ -78,6 +94,8 @@ export function pedidoDeSugestao(
   ctx: ContextoDoNegocio,
   exemplo: PacoteDeFunil,
 ): { system: string; prompt: string } {
+  const idiomaDasColunas = ctx.idioma ? IDIOMA_DAS_COLUNAS[ctx.idioma] : undefined;
+  const modelo = ctx.idioma ? pacoteNoIdioma(exemplo, ctx.idioma) : exemplo;
   const passos = [
     '"new" — acabou de chamar, ninguém respondeu ainda',
     '"contacted" — já foi respondido',
@@ -105,7 +123,13 @@ export function pedidoDeSugestao(
       `- ${passos}`,
       "",
       `Exemplo do formato (é de outro negócio — não copie os nomes, adapte ao "${ctx.nome}"):`,
-      JSON.stringify({ nome: exemplo.proposta.nome, etapas: exemplo.proposta.etapas }, null, 2),
+      JSON.stringify({ nome: modelo.proposta.nome, etapas: modelo.proposta.etapas }, null, 2),
+      ...(idiomaDasColunas
+        ? [
+            "",
+            `Escreva o "nome" do quadro e de cada coluna em ${idiomaDasColunas}. Os valores de "passo" ficam como estão.`,
+          ]
+        : []),
     ].join("\n"),
   };
 }

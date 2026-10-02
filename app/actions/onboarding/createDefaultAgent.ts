@@ -12,6 +12,8 @@ import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiAgentDefaultSchema, type PromptTemplate } from "@/lib/schemas/onboarding";
 import { publicarMemoriaDaOrg } from "@/lib/ai/memoria-da-org";
+import { idiomaDaInstalacao } from "@/lib/i18n/idiomaDaInstalacao";
+import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 import {
   requireOnboardingCtx,
   patchOnboardingState,
@@ -33,10 +35,18 @@ import {
  * que ele entendeu onde está. O ramo é o que o dono respondeu no primeiro passo;
  * quem não respondeu recebe a versão sem ele, e não uma inventada.
  */
-function ondeTrabalha(negocio: string, oQueFaz: string | undefined): string {
-  return oQueFaz ? `${negocio}, que é: ${oQueFaz}` : negocio;
+function ondeTrabalha(negocio: string, oQueFaz: string | undefined, idioma: Idioma): string {
+  if (!oQueFaz) return negocio;
+  return idioma === "es" ? `${negocio}, que es: ${oQueFaz}` : `${negocio}, que é: ${oQueFaz}`;
 }
 
+/**
+ * O prompt nasce no idioma da organização. Ele é o que o funcionário LÊ como
+ * instrução, então um prompt em português numa instalação em espanhol fazia o
+ * agente começar o atendimento misturando os dois idiomas — e o dono, que abre
+ * o editor para ajustar, encontrava um texto que não escreveu nem entende.
+ * Idioma sem corpo próprio cai no português, que é a base do produto.
+ */
 const PROMPT_BODIES: Record<PromptTemplate, (onde: string) => string> = {
   ecommerce_friendly: (n) =>
     `Você atende os clientes de ${n}. Fale de forma calorosa e próxima, como alguém que gosta de ajudar. Cumprimente, entenda o que a pessoa precisa e ofereça opções claras. Confirme os detalhes antes de agir.`,
@@ -45,6 +55,19 @@ const PROMPT_BODIES: Record<PromptTemplate, (onde: string) => string> = {
   support_minimal: (n) =>
     `Você atende os clientes de ${n}. Responda em frases curtas, peça apenas o que for necessário e chame uma pessoa do time assim que a dúvida sair do seu alcance.`,
 };
+
+const PROMPT_BODIES_ES: Record<PromptTemplate, (onde: string) => string> = {
+  ecommerce_friendly: (n) =>
+    `Atiendes a los clientes de ${n}. Habla de forma cálida y cercana, como alguien a quien le gusta ayudar. Saluda, entiende lo que la persona necesita y ofrece opciones claras. Confirma los detalles antes de actuar. Responde siempre en español.`,
+  ecommerce_professional: (n) =>
+    `Atiendes a los clientes de ${n}. Habla de forma objetiva, cordial y profesional. Ve directo al punto, sin sonar frío, y termina siempre indicando el próximo paso. Responde siempre en español.`,
+  support_minimal: (n) =>
+    `Atiendes a los clientes de ${n}. Responde con frases cortas, pide solo lo necesario y deriva a una persona del equipo apenas la consulta se salga de tu alcance. Responde siempre en español.`,
+};
+
+function corpoDoPrompt(template: PromptTemplate, idioma: Idioma): (onde: string) => string {
+  return idioma === "es" ? PROMPT_BODIES_ES[template] : PROMPT_BODIES[template];
+}
 
 /** O agente padrão desta organização, do jeito que este passo precisa vê-lo. */
 interface AgenteDoOnboarding {
@@ -142,7 +165,24 @@ export async function createDefaultAgent(formData: FormData): Promise<CreateAgen
     oQueFaz = undefined;
   }
 
-  const systemPrompt = PROMPT_BODIES[input.prompt_template](ondeTrabalha(ctx.orgName, oQueFaz));
+  // O idioma da ORGANIZAÇÃO (gravado no cadastro a partir de `APP_LOCALE`), com
+  // a instalação como piso. Falha de leitura degrada para o da instalação.
+  let idioma: Idioma = idiomaDaInstalacao();
+  try {
+    const { data: org } = await admin
+      .from("organizations")
+      .select("locale")
+      .eq("id", ctx.orgId)
+      .maybeSingle();
+    const locale = (org as { locale?: string | null } | null)?.locale;
+    if (locale) idioma = normalizarIdioma(locale);
+  } catch {
+    // mantém o idioma da instalação
+  }
+
+  const systemPrompt = corpoDoPrompt(input.prompt_template, idioma)(
+    ondeTrabalha(ctx.orgName, oQueFaz, idioma),
+  );
 
   // O agente padrão do onboarding é UM por organização, e o banco já garante
   // isso: `ai_agents_one_default_per_org` é índice único parcial em

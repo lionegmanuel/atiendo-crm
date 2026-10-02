@@ -4,6 +4,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { dadosDoPasso } from "@/app/actions/onboarding/montarQuadro";
 import { QuadroClient } from "./_client";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { pacoteNoIdioma } from "@/lib/onboarding/pacotes-de-funil";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,12 @@ export default async function FunilPage() {
   if (!activeOrg) redirect("/login");
   const idioma = user.idioma;
 
-  const { atual, sugestao } = await dadosDoPasso(activeOrg.orgId, activeOrg.name);
+  const { atual, sugestao: sugestaoCrua } = await dadosDoPasso(activeOrg.orgId, activeOrg.name, idioma);
+  // O pacote pronto chega à tela no idioma de quem vai gravá-lo (ver `pacoteNoIdioma`).
+  const sugestao =
+    sugestaoCrua.origem === "pacote"
+      ? { ...sugestaoCrua, pacote: pacoteNoIdioma(sugestaoCrua.pacote, idioma) }
+      : sugestaoCrua;
 
   return (
     <div className="space-y-6">

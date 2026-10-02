@@ -23,6 +23,7 @@ import {
   type PropostaDeFunil,
 } from "@/lib/onboarding/proposta-de-funil";
 import { escolherPacotePorTexto, sugerirFunil, type Sugestao } from "@/lib/onboarding/sugerir-funil";
+import type { Idioma } from "@/lib/i18n/idiomas";
 import { requireOnboardingCtx, patchOnboardingState, loadOnboardingState, OnboardingError } from "./_shared";
 
 /** O funil que o gatilho semeou — o que a pessoa tem antes deste passo. */
@@ -125,7 +126,11 @@ export interface DadosDoPasso {
  * passo com a proposta pronta na tela; pedir que ela clique em "gerar sugestão"
  * primeiro seria cobrar um passo a mais para chegar ao mesmo lugar.
  */
-export async function dadosDoPasso(orgId: string, negocio: string): Promise<DadosDoPasso> {
+export async function dadosDoPasso(
+  orgId: string,
+  negocio: string,
+  idioma?: Idioma,
+): Promise<DadosDoPasso> {
   const admin = createAdminClient();
   const atual = await carregarQuadroAtual(admin, orgId);
 
@@ -137,7 +142,7 @@ export async function dadosDoPasso(orgId: string, negocio: string): Promise<Dado
     oQueFaz = "";
   }
 
-  const ctx = { nome: negocio, oQueFaz };
+  const ctx = { nome: negocio, oQueFaz, idioma };
   const cerebro = await cerebroDoFuncionario(admin, orgId);
 
   if ("erro" in cerebro) {

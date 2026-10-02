@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  acessoPermiteAlguem,
   aiAccessUpdateSchema,
+  iaNaoRespondeNinguem,
   lerModoDeAcessoDaIa,
   lerNumerosDeTeste,
   metadataInicialDoCanal,
@@ -41,6 +43,18 @@ describe("pré-go-live do canal", () => {
     expect(
       lerNumerosDeTeste({ ai_test_phone_numbers: ["lixo", "+5511987654321", 42] }),
     ).toEqual(["+5511987654321"]);
+  });
+
+  it("modo de teste com lista vazia é o único estado em que a IA não responde ninguém", () => {
+    const aoNascer = {
+      mode: lerModoDeAcessoDaIa(metadataInicialDoCanal()),
+      test_phone_numbers: lerNumerosDeTeste(metadataInicialDoCanal()),
+    };
+    expect(iaNaoRespondeNinguem(aoNascer)).toBe(true);
+    expect(acessoPermiteAlguem({ mode: "pre_go_live", test_phone_numbers: [] })).toBe(false);
+    expect(acessoPermiteAlguem({ mode: "pre_go_live", test_phone_numbers: ["+5585987654321"] })).toBe(true);
+    expect(acessoPermiteAlguem({ mode: "open", test_phone_numbers: [] })).toBe(true);
+    expect(iaNaoRespondeNinguem({ mode: "allowlist", test_phone_numbers: [] })).toBe(false);
   });
 
   it("reconhece o mesmo celular brasileiro com ou sem o nono dígito", () => {

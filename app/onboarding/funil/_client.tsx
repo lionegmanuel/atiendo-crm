@@ -3,13 +3,14 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { aplicarQuadro, pularQuadro, type QuadroAtual } from "@/app/actions/onboarding/montarQuadro";
 import { explicacaoDoPasso } from "@/lib/leads/agent-mapping";
 import { MAX_ETAPAS, MIN_ETAPAS, type PropostaDeFunil } from "@/lib/onboarding/proposta-de-funil";
-import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
+import { PACOTES, pacoteNoIdioma } from "@/lib/onboarding/pacotes-de-funil";
 import type { Sugestao } from "@/lib/onboarding/sugerir-funil";
 
 /**
@@ -27,6 +28,7 @@ export function QuadroClient({
   sugestao: Sugestao;
 }) {
   const t = useT();
+  const idioma = useIdioma();
   const inicial: PropostaDeFunil =
     sugestao.origem === "ia" ? sugestao.proposta : sugestao.pacote.proposta;
 
@@ -70,7 +72,7 @@ export function QuadroClient({
   function usarPacote(id: string) {
     const p = PACOTES.find((x) => x.id === id);
     if (!p) return;
-    setQuadro(p.proposta);
+    setQuadro(pacoteNoIdioma(p, idioma).proposta);
     // A origem acompanha: o resumo do onboarding registra de onde o quadro veio,
     // e manter "ia" depois de a pessoa escolher outro seria registrar mentira.
     setOrigem("pacote");

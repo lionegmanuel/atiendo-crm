@@ -46,9 +46,15 @@ pnpm install
 
 ### 2. Base de datos (Supabase)
 
-En tu proyecto de Supabase: **SQL Editor** → **New query** → pegá todo el contenido de [`supabase/baseline.sql`](supabase/baseline.sql) → **Run**.
+Recomendado, por terminal (no depende de pegar 40.000 líneas en el navegador y al final confirma que la base quedó completa):
 
-> Alternativa por terminal, con `SUPABASE_DB_URL` ya cargada en `.env.local`: `pnpm db:setup`.
+```bash
+pnpm db:aplicar -- --url="postgresql://postgres.<ref>:<clave>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+```
+
+La cadena sale de Supabase › botón **Connect** › *Session pooler*. Si ya la cargaste como `SUPABASE_DB_URL` en `.env.local` (paso 3), alcanza con `pnpm db:aplicar`. Tiene que terminar con **✓ Instalación completa**. Es seguro correrlo de nuevo, por ejemplo después de cada `git pull`.
+
+> Alternativa: Supabase › **SQL Editor** → **New query** → pegá todo [`supabase/baseline.sql`](supabase/baseline.sql) → **Run**. Después comprobá que llegó al final con `pnpm db:aplicar -- --solo-verificar` (no modifica nada).
 
 Recomendado: en **Authentication › Sign In / Providers › Email**, desactivá **Confirm email** para no depender del correo de confirmación.
 
@@ -97,6 +103,7 @@ Correlo **después** de crear tu cuenta y **antes** de conectar Zernio.
 2. En el CRM: **Conexiones** → **Proveedor asociado** → ID de la cuenta de WhatsApp + API key de Zernio → **Conectar**.
 3. Copiá la **URL del webhook** y el **secreto** (se muestra una sola vez) y pegalos en Zernio › **Webhooks**, con los eventos de mensajes activos.
 4. **Agentes** → tu agente → **Número conectado** → **Publicar**. Sin publicar, el agente no responde.
+5. **Conexiones** → **Proveedor asociado** → **Configurar acceso de la IA** → **Habilitar atención al público**. Todo número nuevo arranca en *modo de prueba* con la lista vacía: así la IA no le responde a nadie. Si preferís probar primero, cargá tu número en la lista (con código de país, por ejemplo `+5491122334455`) y habilitá al público después. Los mensajes que llegaron mientras estaba cerrado (últimas 24 h) se responden en ese momento.
 
 Listo: mandá un WhatsApp desde otro teléfono y mirá cómo entra al Inbox, aparece en el embudo y responde la IA.
 
@@ -115,7 +122,8 @@ Requiere que tu clave de OpenAI tenga acceso a embeddings: platform.openai.com �
 | `pnpm demo` se cierra al arrancar | Falta una variable en `.env.local` (ver paso 3). |
 | `[tunel]` muestra `ERR_NGROK_334` | Ya hay otro ngrok abierto con tu dominio: cerralo. |
 | El mensaje no aparece en el Inbox | Revisá la URL y el secreto en Zernio › Webhooks. En la terminal, `assinatura recusada` indica un secreto mal pegado. |
-| El mensaje entra pero la IA no responde | El agente no está publicado con el número conectado. |
+| El mensaje entra pero la IA no responde | El agente no está publicado con el número conectado, o el número sigue en *modo de prueba*: Conexiones › Configurar acceso de la IA › Habilitar atención al público (paso 7.5). |
+| Error `column crm_stages.avisar_na_central does not exist` | La base quedó incompleta: corré `pnpm db:aplicar`. |
 
 ## Comandos útiles
 
@@ -123,7 +131,7 @@ Requiere que tu clave de OpenAI tenga acceso a embeddings: platform.openai.com �
 |---|---|
 | `pnpm demo` | App + agente de IA + túnel, en una terminal |
 | `pnpm build` | Compila la app (necesario antes de `pnpm demo`) |
-| `pnpm db:setup` | Aplica la base de datos en Supabase |
+| `pnpm db:aplicar` | Aplica o actualiza la base de datos en Supabase y verifica que quedó completa (`-- --solo-verificar` solo verifica) |
 | `pnpm typecheck` · `pnpm lint` · `pnpm test:unit` | Verificaciones de código |
 
 ---

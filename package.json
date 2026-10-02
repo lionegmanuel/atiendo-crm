@@ -17,6 +17,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json,css}\"",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "db:setup": "node scripts/migrar-supabase.js",
+    "db:aplicar": "tsx --env-file-if-exists=.env.local scripts/aplicar-baseline.ts",
     "db:migrate": "echo 'TODO: wire supabase db push or pg-migrate' && exit 0",
     "db:reset": "supabase db reset",
     "test:e2e": "playwright test",
