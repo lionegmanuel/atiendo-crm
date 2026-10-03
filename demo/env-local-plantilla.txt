@@ -1,67 +1,76 @@
-=====================================================================
- .env.local — qué va y de dónde sale cada valor
-=====================================================================
-Tu .env.local YA ESTÁ COMPLETO y probado con tu proyecto de Supabase
-(el que se usa en el video). Esta plantilla es para mostrarlo en
-cámara y explicar de dónde sale cada valor.
+# =====================================================================
+#  .env.local - Plantilla de configuración de Atiendo CRM
+# =====================================================================
+#  Copiá este archivo como .env.local en la raíz del proyecto y
+#  completá los valores. Ya es un archivo de entorno válido: las líneas
+#  que empiezan con # son comentarios.
+#
+#  "pnpm demo" corre la app en modo producción local: si falta alguna
+#  variable marcada OBLIGATORIA, el CRM no arranca.
+#
+#  Las opciones avanzadas (Redis, servidor QR propio, e-mail, etc.)
+#  están documentadas en .env.example.
+# ---------------------------------------------------------------------
 
-pnpm demo corre la app en modo producción: si falta cualquier
-variable marcada OBLIGATORIA, el CRM no arranca.
----------------------------------------------------------------------
+# --- 1. Personalización de Marca (White-Label) ---
+APP_NAME="Atiendo CRM"                # El nombre de tu empresa o producto
+APP_ACCENT_HEX="#10b981"              # Color primario de botones (ej. verde esmeralda #10b981)
+APP_LOCALE=es                        # Interfaz, login y organización en español
 
-# --- Marca (sin tocar código) ---
-APP_NAME="Atiendo CRM"                # el nombre de tu marca
-APP_ACCENT_HEX="#10b981"
-APP_LOCALE=es                        # interfaz, login y empresa nueva en español
+# --- 2. Base de Datos (Supabase) ---
+# En Supabase: Project Settings > Data API (para URL) y API Keys
+NEXT_PUBLIC_SUPABASE_URL=https://<TU-PROYECTO>.supabase.co      # OBLIGATORIA
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<TU-ANON-KEY>                    # OBLIGATORIA
+SUPABASE_SERVICE_ROLE_KEY=<TU-SERVICE-ROLE-KEY>                # OBLIGATORIA
 
-# --- Supabase ---
-# Supabase > Project Settings > API Keys (y Data API para la URL)
-NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co          # OBLIGATORIA
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>                    # OBLIGATORIA
-SUPABASE_SERVICE_ROLE_KEY=<service_role key>                # OBLIGATORIA
-# Supabase > botón "Connect" > "Session pooler" (funciona con IPv4).
-# Si la contraseña tiene "@", va escrita como %40.
-SUPABASE_DB_URL=postgresql://postgres.<ref>:<PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres   # OBLIGATORIA
+# En Supabase: botón "Connect" > "Session pooler" (puerto 5432, compatible con IPv4).
+# Si la contraseña tiene caracteres especiales como "@", escribila como %40.
+SUPABASE_DB_URL=postgresql://postgres.<TU-PROYECTO>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:5432/postgres   # OBLIGATORIA
 
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# --- Secretos: se GENERAN, nunca se copian de un ejemplo ---
+# --- 3. Claves Criptográficas Internas ---
+# Generá cada clave (una distinta para cada variable) con:
 # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-INTERNAL_SECRET=<64 hex>                                    # OBLIGATORIA
-CPF_ENCRYPTION_KEY=<64 hex>                                 # OBLIGATORIA
-WAHA_BYO_ENCRYPTION_KEY=<64 hex>                            # OBLIGATORIA
+INTERNAL_SECRET=<64_CARACTERES_HEX>                                # OBLIGATORIA
+CPF_ENCRYPTION_KEY=<64_CARACTERES_HEX>                             # OBLIGATORIA
+WAHA_BYO_ENCRYPTION_KEY=<64_CARACTERES_HEX>                        # OBLIGATORIA
+IMPERSONATE_COOKIE_SECRET=<64_CARACTERES_HEX>                      # OBLIGATORIA
+
+# Generá la clave Base64 de exactamente 32 bytes con:
 # node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-# Tiene que medir EXACTAMENTE 32 bytes; si no, no se puede guardar la key de OpenAI.
-AI_CRED_AES_KEY=<base64 de 32 bytes>                        # OBLIGATORIA
-# No cambiar AI_CRED_AES_KEY después de cargar la key de OpenAI en el CRM.
+AI_CRED_AES_KEY=<32_BYTES_BASE64>                                  # OBLIGATORIA
+# No cambies AI_CRED_AES_KEY después de guardar claves de IA en el CRM:
+# las que ya estén guardadas dejarían de poder leerse.
 
-# --- IA ---
-OPENAI_API_KEY=sk-...        # la misma que pegás en el onboarding
+# --- 4. Inteligencia Artificial (OpenAI) ---
+# Clave de OpenAI para el agente de ventas (obtenida en platform.openai.com)
+OPENAI_API_KEY=sk-...
 
-# --- WhatsApp por Zernio ---
-# Tu dominio FIJO de ngrok (dashboard.ngrok.com > Domains). Sin barra al final.
+# --- 5. WhatsApp con Zernio (Modo Coexistencia QR) ---
+# Tu dominio fijo de ngrok (dashboard.ngrok.com > Domains). Sin barra al final.
 CHANNEL_WEBHOOK_BASE_URL=https://tu-dominio.ngrok-free.dev
-# VACÍAS a propósito: la cuenta y la API key de Zernio se cargan en
-# Conexiones > Proveedor asociado (quedan cifradas por empresa).
+
+# Dejar vacías por defecto: el ID de cuenta y la API Key de Zernio
+# se vinculan de forma segura desde la interfaz web del CRM
+# en: Conexiones > Proveedor asociado (se cifran en base de datos por organización).
 ZERNIO_API_KEY=
 ZERNIO_ACCOUNT_ID=
 
-# --- WAHA y Redis: NO se usan acá, pero el modo producción exige que existan ---
+# --- 6. Servicios Auxiliares en Modo Local ---
+# En modo Zernio no se requiere servidor WAHA ni Redis externo.
+# Se configuran valores neutros de fallback para validaciones internas:
 WAHA_API_BASE_URL=http://127.0.0.1:9
 WAHA_API_KEY=sin-waha
 WAHA_WEBHOOK_BASE_URL=http://localhost:3000
 UPSTASH_REDIS_REST_URL=sin-redis-local
 UPSTASH_REDIS_REST_TOKEN=sin-redis-local
 
-# --- Solo para grabar: que la IA responda en segundos ---
-# Por defecto espera 8 s por si llegan más mensajes seguidos y revisa la
-# cola cada 15 s cuando está ociosa (respuesta en 10-25 s).
-# Consultan la base más seguido: sacarlas después de grabar.
-INBOUND_DEBOUNCE_MS=1500
-CRM_DRAIN_IDLE_INTERVAL_MS=1000
-QUEUE_POLL_INTERVAL_MS=500
-
----------------------------------------------------------------------
-Nota: tu .env.local actual tiene ZERNIO_API_KEY con valor. No molesta
-(sin ZERNIO_ACCOUNT_ID el CRM no la usa), pero si vas a mostrar el
-archivo en cámara, conviene dejarla vacía para no exponerla.
+# --- 7. Tiempos de Respuesta del Agente (OPCIONAL) ---
+# Por defecto el agente espera 8 s por si el cliente manda varios mensajes
+# seguidos y revisa la cola cada 15 s cuando está ocioso (responde en 10-25 s).
+# Para una demo en vivo podés acelerarlo descomentando estas líneas, a costa de
+# consultar la base mucho más seguido (cuenta para los límites de Supabase):
+# INBOUND_DEBOUNCE_MS=2000
+# CRM_DRAIN_IDLE_INTERVAL_MS=1000
+# QUEUE_POLL_INTERVAL_MS=500

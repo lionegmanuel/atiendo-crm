@@ -50,3 +50,12 @@ describe("configuração REST do Redis", () => {
     });
   });
 });
+
+describe("instalación sin Redis (valor neutro de la plantilla del fork)", () => {
+  it("`sin-redis-local` es no configurado, no configuración inválida", () => {
+    expect(validarConfigRedisRest("sin-redis-local", "sin-redis-local")).toEqual({
+      ok: false,
+      reason: "nao_configurado",
+    });
+  });
+});

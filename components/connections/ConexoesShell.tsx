@@ -57,8 +57,13 @@ export function ConexoesShell({
   const router = useRouter();
   const params = useSearchParams();
   const abaParam = params.get("tab") ?? params.get("aba");
+  // Sin servidor QR propio, la aba "Números por QR" no puede conectar nada: la
+  // que funciona de entrada es la del proveedor asociado.
+  const abaPadrao = wahaConfigured ? "numeros" : "parceiro";
   const aba =
-    abaParam === "sociais" || abaParam === "social" || abaParam === "sociales"
+    abaParam === "numeros" || abaParam === "qr"
+      ? "numeros"
+      : abaParam === "sociais" || abaParam === "social" || abaParam === "sociales"
       ? "sociais"
       : abaParam === "oficial" || abaParam === "official"
       ? "oficial"
@@ -70,12 +75,12 @@ export function ConexoesShell({
             ? "voz"
             : abaParam === "graph" && graphParceiro
               ? "graph"
-              : "numeros";
+              : abaPadrao;
   const sub = params.get("sub") === "templates" ? "templates" : "conexao";
 
   const irPara = (proximaAba: string, proximaSub?: string): void => {
     const q = new URLSearchParams();
-    if (proximaAba !== "numeros") q.set("aba", proximaAba);
+    if (proximaAba !== abaPadrao) q.set("aba", proximaAba);
     if (proximaSub && proximaSub !== "conexao") q.set("sub", proximaSub);
     const qs = q.toString();
     // `scroll: false`: trocar de aba não é navegar para outra página; jogar o

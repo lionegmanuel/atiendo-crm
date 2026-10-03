@@ -21,8 +21,14 @@ export default async function ConnectionsPage() {
   const idioma = user.idioma;
 
   const key = process.env.WAHA_API_KEY;
+  // `sin-waha` es el valor neutro de `demo/env-local-plantilla.txt`: el modo
+  // producción exige la variable, pero no hay servidor QR propio detrás. Tratarlo
+  // como configurado habilitaba "Conectar" y dejaba un canal roto en "Se cayó".
   const wahaConfigured = Boolean(
-    process.env.WAHA_API_BASE_URL && key && key !== "dev_plaintext_change_me",
+    process.env.WAHA_API_BASE_URL &&
+      key &&
+      key !== "dev_plaintext_change_me" &&
+      key !== "sin-waha",
   );
   const wacallsConfigured = Boolean(process.env.WACALLS_API_BASE_URL);
 

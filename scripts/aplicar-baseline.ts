@@ -214,6 +214,12 @@ const VERIFICACOES: ReadonlyArray<{ nome: string; sql: string }> = [
            where n.nspname = 'public' and p.proname = 'fn_seed_default_pipeline_for_org'
              and p.prosrc like '%Carrito abandonado%'`,
   },
+  {
+    // Es la ÚLTIMA sentencia del archivo: si está, el pegado llegó hasta el final.
+    nome: "skills de plataforma en español (0445)",
+    sql: `select 1 from public.skill_pointers p join public.skill_versions v on v.id = p.version_id
+           where p.organization_id is null and p.name = 'agendamento' and v.description like 'Guía para agendar%'`,
+  },
 ];
 
 async function conferir(cliente: pg.Client): Promise<string[]> {

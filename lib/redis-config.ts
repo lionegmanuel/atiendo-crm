@@ -37,6 +37,9 @@
 
 export type RedisConfigReason = "ok" | "nao_configurado" | "configuracao_invalida";
 
+/** Valor neutro que la plantilla del fork usa cuando la instalación no tiene Redis. */
+export const VALOR_SEM_REDIS = "sin-redis-local";
+
 export type RedisConfigStatus = {
   ok: boolean;
   reason: RedisConfigReason;
@@ -63,6 +66,13 @@ export function validarConfigRedisRest(
   token: string | undefined,
 ): RedisConfigStatus {
   if (!url || !token) return { ok: false, reason: "nao_configurado" };
+  // `sin-redis-local` es el valor neutro de `demo/env-local-plantilla.txt`: el
+  // modo producción exige la variable, pero la instalación decidió no usar Redis
+  // (rate limit en memoria). Es "no configurado", no "configurado mal" — y el
+  // health no reporta caída por algo que nadie contrató.
+  if (url === VALOR_SEM_REDIS || token === VALOR_SEM_REDIS) {
+    return { ok: false, reason: "nao_configurado" };
+  }
 
   if (!valorSemFormatacaoExtra(url) || !valorSemFormatacaoExtra(token)) {
     return { ok: false, reason: "configuracao_invalida" };

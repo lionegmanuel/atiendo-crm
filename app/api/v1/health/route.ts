@@ -194,7 +194,9 @@ async function checkRedis(): Promise<Check> {
 async function checkWaha(): Promise<Check> {
   const t0 = Date.now();
   const base = env.WAHA_API_BASE_URL;
-  if (!base) {
+  // `sin-waha`: valor neutro de la plantilla del fork para instalaciones que
+  // conectan WhatsApp por el proveedor asociado y no tienen servidor QR propio.
+  if (!base || env.WAHA_API_KEY === "sin-waha") {
     return { status: "degraded", latency_ms: 0, error: "not_configured", reason: "nao_configurado" };
   }
   try {

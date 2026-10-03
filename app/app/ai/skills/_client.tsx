@@ -137,7 +137,7 @@ export function SkillsClient({ initialState }: Props) {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <PuzzlePiece className="text-accent" aria-hidden />
-                    <span className="font-medium">{skill.name}</span>
+                    <span className="font-medium">{t(skill.name)}</span>
                     <Badge variant={skill.source === "catalog" ? "info" : "neutral"} className="text-[10px]">
                       {skill.source === "catalog" ? t("do catálogo") : t("manual")}
                     </Badge>
@@ -145,7 +145,7 @@ export function SkillsClient({ initialState }: Props) {
                       {t("atualizada em")} {formatDate(skill.updated_at, tagDoIdioma)}
                     </span>
                   </div>
-                  {skill.description && <p className="text-text-muted">{skill.description}</p>}
+                  {skill.description && <p className="text-text-muted">{t(skill.description)}</p>}
                   {canManage && (
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                       <Button
@@ -204,9 +204,9 @@ export function SkillsClient({ initialState }: Props) {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <PuzzlePiece aria-hidden />
-                    <span className="font-medium">{skill.name}</span>
+                    <span className="font-medium">{t(skill.name)}</span>
                   </div>
-                  {skill.description && <p className="text-text-muted">{skill.description}</p>}
+                  {skill.description && <p className="text-text-muted">{t(skill.description)}</p>}
                   {canManage && (
                     <div className="flex sm:justify-end">
                       <Button

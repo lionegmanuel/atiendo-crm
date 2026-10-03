@@ -33,6 +33,9 @@ import {
 import { TokenCounter } from "@/lib/ui/TokenCounter";
 import { Info } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { useIdioma } from "@/lib/i18n/IdiomaProvider";
+import type { Idioma } from "@/lib/i18n/idiomas";
+import { palavrasDeHandoffPadrao } from "@/lib/ai/agents/palavras-de-handoff";
 import Link from "next/link";
 
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
@@ -248,8 +251,10 @@ export function buildState(args: {
    * continua sendo o último degrau, para instalação que ainda não escolheu nada.
    */
   provedorPadrao?: string;
+  /** Idioma de quien edita: decide las palabras de derivación sugeridas al crear. */
+  idioma?: Idioma;
 }): FormState {
-  const { agent, version, t, provedorPadrao } = args;
+  const { agent, version, t, provedorPadrao, idioma = "pt-BR" } = args;
   return {
     name: agent?.name ?? "",
     description: agent?.description ?? "",
@@ -273,11 +278,7 @@ export function buildState(args: {
     cost_budget_cents: version?.cost_budget_cents ?? 50,
     history_message_window: version?.history_message_window ?? 20,
     history_token_window: version?.history_token_window ?? 8_000,
-    handoff_keywords: version?.handoff_keywords ?? [
-      "falar com humano",
-      "atendente",
-      "pessoa real",
-    ],
+    handoff_keywords: version?.handoff_keywords ?? palavrasDeHandoffPadrao(idioma),
     handoff_tool_enabled: version?.handoff_tool_enabled ?? true,
     cases_enabled: version?.cases_enabled ?? false,
     split_messages: version?.split_messages ?? false,
@@ -357,6 +358,7 @@ function toVersionPayload(s: FormState) {
 
 export function AgentForm(props: Props) {
   const t = useT();
+  const idioma = useIdioma();
   const funis = props.funis ?? [];
   const materiais = props.materiais ?? [];
   const router = useRouter();
@@ -369,10 +371,10 @@ export function AgentForm(props: Props) {
       // O fallback existe para chamadores que ainda não a passam; sem ele, um
       // agente pausado abriria no texto padrão e o prompt "sumiria".
       const ref = props.base ?? props.draft ?? props.published;
-      return buildState({ agent: props.agent, version: ref, t });
+      return buildState({ agent: props.agent, version: ref, t, idioma });
     }
-    return buildState({ version: null, t, provedorPadrao: props.provedorPadrao });
-  }, [isEdit, props, t]);
+    return buildState({ version: null, t, provedorPadrao: props.provedorPadrao, idioma });
+  }, [isEdit, props, t, idioma]);
 
   const [form, setForm] = React.useState<FormState>(baseline);
   const [saving, setSaving] = React.useState(false);

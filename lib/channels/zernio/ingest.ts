@@ -25,6 +25,7 @@ import { ehCanalDeConversa } from "@/lib/channels/canais-de-conversa";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
+import { idiomaDaInstalacao } from "@/lib/i18n/idiomaDaInstalacao";
 import { corpoDaLocalizacao } from "@/lib/messaging/localizacao";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
@@ -42,6 +43,7 @@ import {
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
 
 import { completarLocalizacao } from "./localizacao";
+import { normalizarMensagemNaoSuportada } from "./nao-suportada";
 import { parseZernioInbound, type ZernioIdentity, type ZernioInboundMessage } from "./webhook";
 
 export interface ZernioIngestResult {
@@ -88,7 +90,10 @@ export async function ingestZernioInbound(
   if (!lida) return { status: "ignored", reason: "evento_sem_interesse" };
   // O pino do WhatsApp chega como "📍 Location", sem coordenadas: elas moram
   // só na API. Rede social não manda pino — a busca é só do WhatsApp.
-  const msg = input.socialMessage ? lida : await completarLocalizacao(admin, input.organizationId, lida);
+  const msg = normalizarMensagemNaoSuportada(
+    input.socialMessage ? lida : await completarLocalizacao(admin, input.organizationId, lida),
+    idiomaDaInstalacao(),
+  );
 
   // Evento de DESFECHO: a mensagem já existe (ou nem é nossa). Só atualiza o
   // status — inserir aqui criaria uma segunda linha para a mesma mensagem, uma

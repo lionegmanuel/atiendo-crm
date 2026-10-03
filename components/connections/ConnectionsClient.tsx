@@ -318,6 +318,13 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         <div className="rounded-md border border-warning bg-warning-bg p-4 text-sm text-warning-fg">
           <p className="font-medium">{t("O serviço do WhatsApp não está configurado.")}</p>
           <p className="mt-1">
+            {t("Para conectar o WhatsApp por QR sem servidor próprio, use a aba")}{" "}
+            <Link href="/app/connections?aba=parceiro" className="font-medium underline">
+              {t("Provedor parceiro")}
+            </Link>
+            .
+          </p>
+          <p className="mt-1">
             {t("Faltam o endereço e a chave do serviço (")}
             <code>WAHA_API_BASE_URL</code> {t("e")} <code>WAHA_API_KEY</code>
             {t(

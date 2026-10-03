@@ -7013,7 +7013,7 @@ export const DICIONARIO: Traducoes = {
   "Não prometer preço ou prazo por conta própria": { es: "No prometer precio o plazo por cuenta propia" },
   "Conferir promessas em texto livre": { es: "Verificar promesas en texto libre" },
   "Não prometer atendimento humano que não existe": { es: "No prometer atención humana que no existe" },
-  "Não falar a nossa língua com o seu cliente": { es: "No hablar nuestro idioma con tu cliente" },
+  "Não falar a nossa língua com o seu cliente": { es: "No usar jerga interna con tu cliente" },
   "Dizer que é um assistente quando perguntam": { es: "Decir que es un asistente cuando preguntan" },
   "Detectar tentativa de manipular o assistente": { es: "Detectar intento de manipular al asistente" },
 
@@ -10599,7 +10599,7 @@ export const DICIONARIO: Traducoes = {
   "Marca um horário para o agente voltar a falar com o cliente, para que a conversa não morra sem resposta.": {
     es: "Programa un seguimiento con hora fija para que el agente vuelva a hablar con el cliente y la conversación no se quede sin respuesta.",
   },
-  "Marcar consulta ou sessão": { es: "Programar consulta o sesión" },
+  "Marcar consulta ou sessão": { es: "Reservar cita o sesión" },
   "Mostra as colunas de um funil na ordem em que aparecem no quadro, para o agente saber onde pode colocar cada negócio.": {
     es: "Muestra las columnas de un embudo en el orden en que aparecen en el tablero, para que el agente sepa dónde puede poner cada negocio.",
   },
@@ -12836,6 +12836,26 @@ export const DICIONARIO: Traducoes = {
   },
   "Erro ao carregar a previsão.": { es: "Error al cargar la previsión." },
   "Falha ao calcular a previsão do funil.": { es: "No se pudo calcular la previsión del embudo." },
+  // Título que los triggers de la base graban al abrir un caso (0222 y 0396):
+  // se traduce en pantalla, así las bases existentes no necesitan migración.
+  "Responder à nova mensagem do cliente": { es: "Responder al nuevo mensaje del cliente" },
+  "Ver se o horário está livre e já marcar": { es: "Verificar si el horario está libre y reservar" },
+  "Para conectar o WhatsApp por QR sem servidor próprio, use a aba": {
+    es: "Para conectar WhatsApp por QR sin servidor propio, usá la pestaña",
+  },
+  "Mensagem não suportada (abra no WhatsApp)": { es: "Mensaje no compatible (abrir en WhatsApp)" },
+  // Skills de fábrica (migración 0069): se siembran en portugués para toda la
+  // plataforma y `skill_versions` es inmutable, así que se traducen al mostrar.
+  "objecao-preco": { es: "objecion-precio" },
+  "agendamento": { es: "agendamiento-citas" },
+  "Playbook pra contornar objeção de preço no WhatsApp — diagnostica o motivo real por trás do \"caro\" antes de reagir, sem ceder desconto não autorizado.":
+    {
+      es: "Guía para responder la objeción de precio por WhatsApp: identifica el motivo real detrás del \"es caro\" antes de reaccionar, sin ofrecer descuentos no autorizados.",
+    },
+  "Playbook pra marcar/remarcar horário (consulta, visita, sessão) — oferece opções concretas de agenda real, nunca inventa disponibilidade, confirma por escrito antes de fechar.":
+    {
+      es: "Guía para agendar o reprogramar citas (consulta, visita, sesión): ofrece opciones concretas de la agenda real, nunca inventa disponibilidad y confirma por escrito antes de cerrar.",
+    },
 };
 
 /**

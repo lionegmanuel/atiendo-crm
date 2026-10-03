@@ -22,6 +22,7 @@ Los mensajes entran a una bandeja de entrada, cada cliente nuevo aparece en un e
 - **WhatsApp vía [Zernio](https://zernio.com)** en modo coexistencia: se vincula por QR y tu WhatsApp sigue funcionando en el teléfono.
 - **Marca propia sin tocar código:** nombre, color e idioma desde `.env.local`.
 - **Multi-empresa** con aislamiento por organización (RLS en Postgres).
+- **Para cualquier rubro:** agencias, salud, comercio, educación, servicios o B2B. Cambiás las etapas del embudo, el vocabulario y las instrucciones del agente; no hay nada atado a un nicho.
 
 ## Requisitos
 
@@ -60,7 +61,13 @@ Recomendado: en **Authentication › Sign In / Providers › Email**, desactivá
 
 ### 3. Variables de entorno
 
-Copiá `.env.example` como `.env.local` y completalo. La plantilla comentada, con de dónde sale cada valor, está en [`demo/env-local-plantilla.txt`](demo/env-local-plantilla.txt). Lo esencial:
+Copiá la plantilla en español como `.env.local` en la raíz del proyecto:
+
+```bash
+cp demo/env-local-plantilla.txt .env.local   # en Windows: copy demo\env-local-plantilla.txt .env.local
+```
+
+Está comentada línea por línea, con de dónde sale cada valor. Si preferís partir de `.env.example`, que trae todas las opciones avanzadas, también funciona. Lo esencial:
 
 | Variable | De dónde sale |
 |---|---|
@@ -68,7 +75,7 @@ Copiá `.env.example` como `.env.local` y completalo. La plantilla comentada, co
 | `SUPABASE_DB_URL` | Supabase › botón **Connect** › *Session pooler* (si la contraseña tiene `@`, escribila como `%40`) |
 | `OPENAI_API_KEY` | platform.openai.com › API keys |
 | `CHANNEL_WEBHOOK_BASE_URL` | Tu dominio fijo de ngrok, por ejemplo `https://tu-dominio.ngrok-free.dev` |
-| `INTERNAL_SECRET`, `CPF_ENCRYPTION_KEY`, `WAHA_BYO_ENCRYPTION_KEY` | Generalas: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `INTERNAL_SECRET`, `CPF_ENCRYPTION_KEY`, `WAHA_BYO_ENCRYPTION_KEY`, `IMPERSONATE_COOKIE_SECRET` | Generalas (una distinta para cada una): `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `AI_CRED_AES_KEY` | Generala: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
 | `APP_NAME`, `APP_ACCENT_HEX`, `APP_LOCALE` | Tu marca, tu color (ej. `#10b981`) y el idioma (`es`) |
 
@@ -85,23 +92,24 @@ Abrí `http://localhost:3000`, creá tu cuenta y seguí el asistente inicial. En
 
 ### 5. Embudo en español con datos de ejemplo (opcional)
 
-Supabase › **SQL Editor** → pegá [`scripts/seed-demo-inmobiliaria.sql`](scripts/seed-demo-inmobiliaria.sql) → **Run**. Crea 6 etapas (*Nuevo Lead* → *Cerrado Ganado / Perdido*) y 4 prospectos de ejemplo.
+Supabase › **SQL Editor** → pegá [`scripts/seed-demo-universal.sql`](scripts/seed-demo-universal.sql) (recomendado: embudo comercial estándar para cualquier empresa o agencia) o [`scripts/seed-demo-inmobiliaria.sql`](scripts/seed-demo-inmobiliaria.sql) (el ejemplo inmobiliario del video) → **Run**. Crea 6 etapas (*Nuevo Lead* → *Cerrado Ganado / Perdido*) y 4 prospectos de ejemplo.
 Correlo **después** de crear tu cuenta y **antes** de conectar Zernio.
 
 ### 6. Configurar el agente
 
 **Agentes** → tu agente:
 
-1. **Sus instrucciones:** pegá tu prompt. Un ejemplo completo para una inmobiliaria, con el catálogo incluido, está en [`demo/prompt-del-agente.txt`](demo/prompt-del-agente.txt).
+1. **Sus instrucciones:** pegá tu prompt. Tenés la plantilla universal lista para personalizar para cualquier negocio en [`demo/prompt-agente-universal.txt`](demo/prompt-agente-universal.txt), o el ejemplo inmobiliario del video en [`demo/prompt-del-agente.txt`](demo/prompt-del-agente.txt).
 2. **La inteligencia que usa:** OpenAI (GPT) · GPT-4.1 Mini · tu clave.
 3. **Capacidades:** activá *Atender y responder* y *Pasar a un humano*; en *Elegir una por una* sumá las del embudo (por ejemplo, *Mover oportunidad de etapa*).
-4. **Guardar borrador.**
+4. **Palabras que llaman a una persona al instante:** vienen sugeridas en español (*hablar con una persona*, *hablar con un asesor*, *quiero un humano*); sumá las que usen tus clientes.
+5. **Guardar borrador.**
 
 ### 7. Conectar WhatsApp con Zernio
 
 1. En Zernio: WhatsApp → **modo coexistencia** → escaneá el QR desde *Dispositivos vinculados*.
 2. En el CRM: **Conexiones** → **Proveedor asociado** → ID de la cuenta de WhatsApp + API key de Zernio → **Conectar**.
-3. Copiá la **URL del webhook** y el **secreto** (se muestra una sola vez) y pegalos en Zernio › **Webhooks**, con los eventos de mensajes activos.
+3. Copiá la **URL del webhook** y el **secreto** (se muestra una sola vez) y pegalos en Zernio › **Webhooks**. Eventos: `message.received` (obligatorio), `message.sent`, `message.delivered`, `message.read` y `message.failed`; opcionales `message.edited`, `message.deleted`, `account.connected` y `account.disconnected`.
 4. **Agentes** → tu agente → **Número conectado** → **Publicar**. Sin publicar, el agente no responde.
 5. **Conexiones** → **Proveedor asociado** → **Configurar acceso de la IA** → **Habilitar atención al público**. Todo número nuevo arranca en *modo de prueba* con la lista vacía: así la IA no le responde a nadie. Si preferís probar primero, cargá tu número en la lista (con código de país, por ejemplo `+5491122334455`) y habilitá al público después. Los mensajes que llegaron mientras estaba cerrado (últimas 24 h) se responden en ese momento.
 

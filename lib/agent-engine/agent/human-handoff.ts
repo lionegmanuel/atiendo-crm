@@ -68,7 +68,7 @@ function normalize(text: string): string {
 }
 
 /**
- * Padrões PT-BR CONSERVADORES de pedido explícito de atendimento humano (evita falso
+ * Padrões PT-BR (e ES) CONSERVADORES de pedido explícito de atendimento humano (evita falso
  * positivo: exige o verbo de contato + o alvo humano, ou expressões inequívocas). Rodam
  * sobre o texto normalizado (sem acento).
  */
@@ -77,6 +77,14 @@ const HUMAN_HANDOFF_PATTERNS: readonly RegExp[] = [
   /\bme\s+(?:passa|passe|transfere|transfira|encaminha|encaminhe|manda|mande)\s+(?:pra|para|pro)\s+(?:um[a]?\s+)?(?:atendente|humano|pessoa|gente|setor|comercial)\b/,
   /\batendimento\s+humano\b/,
   /\b(?:atendente|humano|pessoa)\s+de\s+verdade\b/,
+  // Español (fork Atiendo CRM). Mismo criterio conservador: verbo de contacto +
+  // destinatario humano, o expresión inequívoca. Sin estos, "quiero hablar con un
+  // asesor" no derivaba hasta que el modelo decidiera llamar a la herramienta.
+  /\b(?:hablar|conversar|comunicarme)\s+con\s+(?:un[a]?\s+)?(?:asesor[a]?|humano|persona|agente|operador[a]?|vendedor[a]?|representante|responsable)\b/,
+  /\b(?:pasame|pasenme|paseme|transferime|transfiereme|derivame|derivenme|comunicame)\s+(?:con|a)\s+(?:un[a]?\s+)?(?:asesor[a]?|humano|persona|agente|operador[a]?|vendedor[a]?|representante)\b/,
+  /\batencion\s+humana\b/,
+  /\bquiero\s+(?:un[a]?\s+)?(?:humano|asesor[a]?)\b/,
+  /\b(?:asesor[a]?|humano|persona)\s+(?:de\s+verdad|real)\b/,
 ];
 
 /** True se a mensagem do lead é um pedido explícito de atendimento humano (determinístico). */
