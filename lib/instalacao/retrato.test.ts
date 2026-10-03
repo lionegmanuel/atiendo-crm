@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { lerRetratoDaInstalacao, provedorDaOrg } from "@/lib/instalacao/retrato";
+import { lerRetratoDaInstalacao } from "@/lib/instalacao/retrato";
 
 type Linha = Record<string, unknown>;
 
@@ -165,33 +165,5 @@ describe("o retrato da instalação", () => {
       ambiente: SEM_AMBIENTE,
     });
     expect(r.empresa.aindaSemNomeProprio).toBe(true);
-  });
-});
-
-describe("provedorDaOrg — sin proveedor grabado, vale la clave que trajo la instalación", () => {
-  it("el proveedor grabado en la organización siempre manda", () => {
-    expect(provedorDaOrg({ llm: { provider: "anthropic" } }, { openai: true })).toBe("anthropic");
-  });
-
-  it("con solo OPENAI_API_KEY en el .env, el onboarding ve OpenAI y no pide la clave", () => {
-    expect(provedorDaOrg({}, { openai: true, anthropic: false })).toBe("openai");
-  });
-
-  it("con solo ANTHROPIC_API_KEY en el .env, vale Anthropic", () => {
-    expect(provedorDaOrg(null, { openai: false, anthropic: true })).toBe("anthropic");
-  });
-
-  it("sin nada configurado, el piso es OpenAI (el camino que enseña el fork)", () => {
-    expect(provedorDaOrg(undefined)).toBe("openai");
-  });
-
-  it("de punta a punta: OPENAI_API_KEY en el ambiente vuelve origem 'instalacao'", async () => {
-    const r = await lerRetratoDaInstalacao({
-      supabase: clientFalso({ organizations: [{ id: ORG, display_name: "Mi Empresa", settings: {} }] }),
-      orgId: ORG,
-      ambiente: { ...SEM_AMBIENTE, OPENAI_API_KEY: "sk-xxx" },
-    });
-    expect(r.inteligencia.provedor).toBe("openai");
-    expect(r.inteligencia.origemDaChave).toBe("instalacao");
   });
 });

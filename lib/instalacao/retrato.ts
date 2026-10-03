@@ -35,24 +35,11 @@ export interface RetratoDaInstalacao {
   funil: { id: string; nome: string } | null;
 }
 
-/**
- * O provedor que a instalação escolheu — mesma leitura defensiva do runtime.
- *
- * Fork Atiendo CRM: sem provedor gravado na organização (o onboarding ainda não
- * salvou a chave), vale o provedor cuja chave a instalação já trouxe no `.env`.
- * Antes caía sempre em `anthropic`, e quem tinha só `OPENAI_API_KEY` via
- * "Falta la clave de la inteligencia artificial" no primeiro passo.
- */
-export function provedorDaOrg(
-  settings: unknown,
-  chavesDeProvedor: Record<string, boolean> = {},
-): string {
+/** O provedor que a instalação escolheu — mesma leitura defensiva do runtime. */
+export function provedorDaOrg(settings: unknown): string {
   const llm = (settings as { llm?: unknown } | null)?.llm;
   const p = (llm as { provider?: unknown } | null | undefined)?.provider;
-  if (typeof p === "string" && p.trim() !== "") return p;
-  if (chavesDeProvedor.openai === true) return "openai";
-  if (chavesDeProvedor.anthropic === true) return "anthropic";
-  return "openai";
+  return typeof p === "string" && p.trim() !== "" ? p : "anthropic";
 }
 
 export interface DependenciasDoRetrato {
@@ -80,7 +67,7 @@ export async function lerRetratoDaInstalacao(
     .eq("id", orgId)
     .maybeSingle();
 
-  const provider = provedorDaOrg(orgRow?.settings, ambiente.chavesDeProvedor);
+  const provider = provedorDaOrg(orgRow?.settings);
 
   // Credencial cadastrada pela tela vence a chave da instalação — mesma
   // precedência que `resolveOrgLlmConfig` aplica no turno.

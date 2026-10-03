@@ -7,17 +7,15 @@
  *   túnel   `ngrok http --url=<dominio> 3000`, SOLO si CHANNEL_WEBHOOK_BASE_URL
  *           apunta a un dominio de ngrok y el binario existe (PATH, NGROK_BIN
  *           o `../ngrok.exe`). Si no, se asume que el túnel lo levantás aparte.
- *   reloj   un POST por minuto a `/api/v1/system/relogio/tick` (las tareas que
- *           en una VPS corre el contenedor `scheduler`).
  *
  * Requiere `pnpm build` antes: sin build, avisa y sale en vez de caer en dev.
- * Ctrl+C cierra todo.
+ * Ctrl+C cierra los tres.
  */
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-const COLORES = { app: "\x1b[36m", worker: "\x1b[35m", tunel: "\x1b[33m", reloj: "\x1b[32m" } as const;
+const COLORES = { app: "\x1b[36m", worker: "\x1b[35m", tunel: "\x1b[33m" } as const;
 const RESET = "\x1b[0m";
 const hijos: ChildProcess[] = [];
 
@@ -95,31 +93,4 @@ if (dominio) {
     "Túnel no iniciado: poné tu dominio de ngrok en CHANNEL_WEBHOOK_BASE_URL (.env.local) o levantalo aparte.",
   );
 }
-// Reloj de los trabajos de cada minuto (cola de eventos, seguimientos,
-// distribución de conversaciones y envíos trabados). En una VPS los corre el
-// contenedor `scheduler`; acá no hay ninguno, y sin esto la derivación quedaba
-// `pending` para siempre. Es UNA llamada por minuto: no castiga la base.
-const RELOJ_MS = 60_000;
-const secreto = (process.env.INTERNAL_CRON_SECRET || process.env.INTERNAL_SECRET || "").trim();
-let relojAvisado = false;
-async function tickDelReloj(): Promise<void> {
-  try {
-    const res = await fetch("http://localhost:3000/api/v1/system/relogio/tick", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${secreto}` },
-    });
-    if (!res.ok && !relojAvisado) {
-      process.stderr.write(`${COLORES.reloj}[reloj]${RESET} el tick respondió ${res.status}\n`);
-      relojAvisado = true;
-    }
-  } catch {
-    // La app todavía está arrancando: el próximo tick lo intenta de nuevo.
-  }
-}
-if (secreto) {
-  setInterval(() => void tickDelReloj(), RELOJ_MS).unref();
-} else {
-  console.info("Reloj de tareas no iniciado: falta INTERNAL_SECRET en .env.local.");
-}
-
 console.info("CRM en http://localhost:3000 — Ctrl+C cierra todo.");
